@@ -65,66 +65,122 @@ VARIABLES
 Init ==
   \* non-deterministically choose the initial values
   /\ value \in [ CORRECT -> VALUES ]
+  /\ decision = [ r \in ALL |-> NO_DECISION ]
   /\ round = [ r \in CORRECT |-> 1 ]
   /\ step = [ r \in CORRECT |-> S1 ]
-  \* TODO: send the faulty messages right in the initial state
   /\ msgs1 = [ r \in ROUNDS |-> {}]
   /\ msgs2 = [ r \in ROUNDS |-> {}]
+
+InitWithFaults ==
+  \* non-deterministically choose the initial values
+  /\ value \in [ CORRECT -> VALUES ]
+  /\ decision = [ r \in ALL |-> NO_DECISION ]
+  /\ round = [ r \in CORRECT |-> 1 ]
+  /\ step = [ r \in CORRECT |-> S1 ]
+  \* non-deterministically initialize the messages with faults
+  /\ \E F1 \in SUBSET [ src: FAULTY, r: ROUNDS, v: VALUES ]:
+        msgs1 = [ r \in ROUNDS |-> { m \in F1: m.r = r } ]
+  /\ \E F1D \in SUBSET [ src: FAULTY, r: ROUNDS, v: VALUES ],
+        F1Q \in SUBSET [ src: FAULTY, r: ROUNDS ]:
+        msgs2 = [ r \in ROUNDS |->
+            { D2(mm.src, r, mm.v): mm \in { m \in F1D: m.r = r } }
+                \union { Q2(mm.src, r): mm \in { m \in F1Q: m.r = r } }
+        ]
 
 \* @type: REPLICA => Bool;
 Step1(id) ==
   LET r == round[id] IN
   /\ step[id] = S1
+  \* "send the message (1, r, x_P) to all the processes"
   /\ msgs1' = [msgs1 EXCEPT ![r] = @ \union { M1(id, r, value[id]) }]
   /\ step' = [step EXCEPT ![id] = S2]
-  /\ UNCHANGED << value, round, msgs2 >>
+  /\ UNCHANGED << value, decision, round, msgs2 >>
 
 Step2(id) ==
   LET r == round[id] IN
   /\ step[id] = S2
   /\ \E received \in SUBSET msgs1[r]:
+     \* "wait till messages of type (1, r, *) are received from N - T processes"
      /\ Cardinality(received) >= N - T
      /\ LET Weights == [ v \in VALUES |->
               Cardinality({ m \in received: m.v = v }) ]
         IN
         \/ \E v \in VALUES: 
-          /\ 2 * Weights[v] > N
+          \* "if more than (N + T)/2 messages have the same value v..."
+          /\ 2 * Weights[v] > N + T
+          \* "...then send the message (2, r, v, D) to all processes"
           /\ msgs2' = [msgs2 EXCEPT ![r] = @ \union { D2(id, r, v) }]
         \//\ \A v \in VALUES: 2 * Weights[v] <= N
+          \* "Else send the message (2, r, ?) to all processes"
           /\ msgs2' = [msgs2 EXCEPT ![r] = @ \union { Q2(id, r) }]
   /\ step' = [ step EXCEPT ![id] = S3 ]
-  /\ UNCHANGED << value, round, msgs1 >>
+  /\ UNCHANGED << value, decision, round, msgs1 >>
 
 Step3(id) ==
   LET r == round[id] IN
   /\ step[id] = S3
   /\ \E received \in SUBSET msgs2[r]:
+    \* "Wait till messages of type (2, r, *) arrive from N - T processes"
     /\ Cardinality(received) >= N - T
     /\ LET Weights == [ v \in VALUES |->
              Cardinality({ m \in received: IsD2(m) /\ AsD2(m).v = v }) ]
        IN
        \/ \E v \in VALUES: 
-          \* (a) If there are at least T+1 D-messages (2, r, v, D),
-          \* then set x_P to v
+          \* "(a) If there are at least T+1 D-messages (2, r, v, D),
+          \* then set x_P to v"
           /\ Weights[v] >= T + 1
           /\ value' = [value EXCEPT ![id] = v]
+          \* "(b) Of there are more than (N + T)/2 D-messages..."
           /\ IF 2 * Weights[v] > N + T
+             \* "...then decide v"
              THEN decision' = [decision EXCEPT ![id] = v]
              ELSE decision' = decision
        \/ /\ \A v \in VALUES: Weights[v] < T + 1
           /\ \E next_v \in VALUES:
-             \* Choose a value with probability 1/2.
+             \* "(c) Else set x_P = 1 or 0 each with probability 1/2."
              \* We replace probabilites with non-determinism.
              /\ value' = [value EXCEPT ![id] = next_v]
-    /\ step' = [ step EXCEPT ![id] = S3 ]
+             /\ decision' = decision
+    \* the condition below is to bound the number of rounds for model checking
+    /\ r + 1 \in ROUNDS
+    \* "Set r := r + 1 and go to step 1"
     /\ round' = [ round EXCEPT ![id] = r + 1 ]
+    /\ step' = [ step EXCEPT ![id] = S1 ]
     /\ UNCHANGED << msgs1, msgs2 >>
 
-Next ==
+FaultyStep ==
+    \* the faulty replicas collectively inject messages for a single round
+    /\ \E r \in ROUNDS:
+        /\ \E F1 \in SUBSET [ src: FAULTY, r: { r }, v: VALUES ]:
+            msgs1' = [ msgs1 EXCEPT ![r] = @ \union F1 ]
+        /\ \E F2D \in SUBSET { D2(src, r, v): src \in FAULTY, v \in VALUES }:
+             \E F2Q \in SUBSET { Q2(src, r): src \in FAULTY }:
+                msgs2' = [ msgs2 EXCEPT ![r] = @ \union F2D \union F2Q ]
+    /\ UNCHANGED << value, decision, round, step >>
+
+CorrectStep ==
   \E id \in CORRECT:
     \/ Step1(id)
     \/ Step2(id)
     \/ Step3(id)
-    \* TODO: add a step by the faulty replicas?
+
+Next ==
+  \/ CorrectStep
+  \/ FaultyStep
+
+\****************** INVARIANTS *****************************
+
+\* No two correct replicas decide on different values
+AgreementInv ==
+    \A id1, id2 \in CORRECT:
+        \/ decision[id1] = NO_DECISION
+        \/ decision[id2] = NO_DECISION
+        \/ decision[id1] = decision[id2]
+
+\****************** EXAMPLES   *****************************
+
+\* An example of a replica that has made a decision
+DecisionEx ==
+    ~(\E id \in CORRECT: decision[id] /= NO_DECISION)
 
 ======================================================================================
