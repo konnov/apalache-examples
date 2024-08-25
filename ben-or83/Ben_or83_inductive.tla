@@ -8,6 +8,7 @@
  * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
  * - 20 min to fix Lemma5_RoundNeedsSentMessages
  * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
+ * - 30 min to add Lemma11_ValueOnQuorum
  *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
@@ -21,7 +22,7 @@
  *
  * 3. That IndInit /\ Next => IndInv' (running 10 jobs in parallel):
  *
- * $ seq 0 14 | parallel --delay 1 -j 10 \
+ * $ seq 0 15 | parallel --delay 1 -j 10 \
  *   ~/devl/apalache/bin/apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *)
@@ -156,14 +157,16 @@ Lemma11_ValueOnQuorum ==
     (step[id] /= S3 /\ r > 1) =>
         \/ \E Q \in SUBSET ALL:
             LET v == value[id] IN
+            LET Qv ==
+                Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v } /\ m.src \in Q)
+            IN
             /\ Q \subseteq Senders2(msgs2[r - 1])
-            /\ 2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) > N + T
+            /\ 2 * Cardinality(Qv) > N + T
         \/ \A v \in VALUES:
             2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
 
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
-  /\ Lemma1_DecisionRequiresQuorumAll 
   /\ Lemma2_NoEquivocation1ByCorrect
   /\ Lemma3_NoEquivocation2ByCorrect
   /\ Lemma4_MessagesNotFromFuture
@@ -174,6 +177,8 @@ IndInv ==
   /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
+  \* this lemma is quite slow
+  /\ Lemma1_DecisionRequiresQuorumAll 
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/
 IndInit ==
