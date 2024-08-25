@@ -6,6 +6,7 @@
  *
  * - 2.5h to come up with Lemmas 1-9 for the fault-free case
  * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
+ * - 20 min to fix Lemma5_RoundNeedsSentMessages
  *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
