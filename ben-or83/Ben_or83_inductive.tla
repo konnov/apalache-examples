@@ -9,6 +9,7 @@
  * - 20 min to fix Lemma5_RoundNeedsSentMessages
  * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
  * - 45 min to add Lemma11_ValueOnQuorum
+ * - 10 min to add Lemma12_CannotJumpRoundsWithoutQuorum
  *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
@@ -20,10 +21,10 @@
  *
  * $ apalache-mc check --init=Init --inv=IndInv --length=0 MC_n6t1f0_inductive.tla
  *
- * 3. That IndInit /\ Next => IndInv' (running 10 jobs in parallel):
+ * 3. That IndInit /\ Next => IndInv' (running 3 jobs in parallel):
  *
- * $ seq 0 15 | parallel --delay 1 -j 10 \
- *   ~/devl/apalache/bin/apalache-mc check --length=1 --inv=IndInv --init=IndInit \
+ * $ seq 0 15 | parallel --delay 1 -j 3 \
+ *   apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
@@ -133,14 +134,11 @@ Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
       \* if there was a quorum of D2 messages for v in round r,
-      \* or there is a correct replica in S1 of round r + 1 right now,
       \* then all messages by correct replicas carry v in round r + 1
       \A v \in VALUES:
         LET nextRoundReached ==
-            \/ \E m \in msgs1[r + 1]:
-                m.src \in CORRECT /\ m.v = v
-            \/ \E id \in CORRECT:
-                round[id] = r /\ step[id] = S1 /\ value[id] = v
+          \E m \in msgs1[r + 1]:
+            m.src \in CORRECT /\ m.v = v
         IN
         nextRoundReached => ExistsQuorum2(r, v) 
 
@@ -171,6 +169,20 @@ Lemma11_ValueOnQuorum ==
       \/ \A v \in VALUES:
         2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
 
+Lemma12_CannotJumpRoundsWithoutQuorum ==
+  \A r \in ROUNDS:
+    r + 1 \in ROUNDS =>
+      \* if there is a correct replica in S1 of round r + 1 right now,
+      \* then there were at least N - T messages of type 2 in round r
+      LET nextRoundReached ==
+        \E id \in CORRECT:
+          round[id] = r /\ step[id] = S1
+      IN
+      nextRoundReached =>
+        \E Q \in SUBSET ALL:
+          /\ Cardinality(Q) >= N - T
+          /\ Q \subseteq Senders2(msgs2[r - 1])
+
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
   /\ Lemma2_NoEquivocation1ByCorrect
@@ -183,6 +195,7 @@ IndInv ==
   /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
+  /\ Lemma12_CannotJumpRoundsWithoutQuorum
   \* this lemma is quite slow
   /\ Lemma1_DecisionRequiresQuorumAll 
 
