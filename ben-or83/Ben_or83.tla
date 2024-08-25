@@ -62,6 +62,19 @@ VARIABLES
   \* @type: Int -> Set($msgB);
   msgs2
 
+\* @type: Set($msgA) => Set(REPLICA);
+Senders1(m1s) ==
+  \* Filter the set of ALL, as it has fixed size, in contrast to m1s.
+  \* This is especially important, when we call Cardinality on the result.
+  { id \in ALL: \E m \in m1s: m.src = id }
+
+\* @type: Set($msgB) => Set(REPLICA);
+Senders2(m2s) ==
+  \* Filter the set of ALL, as it has fixed size, in contrast to m2s.
+  \* This is especially important, when we call Cardinality on the result.
+  { id \in ALL:
+    \E m \in m2s: (IsD2(m) /\ AsD2(m).src = id) \/ (IsQ2(m) /\ AsQ2(m).src = id) }
+
 Init ==
   \* non-deterministically choose the initial values
   /\ value \in [ CORRECT -> VALUES ]
@@ -101,9 +114,9 @@ Step2(id) ==
   /\ step[id] = S2
   /\ \E received \in SUBSET msgs1[r]:
      \* "wait till messages of type (1, r, *) are received from N - T processes"
-     /\ Cardinality(received) >= N - T
+     /\ Cardinality(Senders1(received)) >= N - T
      /\ LET Weights == [ v \in VALUES |->
-              Cardinality({ m \in received: m.v = v }) ]
+          Cardinality(Senders1({ m \in received: m.v = v })) ]
         IN
         \/ \E v \in VALUES: 
           \* "if more than (N + T)/2 messages have the same value v..."
@@ -121,9 +134,9 @@ Step3(id) ==
   /\ step[id] = S3
   /\ \E received \in SUBSET msgs2[r]:
     \* "Wait till messages of type (2, r, *) arrive from N - T processes"
-    /\ Cardinality(received) >= N - T
+    /\ Cardinality(Senders2(received)) >= N - T
     /\ LET Weights == [ v \in VALUES |->
-             Cardinality({ m \in received: IsD2(m) /\ AsD2(m).v = v }) ]
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) ]
        IN
        \/ \E v \in VALUES: 
           \* "(a) If there are at least T+1 D-messages (2, r, v, D),

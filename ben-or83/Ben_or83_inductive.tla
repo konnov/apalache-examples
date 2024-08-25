@@ -5,6 +5,19 @@
  * Igor Konnov, August 2024
  *
  * - 2.5h to come up with Lemmas 1-9 for the fault-free case
+ *
+ * To make sure that we have constructed an inductive invariant, we need to check:
+ *
+ * 1. That IndInv => AgreementInv:
+ *
+ * 2. That Init => IndInv:
+ *
+ *
+ * 3. That IndInit /\ Next => IndInv':
+ *
+ * $ seq 0 13 | parallel --delay 1 \
+ *   ~/devl/apalache/bin/apalache-mc check --length=1 --inv=IndInv --init=IndInit \
+ *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir={} MC_n6t1f0_inductive.tla
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -97,18 +110,24 @@ Lemma7_D2RequiresQuorum ==
         => ExistsQuorum1(r, v)
 
 Lemma8_Q2RequiresNoQuorum ==
-  \A r \in ROUNDS:
-    (\E m \in msgs2[r]: IsQ2(m) /\ AsQ2(m).src \in CORRECT)
-      => \A v \in VALUES:
-        LET Sv == { m \in msgs1[r]: m.v = v } IN
-        \* account for the faulty replicas?
+  LET RoundsWithQ2 ==
+    { r \in ROUNDS:
+      \E m \in msgs2[r]: IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+  IN
+  \A r \in RoundsWithQ2:
+    \* follows from Step2
+    \E Q \in SUBSET ALL:
+      /\ Cardinality(Q) >= N - T
+      /\ Q \subseteq Senders1(msgs1[r])
+      /\ \A v \in VALUES:
+        LET Sv == Senders1({ m \in msgs1[r]: m.v = v /\ m.src \in Q }) IN
         2 * Cardinality(Sv) <= N
 
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
       \* if there was a quorum of D2 messages for v in round r,
-      \* then all messages by correct replicas carry v
+      \* then all messages by correct replicas carry v in round r + 1
       \A v \in VALUES:
         ExistsQuorum2(r, v) =>
           \A m \in msgs1[r + 1]:
