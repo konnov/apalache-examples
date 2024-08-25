@@ -8,7 +8,7 @@
  * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
  * - 20 min to fix Lemma5_RoundNeedsSentMessages
  * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
- * - 30 min to add Lemma11_ValueOnQuorum
+ * - 45 min to add Lemma11_ValueOnQuorum
  *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
@@ -133,11 +133,16 @@ Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
       \* if there was a quorum of D2 messages for v in round r,
+      \* or there is a correct replica in S1 of round r + 1 right now,
       \* then all messages by correct replicas carry v in round r + 1
       \A v \in VALUES:
-        ExistsQuorum2(r, v) =>
-          \A m \in msgs1[r + 1]:
-            m.src \in CORRECT => m.v = v
+        LET nextRoundReached ==
+            \/ \E m \in msgs1[r + 1]:
+                m.src \in CORRECT /\ m.v = v
+            \/ \E id \in CORRECT:
+                round[id] = r /\ step[id] = S1 /\ value[id] = v
+        IN
+        nextRoundReached => ExistsQuorum2(r, v) 
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
@@ -155,16 +160,16 @@ Lemma11_ValueOnQuorum ==
     \* explain how value[id] is defined via the messages from the previous round
     LET r == round[id] IN
     (step[id] /= S3 /\ r > 1) =>
-        \/ \E Q \in SUBSET ALL:
-            LET v == value[id] IN
-            LET Qv == Senders2({
-                m \in msgs2[r - 1]:
-                    IsD2(m) /\ AsD2(m).v = v  /\ AsD2(m).src \in Q })
-            IN
-            /\ Q \subseteq Senders2(msgs2[r - 1])
-            /\ 2 * Cardinality(Qv) > N + T
-        \/ \A v \in VALUES:
-            2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
+      \/ \E Q \in SUBSET ALL:
+        LET v == value[id] IN
+        LET Qv == Senders2({
+          m \in msgs2[r - 1]:
+            IsD2(m) /\ AsD2(m).v = v  /\ AsD2(m).src \in Q })
+        IN
+        /\ Q \subseteq Senders2(msgs2[r - 1])
+        /\ 2 * Cardinality(Qv) > N + T
+      \/ \A v \in VALUES:
+        2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
 
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
