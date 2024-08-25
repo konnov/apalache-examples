@@ -19,9 +19,9 @@
  *
  * $ apalache-mc check --init=Init --inv=IndInv --length=0 MC_n6t1f0_inductive.tla
  *
- * 3. That IndInit /\ Next => IndInv':
+ * 3. That IndInit /\ Next => IndInv' (running 10 jobs in parallel):
  *
- * $ seq 0 13 | parallel --delay 1 \
+ * $ seq 0 14 | parallel --delay 1 -j 10 \
  *   ~/devl/apalache/bin/apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *)
@@ -149,6 +149,18 @@ Lemma10_M1RequiresQuorum ==
       /\ Cardinality(Q) >= N - T
       /\ Q \subseteq Senders2(msgs2[r - 1])
 
+Lemma11_ValueOnQuorum ==
+  \A id \in CORRECT:
+    \* explain how value[id] is defined via the messages from the previous round
+    LET r == round[id] IN
+    (step[id] /= S3 /\ r > 1) =>
+        \/ \E Q \in SUBSET ALL:
+            LET v == value[id] IN
+            /\ Q \subseteq Senders2(msgs2[r - 1])
+            /\ 2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) > N + T
+        \/ \A v \in VALUES:
+            2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
+
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
   /\ Lemma1_DecisionRequiresQuorumAll 
@@ -161,6 +173,7 @@ IndInv ==
   /\ Lemma8_Q2RequiresNoQuorum
   /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
+  /\ Lemma11_ValueOnQuorum
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/
 IndInit ==
