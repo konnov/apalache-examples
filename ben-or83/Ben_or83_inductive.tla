@@ -7,6 +7,7 @@
  * - 2.5h to come up with Lemmas 1-9 for the fault-free case
  * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
  * - 20 min to fix Lemma5_RoundNeedsSentMessages
+ * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
  *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
@@ -42,13 +43,13 @@ TypeOK ==
 
 \*********** AUXILIARY DEFINITIONS ***********/
 ExistsQuorum2(r, v) ==
-  \* TODO: can we simplify this?
-  \*\E S \in SUBSET msgs2[r]:
-  LET S == msgs2[r] IN
-  LET Sv == { m \in S: IsD2(m) /\ AsD2(m).v = v } IN
-  /\ Cardinality(S) >= N - T
-  /\ Cardinality(Sv) >= T + 1
-  /\ 2 * Cardinality(Sv) > N + T
+  \E Q \in SUBSET ALL:
+    LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
+    LET cardSv == Cardinality(Sv) IN
+    /\ Sv \subseteq Q /\ Q \subseteq Senders2(msgs2[r])
+    /\ Cardinality(Q) >= N - T
+    /\ cardSv >= T + 1
+    /\ 2 * cardSv > N + T
 
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
@@ -106,7 +107,7 @@ Lemma6_DecisionDefinesValue ==
 Lemma7_D2RequiresQuorum ==
   LET ExistsQuorum1(r, v) ==
     LET Sv == { m \in msgs1[r]: m.v = v } IN
-    2 * Cardinality(Sv) > N + T
+    2 * Cardinality(Senders1(Sv)) > N + T
   IN
   \A r \in ROUNDS:
     \A v \in VALUES:
@@ -137,6 +138,17 @@ Lemma9_RoundsConnection ==
           \A m \in msgs1[r + 1]:
             m.src \in CORRECT => m.v = v
 
+Lemma10_M1RequiresQuorum ==
+  LET RoundsWithM1 ==
+      { r \in ROUNDS \ { 1 }: \E m \in msgs1[r]: m.src \in CORRECT }
+  IN
+  \* for all rounds greater than 1,
+  \* a correct replica needs at least N - T message of type 2 to send a message of type 1
+  \A r \in RoundsWithM1:
+    \E Q \in SUBSET ALL:
+      /\ Cardinality(Q) >= N - T
+      /\ Q \subseteq Senders2(msgs2[r - 1])
+
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
   /\ Lemma1_DecisionRequiresQuorumAll 
@@ -148,6 +160,7 @@ IndInv ==
   /\ Lemma7_D2RequiresQuorum
   /\ Lemma8_Q2RequiresNoQuorum
   /\ Lemma9_RoundsConnection
+  /\ Lemma10_M1RequiresQuorum
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/
 IndInit ==
