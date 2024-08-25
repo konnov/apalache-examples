@@ -157,8 +157,9 @@ Lemma11_ValueOnQuorum ==
     (step[id] /= S3 /\ r > 1) =>
         \/ \E Q \in SUBSET ALL:
             LET v == value[id] IN
-            LET Qv ==
-                Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v } /\ m.src \in Q)
+            LET Qv == Senders2({
+                m \in msgs2[r - 1]:
+                    IsD2(m) /\ AsD2(m).v = v  /\ AsD2(m).src \in Q })
             IN
             /\ Q \subseteq Senders2(msgs2[r - 1])
             /\ 2 * Cardinality(Qv) > N + T
