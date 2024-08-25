@@ -4,13 +4,6 @@
  *
  * Igor Konnov, August 2024
  *
- * - 2.5h to come up with Lemmas 1-9 for the fault-free case
- * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
- * - 20 min to fix Lemma5_RoundNeedsSentMessages
- * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
- * - 45 min to add Lemma11_ValueOnQuorum
- * - 10 min to add Lemma12_CannotJumpRoundsWithoutQuorum
- *
  * To make sure that we have constructed an inductive invariant, we need to check:
  *
  * 1. That IndInv => AgreementInv:
@@ -26,6 +19,16 @@
  * $ seq 0 16 | parallel --delay 1 -j 3 \
  *   apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
+ *
+ * Timeline:
+ *
+ * - 2.5h to come up with Lemmas 1-9 for the fault-free case
+ * - 2.5h to fix Lemma8_Q2RequiresNoQuorum
+ * - 20 min to fix Lemma5_RoundNeedsSentMessages
+ * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
+ * - 45 min to add Lemma11_ValueOnQuorum
+ * - 10 min to add Lemma12_CannotJumpRoundsWithoutQuorum
+ * - 5 min to fix Lemma12_CannotJumpRoundsWithoutQuorum
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
