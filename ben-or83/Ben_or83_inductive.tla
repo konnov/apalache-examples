@@ -11,14 +11,17 @@
  *
  * 1. That IndInv => AgreementInv:
  *
+ * $ apalache-mc check --init=IndInit --inv=AgreementInv --length=0 MC_n6t1f0_inductive.tla
+ *
  * 2. That Init => IndInv:
  *
+ * $ apalache-mc check --init=Init --inv=IndInv --length=0 MC_n6t1f0_inductive.tla
  *
  * 3. That IndInit /\ Next => IndInv':
  *
  * $ seq 0 13 | parallel --delay 1 \
  *   ~/devl/apalache/bin/apalache-mc check --length=1 --inv=IndInv --init=IndInit \
- *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir={} MC_n6t1f0_inductive.tla
+ *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -93,8 +96,7 @@ Lemma5_RoundNeedsSentMessages ==
         => \E m \in msgs2[r]: AsD2(m).src = id \/ AsQ2(m).src = id
       /\ (r = round[id] /\ step[id] = S3)
         => \E m \in msgs2[r]:
-            \/ AsD2(m).src = id /\ AsD2(m).v = value[id]
-            \/ AsQ2(m).src = id
+            AsD2(m).src = id \/ AsQ2(m).src = id
 
 Lemma6_DecisionDefinesValue ==
   \A id \in CORRECT:
