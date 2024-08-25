@@ -130,7 +130,7 @@ Step3(id) ==
           \* then set x_P to v"
           /\ Weights[v] >= T + 1
           /\ value' = [value EXCEPT ![id] = v]
-          \* "(b) Of there are more than (N + T)/2 D-messages..."
+          \* "(b) If there are more than (N + T)/2 D-messages..."
           /\ IF 2 * Weights[v] > N + T
              \* "...then decide v"
              THEN decision' = [decision EXCEPT ![id] = v]

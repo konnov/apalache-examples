@@ -26,6 +26,9 @@ Q2(src, round) == Variant("Q", [ src |-> src, r |-> round ])
 \* @type: $msgB => Bool;
 IsQ2(msg) == VariantTag(msg) = "Q"
 
+\* @type: $msgB => { src: REPLICA, r: Int };
+AsQ2(msg) == VariantGetUnsafe("Q", msg)
+
 \* @type: (REPLICA, Int, Int) => $msgB;
 D2(src, round, value) == Variant("D", [ src |-> src, r |-> round, v |-> value ])
 
