@@ -176,12 +176,12 @@ Lemma12_CannotJumpRoundsWithoutQuorum ==
       \* then there were at least N - T messages of type 2 in round r
       LET nextRoundReached ==
         \E id \in CORRECT:
-          round[id] = r /\ step[id] = S1
+          round[id] = r + 1 /\ step[id] = S1
       IN
       nextRoundReached =>
         \E Q \in SUBSET ALL:
           /\ Cardinality(Q) >= N - T
-          /\ Q \subseteq Senders2(msgs2[r - 1])
+          /\ Q \subseteq Senders2(msgs2[r])
 
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
