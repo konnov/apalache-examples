@@ -186,7 +186,7 @@ Lemma11_ValueOnQuorum ==
          \* that did not shows us over (N + T) / 2 messages for every value
          \E Q \in SUBSET ALL:
            /\ Cardinality(Q) >= N - T
-           /\ Q \subseteq Senders2(msgs2[r])
+           /\ Q \subseteq Senders2(msgs2[r - 1])
            /\ LET DinQ ==
                 Senders2({ m \in msgs2[r - 1]:
                   IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in Q })
