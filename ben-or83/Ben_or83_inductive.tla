@@ -169,7 +169,7 @@ Lemma13_ValueLock ==
     LET ValueWasSet(r) ==
       Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
     IN
-    (round[id] > 1 /\ ValueWasSet(round[id])) => value[id] = v
+    (round[id] > 1 /\ ValueWasSet(round[id] - 1)) => value[id] = v
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
