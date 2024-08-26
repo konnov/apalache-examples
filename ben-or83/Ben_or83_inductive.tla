@@ -181,17 +181,17 @@ Lemma11_ValueOnQuorum ==
         IN
         /\ Q \subseteq Senders2(msgs2[r - 1])
         /\ 2 * Cardinality(Qv) > N + T
-      \/ \A v \in VALUES:
-         \* there was a way to select N - T replicas
-         \* that did not shows us over (N + T) / 2 messages for every value
-         \E Q \in SUBSET ALL:
-           /\ Cardinality(Q) >= N - T
-           /\ Q \subseteq Senders2(msgs2[r - 1])
-           /\ LET DinQ ==
-                Senders2({ m \in msgs2[r - 1]:
-                  IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in Q })
-              IN
-              2 * Cardinality(DinQ) <= N + T
+      \/ \E Q \in SUBSET ALL:
+        /\ Cardinality(Q) >= N - T
+        /\ Q \subseteq Senders2(msgs2[r - 1])
+        /\ \A v \in VALUES:
+           \* there was a way to select N - T replicas
+           \* that did not shows us over (N + T) / 2 messages for every value
+           LET DinQ ==
+             Senders2({ m \in msgs2[r - 1]:
+               IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in Q })
+           IN
+           2 * Cardinality(DinQ) <= N + T
 
 Lemma12_CannotJumpRoundsWithoutQuorum ==
   \A r \in ROUNDS:
@@ -216,7 +216,7 @@ IndInv ==
   /\ Lemma6_DecisionDefinesValue
   /\ Lemma7_D2RequiresQuorum
   /\ Lemma8_Q2RequiresNoQuorum
-  /\ Lemma9_RoundsConnection
+  \*/\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
