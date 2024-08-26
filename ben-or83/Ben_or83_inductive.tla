@@ -39,6 +39,7 @@
  * - 15 min to fix Lemma11_ValueOnQuorum
  * - 1.5h to fix Lemma9_RoundsConnection (2 * T + 1)
  * - Using 'simulate' to debug the lemmas
+ * - 5 min to add Lemma13_ValueLock
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -153,7 +154,7 @@ Lemma8_Q2RequiresNoQuorum ==
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
-      \* there were at least T + 1 D2 messages for v in round r,
+      \* if there were at least 2*T + 1 D2 messages for v in round r,
       \* then all M1 messages by correct replicas carry v in round r + 1
       LET ValueWasSet(v) ==
         Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
@@ -162,6 +163,13 @@ Lemma9_RoundsConnection ==
         ValueWasSet(v) =>
           \A m \in msgs1[r + 1]:
             (m.src \in CORRECT => m.v = v)
+
+Lemma13_ValueLock ==
+  \A id \in CORRECT, v \in VALUES:
+    LET ValueWasSet(r) ==
+      Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
+    IN
+    (round[id] > 1 /\ ValueWasSet(round[id])) => value[id] = v
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
@@ -225,6 +233,7 @@ IndInv ==
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
+  /\ Lemma13_ValueLock
   \* this lemma is rather slow
   /\ Lemma1_DecisionRequiresLastQuorum
 
