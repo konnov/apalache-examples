@@ -4,11 +4,13 @@
  *
  * Igor Konnov, August 2024
  *
- * To make sure that we have constructed an inductive invariant, we need to check:
+ * To make sure that we have constructed an inductive invariant, we have to check:
  *
  * 1. That IndInv => AgreementInv:
  *
  * $ apalache-mc check --init=IndInit --inv=AgreementInv --length=0 MC_n6t1f0_inductive.tla
+ *
+ * On my computer, it finished in 10 min 13 sec using 5.3G of RAM.
  *
  * 2. That Init => IndInv:
  *
@@ -16,9 +18,11 @@
  *
  * 3. That IndInit /\ Next => IndInv' (running 3 jobs in parallel):
  *
- * $ seq 0 16 | parallel --delay 1 -j 3 \
+ * $ seq 0 16 | parallel --delay 1 -j 8 \
  *   apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
+ *
+ * Do the same for MC_n6t1f1_inductive.tla instead of MC_n6t1f0_inductive.tla.
  *
  * Timeline:
  *
@@ -27,8 +31,10 @@
  * - 20 min to fix Lemma5_RoundNeedsSentMessages
  * - 1h to fix Lemma9_RoundsConnection by introducing Lemma10_M1RequiresQuorum
  * - 45 min to add Lemma11_ValueOnQuorum
+ * - A single lemma requires about 40G of RAM!
  * - 10 min to add Lemma12_CannotJumpRoundsWithoutQuorum
  * - 5 min to fix Lemma12_CannotJumpRoundsWithoutQuorum
+ * - A single lemma requires 4-8G of RAM?
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -64,9 +70,16 @@ Lemma1_DecisionRequiresQuorum(id) ==
       /\ r <= round[id]
       /\ ExistsQuorum2(r, decision[id])
 
-Lemma1_DecisionRequiresQuorumAll ==
+\* although Lemma1 is the most natural one, it is quite slow
+Lemma1_DecisionRequiresQuorumAll_Slow ==
   \A id \in CORRECT:
     Lemma1_DecisionRequiresQuorum(id)
+
+\* this is a faster version Lemma 1
+Lemma1_DecisionRequiresLastQuorum ==
+  \A id \in CORRECT:
+    decision[id] /= NO_DECISION =>
+      round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
 
 Lemma2_NoEquivocation1ByCorrect ==
   \A r \in ROUNDS:
@@ -200,7 +213,7 @@ IndInv ==
   /\ Lemma11_ValueOnQuorum
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
   \* this lemma is quite slow
-  /\ Lemma1_DecisionRequiresQuorumAll 
+  /\ Lemma1_DecisionRequiresLastQuorum
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/
 IndInit ==
