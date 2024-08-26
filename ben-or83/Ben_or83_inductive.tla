@@ -18,7 +18,7 @@
  *
  * 3. That IndInit /\ Next => IndInv' (running 3 jobs in parallel):
  *
- * $ seq 0 16 | parallel --delay 1 -j 8 \
+ * $ seq 0 17 | parallel --delay 1 -j 8 \
  *   apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *
