@@ -35,6 +35,10 @@
  * - 10 min to add Lemma12_CannotJumpRoundsWithoutQuorum
  * - 5 min to fix Lemma12_CannotJumpRoundsWithoutQuorum
  * - A single lemma requires 4-8G of RAM?
+ * - 25 min to fix Lemma1 by introducing Lemma1_DecisionRequiresLastQuorum
+ * - 15 min to fix Lemma11_ValueOnQuorum
+ * - 1.5h to fix Lemma9_RoundsConnection (2 * T + 1)
+ * - Using 'simulate' to debug the lemmas
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -149,14 +153,15 @@ Lemma8_Q2RequiresNoQuorum ==
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
-      \* if there was a quorum of D2 messages for v in round r,
-      \* then all messages by correct replicas carry v in round r + 1
+      \* there were at least T + 1 D2 messages for v in round r,
+      \* then all M1 messages by correct replicas carry v in round r + 1
+      LET ValueWasSet(v) ==
+        Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
+      IN
       \A v \in VALUES:
-        LET nextRoundReached ==
-          \E m \in msgs1[r + 1]:
-            m.src \in CORRECT /\ m.v = v
-        IN
-        nextRoundReached => ExistsQuorum2(r, v) 
+        ValueWasSet(v) =>
+          \A m \in msgs1[r + 1]:
+            (m.src \in CORRECT => m.v = v)
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
@@ -216,11 +221,11 @@ IndInv ==
   /\ Lemma6_DecisionDefinesValue
   /\ Lemma7_D2RequiresQuorum
   /\ Lemma8_Q2RequiresNoQuorum
-  \*/\ Lemma9_RoundsConnection
+  /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
-  \* this lemma is quite slow
+  \* this lemma is rather slow
   /\ Lemma1_DecisionRequiresLastQuorum
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/

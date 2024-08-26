@@ -196,4 +196,8 @@ AgreementInv ==
 DecisionEx ==
     ~(\E id \in CORRECT: decision[id] /= NO_DECISION)
 
+\* An example of all correct replicas having made a decision
+AllDecisionEx ==
+    ~(\A id \in CORRECT: decision[id] /= NO_DECISION)
+
 ======================================================================================
