@@ -121,7 +121,7 @@ Lemma5_RoundNeedsSentMessages ==
 Lemma6_DecisionDefinesValue ==
   \A id \in CORRECT:
     decision[id] /= NO_DECISION => value[id] = decision[id]
-
+    
 Lemma7_D2RequiresQuorum ==
   LET ExistsQuorum1(r, v) ==
     LET Sv == { m \in msgs1[r]: m.v = v } IN
@@ -171,9 +171,8 @@ Lemma10_M1RequiresQuorum ==
 
 Lemma11_ValueOnQuorum ==
   \A id \in CORRECT:
-    \* explain how value[id] is defined via the messages from the previous round
     LET r == round[id] IN
-    (step[id] /= S3 /\ r > 1) =>
+    r > 1 =>
       \/ \E Q \in SUBSET ALL:
         LET v == value[id] IN
         LET Qv == Senders2({
@@ -183,7 +182,16 @@ Lemma11_ValueOnQuorum ==
         /\ Q \subseteq Senders2(msgs2[r - 1])
         /\ 2 * Cardinality(Qv) > N + T
       \/ \A v \in VALUES:
-        2 * Cardinality(Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })) <= N + T
+         \* there was a way to select N - T replicas
+         \* that did not shows us over (N + T) / 2 messages for every value
+         \E Q \in SUBSET ALL:
+           /\ Cardinality(Q) >= N - T
+           /\ Q \subseteq Senders2(msgs2[r])
+           /\ LET DinQ ==
+                Senders2({ m \in msgs2[r - 1]:
+                  IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in Q })
+              IN
+              2 * Cardinality(DinQ) <= N + T
 
 Lemma12_CannotJumpRoundsWithoutQuorum ==
   \A r \in ROUNDS:
