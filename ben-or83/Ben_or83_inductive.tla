@@ -40,6 +40,7 @@
  * - 1.5h to fix Lemma9_RoundsConnection (2 * T + 1)
  * - Using 'simulate' to debug the lemmas
  * - 5 min to add Lemma13_ValueLock
+ * - 1.5h to fix Lemma9_RoundsConnection and Lemma13_ValueLock
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -151,25 +152,29 @@ Lemma8_Q2RequiresNoQuorum ==
         LET Sv == Senders1({ m \in msgs1[r]: m.v = v /\ m.src \in Q }) IN
         2 * Cardinality(Sv) <= N
 
+SupportedValues(r) ==
+  LET n_msgs2 == Cardinality(msgs2[r])
+      n_values == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
+  IN
+  { v \in VALUES: n_values[v] >= 2 * T + 1 + n_msgs2 - N }
+
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
-      \* if there were at least 2*T + 1 D2 messages for v in round r,
-      \* then all M1 messages by correct replicas carry v in round r + 1
-      LET ValueWasSet(v) ==
-        Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
-      IN
-      \A v \in VALUES:
-        ValueWasSet(v) =>
-          \A m \in msgs1[r + 1]:
-            (m.src \in CORRECT => m.v = v)
+      \* find the values that could go over T + 1 in every quorum of msgs2[r]
+      LET Supported == SupportedValues(r) IN
+      \/ Supported = {} \* no constraints on values
+      \/ \E v \in Supported:
+           \A m \in msgs1[r + 1]:
+             (m.src \in CORRECT => m.v = v)
 
 Lemma13_ValueLock ==
   \A id \in CORRECT, v \in VALUES:
-    LET ValueWasSet(r) ==
-      Cardinality(Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })) >= 2 * T + 1
-    IN
-    (round[id] > 1 /\ ValueWasSet(round[id] - 1)) => value[id] = v
+    \/ round[id] = 1
+    \/ /\ round[id] > 1
+       /\ LET Supported == SupportedValues(round[id] - 1) IN
+          \/ Supported = {}
+          \/ value[id] \in Supported
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
