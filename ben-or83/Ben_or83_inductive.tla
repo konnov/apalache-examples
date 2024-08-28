@@ -81,7 +81,8 @@ Lemma1_DecisionRequiresQuorumAll_Slow ==
   \A id \in CORRECT:
     Lemma1_DecisionRequiresQuorum(id)
 
-\* this is a faster version Lemma 1
+\* This is a faster version Lemma 1.
+\* Still, this lemma is rather slow, >21h.
 Lemma1_DecisionRequiresLastQuorum ==
   \A id \in CORRECT:
     decision[id] /= NO_DECISION =>
@@ -116,6 +117,7 @@ Lemma4_MessagesNotFromFuture ==
 Lemma5_RoundNeedsSentMessages ==
   \A id \in CORRECT:
     \A r \in ROUNDS:
+      \* this part takes a lot of time to check, >21h
       /\ r < round[id] \/ (r = round[id] /\ step[id] /= S1)
         => \E m \in msgs1[r]: m.src = id
       /\ r < round[id]
