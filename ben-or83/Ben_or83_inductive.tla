@@ -116,16 +116,21 @@ Lemma4_MessagesNotFromFuture ==
 
 Lemma5_RoundNeedsSentMessages ==
   \A id \in CORRECT:
+    LET myStep == step[id]
+        myRound == round[id]
+    IN
     \A r \in ROUNDS:
       \* this part takes a lot of time to check, >21h
-      /\ r < round[id] \/ (r = round[id] /\ step[id] /= S1)
+      /\ r < myRound \/ (r = myRound /\ myStep /= S1)
         => \E m \in msgs1[r]: m.src = id
-      /\ r < round[id]
+      /\ r < myRound
         => \E m \in msgs2[r]: AsD2(m).src = id \/ AsQ2(m).src = id
-      /\ (r = round[id] /\ step[id] = S3)
+      \* this part takes >24h
+      /\ (r = myRound /\ myStep = S3)
         => \E m \in msgs2[r]:
             AsD2(m).src = id \/ AsQ2(m).src = id
 
+\* this lemma takes >24h
 Lemma6_DecisionDefinesValue ==
   \A id \in CORRECT:
     decision[id] /= NO_DECISION => value[id] = decision[id]
