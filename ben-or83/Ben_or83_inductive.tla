@@ -43,7 +43,7 @@
  * - 1.5h to fix Lemma9_RoundsConnection and Lemma13_ValueLock
  *
  * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
- *
+ * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
