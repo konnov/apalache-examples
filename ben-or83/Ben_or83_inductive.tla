@@ -94,8 +94,7 @@ Lemma1_DecisionRequiresLastQuorum ==
 Lemma2_NoEquivocation1ByCorrect ==
   \A r \in ROUNDS:
     \A m1, m2 \in msgs1[r]:
-      m1.src = m2.src =>
-        m1.src \in CORRECT => m1.v = m2.v
+      (m1.src \in CORRECT /\ m1.src = m2.src) => (m1.v = m2.v)
 
 Lemma3_NoEquivocation2ByCorrect ==
   \A r \in ROUNDS:
@@ -114,7 +113,7 @@ Lemma4_MessagesNotFromFuture ==
     /\ \A m \in msgs2[r]:
       LET src == IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src IN
       LET mr == IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r IN
-      m.src \in CORRECT =>
+      src \in CORRECT =>
         /\ step[src] = S3 => (mr <= round[src])
         /\ step[src] /= S3 => (mr < round[src])
 
