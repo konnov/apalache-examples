@@ -41,6 +41,9 @@
  * - Using 'simulate' to debug the lemmas
  * - 5 min to add Lemma13_ValueLock
  * - 1.5h to fix Lemma9_RoundsConnection and Lemma13_ValueLock
+ *
+ * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
+ *
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -92,27 +95,28 @@ Lemma2_NoEquivocation1ByCorrect ==
   \A r \in ROUNDS:
     \A m1, m2 \in msgs1[r]:
       m1.src = m2.src =>
-        m1.src \in FAULTY \/ m1.v = m2.v
+        m1.src \in CORRECT => m1.v = m2.v
 
 Lemma3_NoEquivocation2ByCorrect ==
   \A r \in ROUNDS:
     \A m1, m2 \in msgs2[r]:
       /\ IsD2(m1) /\ IsD2(m2) /\ AsD2(m1).src = AsD2(m2).src =>
-        \/ AsD2(m1).src \in FAULTY
-        \/ AsD2(m1).v = AsD2(m2).v
+        (AsD2(m1).src \in CORRECT => AsD2(m1).v = AsD2(m2).v)
       /\ IsQ2(m1) /\ IsD2(m2) /\ AsQ2(m1).src = AsD2(m2).src =>
         AsQ2(m1).src \in FAULTY
 
 Lemma4_MessagesNotFromFuture ==
   \A r \in ROUNDS:
     /\ \A m \in msgs1[r]:
-      /\ step[m.src] /= S1 => (m.r <= round[m.src])
-      /\ step[m.src] = S1 => (m.r < round[m.src])
+      m.src \in CORRECT =>
+        /\ step[m.src] /= S1 => (m.r <= round[m.src])
+        /\ step[m.src] = S1 => (m.r < round[m.src])
     /\ \A m \in msgs2[r]:
       LET src == IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src IN
       LET mr == IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r IN
-      /\ step[src] = S3 => (mr <= round[src])
-      /\ step[src] /= S3 => (mr < round[src])
+      m.src \in CORRECT =>
+        /\ step[src] = S3 => (mr <= round[src])
+        /\ step[src] /= S3 => (mr < round[src])
 
 Lemma5_RoundNeedsSentMessages ==
   \A id \in CORRECT:
