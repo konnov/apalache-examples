@@ -145,7 +145,7 @@ Lemma7_D2RequiresQuorum ==
   IN
   \A r \in ROUNDS:
     \A v \in VALUES:
-      (\E m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v)
+      (\E m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in CORRECT)
         => ExistsQuorum1(r, v)
 
 Lemma8_Q2RequiresNoQuorum ==
@@ -159,7 +159,9 @@ Lemma8_Q2RequiresNoQuorum ==
       /\ Cardinality(Q) >= N - T
       /\ Q \subseteq Senders1(msgs1[r])
       /\ \A v \in VALUES:
-        LET Sv == Senders1({ m \in msgs1[r]: m.v = v /\ m.src \in Q }) IN
+        LET Sv == Senders1({ m \in msgs1[r]:
+            m.v = v /\ m.src \in Q /\ m.src \in CORRECT })
+        IN
         2 * Cardinality(Sv) <= N
 
 SupportedValues(r) ==
