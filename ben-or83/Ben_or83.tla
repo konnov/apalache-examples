@@ -78,7 +78,7 @@ Senders2(m2s) ==
 Init ==
   \* non-deterministically choose the initial values
   /\ value \in [ CORRECT -> VALUES ]
-  /\ decision = [ r \in ALL |-> NO_DECISION ]
+  /\ decision = [ r \in CORRECT |-> NO_DECISION ]
   /\ round = [ r \in CORRECT |-> 1 ]
   /\ step = [ r \in CORRECT |-> S1 ]
   /\ msgs1 = [ r \in ROUNDS |-> {}]
@@ -87,7 +87,7 @@ Init ==
 InitWithFaults ==
   \* non-deterministically choose the initial values
   /\ value \in [ CORRECT -> VALUES ]
-  /\ decision = [ r \in ALL |-> NO_DECISION ]
+  /\ decision = [ r \in CORRECT |-> NO_DECISION ]
   /\ round = [ r \in CORRECT |-> 1 ]
   /\ step = [ r \in CORRECT |-> S1 ]
   \* non-deterministically initialize the messages with faults
