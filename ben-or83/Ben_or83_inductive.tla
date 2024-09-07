@@ -167,20 +167,15 @@ Lemma8_Q2RequiresNoQuorum ==
         2 * Cardinality(Sv) <= N
 
 SupportedValues(r) ==
-  LET n_all2 == Cardinality(Senders2(msgs2[r]))
-      n_v == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
-      n_q == Cardinality({ m \in msgs2[r]: IsQ2(m) })
+  LET ExistsSupport(r, v) ==
+    \E Q \in SUBSET ALL:
+        LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
+        LET cardSv == Cardinality(Sv) IN
+        /\ Sv \subseteq Q /\ Q \subseteq Senders2(msgs2[r])
+        /\ Cardinality(Q) = N - T
+        /\ cardSv >= T + 1
   IN
-  \* NOTE: this inequality only works for VALUES = { 0, 1 }
-  LET CanBePartitioned ==
-      \/ n_all2 < N - T
-      \/ n_q >= N - 2 * T /\ n_v[0] >= T
-      \/ n_q >= N - 2 * T /\ n_v[1] >= T
-      \/ n_q >= N - 3 * T /\ n_v[0] >= T /\ n_v[1] >= T
-  IN
-  IF CanBePartitioned
-  THEN {}
-  ELSE { v \in VALUES: n_v[v] >= T + 1 }
+  { v: VALUES: ExistsSupport(r, v) }
 
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
