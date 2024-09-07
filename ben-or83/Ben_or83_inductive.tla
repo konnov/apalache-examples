@@ -167,7 +167,7 @@ Lemma8_Q2RequiresNoQuorum ==
         2 * Cardinality(Sv) <= N
 
 SupportedValues(r) ==
-  LET ExistsSupport(r, v) ==
+  LET ExistsSupport(v) ==
     \E Q \in SUBSET ALL:
         LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
         LET cardSv == Cardinality(Sv) IN
@@ -175,7 +175,7 @@ SupportedValues(r) ==
         /\ Cardinality(Q) = N - T
         /\ cardSv >= T + 1
   IN
-  { v: VALUES: ExistsSupport(r, v) }
+  { v \in VALUES: ExistsSupport(v) }
 
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
