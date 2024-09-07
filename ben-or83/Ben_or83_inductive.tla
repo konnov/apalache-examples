@@ -44,6 +44,7 @@
  *
  * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
  * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
+ * - 30 min to fix Lemma9_RoundsConnection
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
