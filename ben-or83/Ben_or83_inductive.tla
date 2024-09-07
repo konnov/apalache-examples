@@ -45,6 +45,7 @@
  * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
  * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
  * - 1h to fix Lemma9_RoundsConnection
+ * - 30 min to fix Lemma13_ValueLock
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -166,12 +167,20 @@ Lemma8_Q2RequiresNoQuorum ==
         2 * Cardinality(Sv) <= N
 
 SupportedValues(r) ==
-  LET n_msgs2 == Cardinality(Senders2(msgs2[r]))
-      n_values == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
+  LET n_all2 == Cardinality(Senders2(msgs2[r]))
+      n_v == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
+      n_q == Cardinality({ m \in msgs2[r]: IsQ2(m) })
   IN
-  IF n_msgs2 >= N - T
-  THEN { v \in VALUES: n_values[v] >= T + 1 }
-  ELSE {}
+  \* NOTE: this inequality only works for VALUES = { 0, 1 }
+  LET CanBePartitioned ==
+      \/ n_all2 < N - T
+      \/ n_q >= N - 2 * T /\ n_v[0] >= T
+      \/ n_q >= N - 2 * T /\ n_v[1] >= T
+      \/ n_q >= N - 3 * T /\ n_v[0] >= T /\ n_v[1] >= T
+  IN
+  IF CanBePartitioned
+  THEN {}
+  ELSE { v \in VALUES: n_v[v] >= T + 1 }
 
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
