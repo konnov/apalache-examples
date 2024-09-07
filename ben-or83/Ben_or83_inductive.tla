@@ -84,7 +84,7 @@ Lemma1_DecisionRequiresQuorumAll_Slow ==
   \A id \in CORRECT:
     Lemma1_DecisionRequiresQuorum(id)
 
-\* This is a faster version Lemma 1.
+\* This is a faster version of Lemma 1.
 \* Still, this lemma is rather slow, >21h.
 Lemma1_DecisionRequiresLastQuorum ==
   \A id \in CORRECT:
@@ -133,7 +133,7 @@ Lemma5_RoundNeedsSentMessages ==
         => \E m \in msgs2[r]:
             AsD2(m).src = id \/ AsQ2(m).src = id
 
-\* this lemma takes >24h
+\* This lemma takes >24h.
 Lemma6_DecisionDefinesValue ==
   \A id \in CORRECT:
     decision[id] /= NO_DECISION => value[id] = decision[id]
@@ -165,7 +165,7 @@ Lemma8_Q2RequiresNoQuorum ==
         2 * Cardinality(Sv) <= N
 
 SupportedValues(r) ==
-  LET n_msgs2 == Cardinality(msgs2[r])
+  LET n_msgs2 == Cardinality(Senders2(msgs2[r]))
       n_values == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
   IN
   { v \in VALUES: n_values[v] >= 2 * T + 1 + n_msgs2 - N }
