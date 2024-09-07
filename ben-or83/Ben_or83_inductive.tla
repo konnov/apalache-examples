@@ -188,12 +188,13 @@ Lemma9_RoundsConnection ==
              (m.src \in CORRECT => m.v = v)
 
 Lemma13_ValueLock ==
+  LET supported == [ r \in ROUNDS |-> SupportedValues(r) ] IN
   \A id \in CORRECT, v \in VALUES:
     \/ round[id] = 1
     \/ /\ round[id] > 1
-       /\ LET Supported == SupportedValues(round[id] - 1) IN
-          \/ Supported = {}
-          \/ value[id] \in Supported
+       /\ LET S == supported[round[id] - 1] IN
+          \/ S = {}
+          \/ value[id] \in S
 
 Lemma10_M1RequiresQuorum ==
   LET RoundsWithM1 ==
