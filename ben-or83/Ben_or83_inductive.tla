@@ -44,7 +44,7 @@
  *
  * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
  * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
- * - 30 min to fix Lemma9_RoundsConnection
+ * - 1h to fix Lemma9_RoundsConnection
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -68,7 +68,7 @@ ExistsQuorum2(r, v) ==
     LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
     LET cardSv == Cardinality(Sv) IN
     /\ Sv \subseteq Q /\ Q \subseteq Senders2(msgs2[r])
-    /\ Cardinality(Q) >= N - T
+    /\ Cardinality(Q) = N - T
     /\ cardSv >= T + 1
     /\ 2 * cardSv > N + T
 
@@ -169,7 +169,9 @@ SupportedValues(r) ==
   LET n_msgs2 == Cardinality(Senders2(msgs2[r]))
       n_values == [ v \in VALUES |-> Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) ]
   IN
-  { v \in VALUES: n_values[v] >= 2 * T + 1 + n_msgs2 - N }
+  IF n_msgs2 >= N - T
+  THEN { v \in VALUES: n_values[v] >= T + 1 }
+  ELSE {}
 
 Lemma9_RoundsConnection ==
   \A r \in ROUNDS:
@@ -194,10 +196,10 @@ Lemma10_M1RequiresQuorum ==
       { r \in ROUNDS \ { 1 }: \E m \in msgs1[r]: m.src \in CORRECT }
   IN
   \* for all rounds greater than 1,
-  \* a correct replica needs at least N - T message of type 2 to send a message of type 1
+  \* a correct replica needs N - T messages of type 2 to send a message of type 1
   \A r \in RoundsWithM1:
     \E Q \in SUBSET ALL:
-      /\ Cardinality(Q) >= N - T
+      /\ Cardinality(Q) = N - T
       /\ Q \subseteq Senders2(msgs2[r - 1])
 
 Lemma11_ValueOnQuorum ==
@@ -213,7 +215,7 @@ Lemma11_ValueOnQuorum ==
         /\ Q \subseteq Senders2(msgs2[r - 1])
         /\ 2 * Cardinality(Qv) > N + T
       \/ \E Q \in SUBSET ALL:
-        /\ Cardinality(Q) >= N - T
+        /\ Cardinality(Q) = N - T
         /\ Q \subseteq Senders2(msgs2[r - 1])
         /\ \A v \in VALUES:
            \* there was a way to select N - T replicas
@@ -235,7 +237,7 @@ Lemma12_CannotJumpRoundsWithoutQuorum ==
       IN
       nextRoundReached =>
         \E Q \in SUBSET ALL:
-          /\ Cardinality(Q) >= N - T
+          /\ Cardinality(Q) = N - T
           /\ Q \subseteq Senders2(msgs2[r])
 
 \******** THE INDUCTIVE INVARIANT ***********/

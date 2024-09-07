@@ -134,7 +134,7 @@ Step3(id) ==
   /\ step[id] = S3
   /\ \E received \in SUBSET msgs2[r]:
     \* "Wait till messages of type (2, r, *) arrive from N - T processes"
-    /\ Cardinality(Senders2(received)) >= N - T
+    /\ Cardinality(Senders2(received)) = N - T
     /\ LET Weights == [ v \in VALUES |->
              Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) ]
        IN
