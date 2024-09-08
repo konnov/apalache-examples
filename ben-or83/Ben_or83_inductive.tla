@@ -90,8 +90,8 @@ Lemma1_DecisionRequiresQuorumAll_Slow ==
 \* Still, this lemma is rather slow, >21h.
 Lemma1_DecisionRequiresLastQuorum ==
   \A id \in CORRECT:
-    decision[id] /= NO_DECISION =>
-      round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
+    \/ decision[id] = NO_DECISION
+    \/ round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
 
 Lemma2_NoEquivocation1ByCorrect ==
   \A r \in ROUNDS:
