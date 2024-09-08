@@ -66,13 +66,14 @@ TypeOK ==
 
 \*********** AUXILIARY DEFINITIONS ***********/
 ExistsQuorum2(r, v) ==
-  \E Q \in SUBSET ALL, Qv \in SUBSET Q:
-    LET cardQv == Cardinality(Qv) IN
-    /\ Qv \subseteq Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
-    /\ Q \subseteq Senders2(msgs2[r])
-    /\ Cardinality(Q) = N - T
-    /\ cardQv >= T + 1
-    /\ 2 * cardQv > N + T
+  \E Q \in SUBSET ALL:
+    \E Qv \in SUBSET Q:
+      LET cardQv == Cardinality(Qv) IN
+      /\ Qv \subseteq Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+      /\ Q \subseteq Senders2(msgs2[r])
+      /\ Cardinality(Q) = N - T
+      /\ cardQv >= T + 1
+      /\ 2 * cardQv > N + T
 
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
