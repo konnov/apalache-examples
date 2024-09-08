@@ -168,12 +168,9 @@ Lemma8_Q2RequiresNoQuorum ==
 
 SupportedValues(r) ==
   LET ExistsSupport(v) ==
-    \E Q \in SUBSET ALL:
-        LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
-        LET cardSv == Cardinality(Sv) IN
-        /\ Sv \subseteq Q /\ Q \subseteq Senders2(msgs2[r])
-        /\ Cardinality(Q) = N - T
-        /\ cardSv >= T + 1
+    LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
+    /\ Cardinality(Senders2(msgs2[r])) >= N - T
+    /\ Cardinality(Sv) >= T + 1
   IN
   { v \in VALUES: ExistsSupport(v) }
 
