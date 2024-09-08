@@ -46,12 +46,13 @@
  * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
  * - 1h to fix Lemma9_RoundsConnection
  * - 30 min to fix Lemma13_ValueLock
+ * - 20 min to fix Lemma9_RoundsConnection, Lemma1_DecisionRequiresLastQuorum
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
 TypeOK ==
   /\ value \in [ CORRECT -> VALUES ]
-  /\ decision \in [ ALL -> VALUES \union { NO_DECISION } ]
+  /\ decision \in [ CORRECT -> VALUES \union { NO_DECISION } ]
   /\ round \in [ CORRECT -> ROUNDS ]
   /\ step \in [ CORRECT -> { S1, S2, S3 } ]
   /\ \E A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ]:
@@ -65,13 +66,13 @@ TypeOK ==
 
 \*********** AUXILIARY DEFINITIONS ***********/
 ExistsQuorum2(r, v) ==
-  \E Q \in SUBSET ALL:
-    LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
-    LET cardSv == Cardinality(Sv) IN
-    /\ Sv \subseteq Q /\ Q \subseteq Senders2(msgs2[r])
+  \E Q \in SUBSET ALL, Qv \in SUBSET Q:
+    LET cardQv == Cardinality(Qv) IN
+    /\ Qv \subseteq Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+    /\ Q \subseteq Senders2(msgs2[r])
     /\ Cardinality(Q) = N - T
-    /\ cardSv >= T + 1
-    /\ 2 * cardSv > N + T
+    /\ cardQv >= T + 1
+    /\ 2 * cardQv > N + T
 
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
