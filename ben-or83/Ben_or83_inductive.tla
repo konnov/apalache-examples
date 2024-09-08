@@ -172,7 +172,7 @@ SupportedValues(r) ==
     LET Others == Senders2({ m \in msgs2[r]: IsQ2(m) \/ AsD2(m).v /= v }) IN
     /\ Cardinality(Senders2(msgs2[r])) >= N - T
     /\ Cardinality(Sv) >= T + 1
-    /\ Cardinality(Others) < N - T
+    /\ Cardinality(Others) < N - 2 * T
   IN
   { v \in VALUES: ExistsSupport(v) }
 
