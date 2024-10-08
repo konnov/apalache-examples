@@ -8,6 +8,7 @@ check [TLA+ Examples][tlaplus-examples].
 | Specification | Author       | Customer     | Syntax          | Description |
 |---------------|--------------|--------------|-----------------|-------------|
 | [Ben-Or 83][] | Igor Konnov  | Fun project  | TLA<sup>+</sup> | Checking safety of Ben-Or's probabilistic consensus that tolerates Byzantine failures. |
+| [distributed-termination-detection][] | Giuliano Losa | | TLA<sup>+</sup> | Formalization of a distributed termination-detection algorithm, including a proof checked with Apalache |
 | [labyrinth][] | Igor Konnov  | Fun project  | TLA<sup>+</sup> | Simple exploration in a 2D-labyrinth |
 | [matter-labs-chonkybft][] | Igor Konnov, Denis Kolegov | Matter Labs | Quint | BFT consensus by Matter Labs |
 | [tendermint-accountability][] | Zarko Milosevic, Igor Konnov | Informal Systems | TLA<sup>+</sup> | BFT consensus in Tendermint/CometBFT blockchains |
@@ -21,6 +22,7 @@ repository, we give proper links to the specifications in the employer's or
 customer's GitHub repository.
 
 [Ben-Or 83]: ./ben-or83
+[distributed-termination-detection]: ./distributed-termination-detection/
 [labyrinth]: ./labyrinth
 [matter-labs-chonkybft]: ./matter-labs-chonkybft/
 [zksync-governance]: ./zksync-governance/
