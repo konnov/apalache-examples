@@ -13,16 +13,16 @@ check [TLA+ Examples][tlaplus-examples].
 | [tendermint-accountability][] | Zarko Milosevic, Igor Konnov | Informal Systems | TLA<sup>+</sup> | BFT consensus in Tendermint/CometBFT blockchains |
 | [tendermint-light-client][] | Josef Widder, Igor Konnov | Informal Systems | TLA<sup>+</sup> | Light client for Tendermint/CometBFT blockchains |
 | [tla-apalache-workshop][] | Igor Konnov et. al. | Informal Systems | TLA<sup>+</sup> | Apalache examples produced at Informal Systems |
-| [zk-governance][] | Denis Kolegov, Igor Konnov | Matter Labs | Quint | Specification of the ZKsync Governance smart contracts |
+| [zksync-governance][] | Denis Kolegov, Igor Konnov | Matter Labs | Quint | Specification of the ZKsync Governance smart contracts |
 
-**Note:** Some of the specifications include open source work by Igor Konnov for
-free, as an employee, or as a contractor. In the latter cases, proper links to
-the specifications on the employer's/customer's GitHub repository are included.
+**Note:** Whenever a specification cannot be directly included in this
+repository, we give proper links to the specifications in the employer's or
+customer's GitHub repository.
 
 [Ben-Or 83]: ./ben-or83
 [labyrinth]: ./labyrinth
 [matter-labs-chonkybft]: ./matter-labs-chonkybft/
-[zk-governance]: https://github.com/zksync-association/zk-governance/tree/master/spec
+[zksync-governance]: ./zksync-governance/
 [tendermint-accountability]: ./tendermint-accountability/
 [tendermint-light-client]: ./tendermint-light-client/
 [tla-apalache-workshop]: ./tla-apalache-workshop/
