@@ -2,7 +2,7 @@
 # Most of it is generated with ChatGPT.
 
 # Variables
-CSV_FILES = n6t1f0_inductive.csv n6t1f1-agreement-sim20.csv
+CSV_FILES = n6t1f0_inductive.csv n6t1f1_inductive.csv n6t1f1-agreement-sim20.csv
 OUTPUT_PNGS = $(CSV_FILES:.csv=.png)
 GNUPLOT_SCRIPT = cactus.plt
 
