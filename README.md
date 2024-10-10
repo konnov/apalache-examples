@@ -29,5 +29,5 @@ customer's GitHub repository.
 [tendermint-accountability]: ./tendermint-accountability/
 [tendermint-light-client]: ./tendermint-light-client/
 [TetraBFT]: ./tetra-bft/
-[tla-apalache-workshop]: ./tla-apalache-workshop/
+[tla-apalache-workshop]: https://github.com/informalsystems/tla-apalache-workshop
 [tlaplus-examples]: https://github.com/tlaplus/Examples
