@@ -213,9 +213,11 @@ Lemma8_Q2RequiresNoQuorumFaster ==
         \* we wrap the map in a filter to constrain the set bound
         nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } })
     IN
-    /\ (n0 + n1 + nf) >= N - T
-    /\ 2 * n0 <= N
-    /\ 2 * n1 <= N
+    \E x0, x1 \in 0..N:
+      /\ x0 <= n0 /\ x1 <= n1
+      /\ x0 + x1 + nf >= N - T
+      /\ 2 * x0 <= N
+      /\ 2 * x1 <= N
 
 SupportedValues(r) ==
   LET ExistsSupport(v) ==
