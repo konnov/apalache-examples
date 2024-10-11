@@ -235,9 +235,7 @@ Lemma10_M1RequiresQuorum ==
   \* for all rounds greater than 1,
   \* a correct replica needs N - T messages of type 2 to send a message of type 1
   \A r \in RoundsWithM1:
-    \E Q \in SUBSET ALL:
-      /\ Cardinality(Q) = N - T
-      /\ Q \subseteq Senders2(msgs2[r - 1])
+    Cardinality(Senders2(msgs2[r - 1])) >= N - T
 
 Lemma11_ValueOnQuorum ==
   Lemma11 ::
@@ -275,9 +273,7 @@ Lemma12_CannotJumpRoundsWithoutQuorum ==
           round[id] = r + 1 /\ step[id] = S1
       IN
       nextRoundReached =>
-        \E Q \in SUBSET ALL:
-          /\ Cardinality(Q) = N - T
-          /\ Q \subseteq Senders2(msgs2[r])
+        Cardinality(Senders2(msgs2[r])) >= N - T
 
 \******** THE INDUCTIVE INVARIANT ***********/
 IndInv ==
