@@ -78,6 +78,7 @@ ExistsQuorum2(r, v) ==
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
 Lemma1_DecisionRequiresQuorum(id) ==
+  Lemma1 ::
   decision[id] /= NO_DECISION =>
     \E r \in ROUNDS:
       /\ r <= round[id]
@@ -85,22 +86,26 @@ Lemma1_DecisionRequiresQuorum(id) ==
 
 \* although Lemma1 is the most natural one, it is quite slow
 Lemma1_DecisionRequiresQuorumAll_Slow ==
+  Lemma1a ::
   \A id \in CORRECT:
     Lemma1_DecisionRequiresQuorum(id)
 
 \* This is a faster version of Lemma 1.
 \* Still, this lemma is rather slow, >21h.
 Lemma1_DecisionRequiresLastQuorum ==
+  Lemma1b ::
   \A id \in CORRECT:
     \/ decision[id] = NO_DECISION
     \/ round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
 
 Lemma2_NoEquivocation1ByCorrect ==
+  Lemma2 ::
   \A r \in ROUNDS:
     \A m1, m2 \in msgs1[r]:
       (m1.src \in CORRECT /\ m1.src = m2.src) => (m1.v = m2.v)
 
 Lemma3_NoEquivocation2ByCorrect ==
+  Lemma3 ::
   \A r \in ROUNDS:
     \A m1, m2 \in msgs2[r]:
       /\ IsD2(m1) /\ IsD2(m2) /\ AsD2(m1).src = AsD2(m2).src =>
@@ -109,6 +114,7 @@ Lemma3_NoEquivocation2ByCorrect ==
         AsQ2(m1).src \in FAULTY
 
 Lemma4_MessagesNotFromFuture ==
+  Lemma4 ::
   \A r \in ROUNDS:
     /\ \A m \in msgs1[r]:
       m.src \in CORRECT =>
@@ -122,6 +128,7 @@ Lemma4_MessagesNotFromFuture ==
         /\ step[src] /= S3 => (mr < round[src])
 
 Lemma5_RoundNeedsSentMessages ==
+  Lemma5 ::
   \A id \in CORRECT:
     LET myStep == step[id]
         myRound == round[id]
@@ -139,10 +146,12 @@ Lemma5_RoundNeedsSentMessages ==
 
 \* This lemma takes >24h.
 Lemma6_DecisionDefinesValue ==
+  Lemma6 ::
   \A id \in CORRECT:
     decision[id] /= NO_DECISION => value[id] = decision[id]
     
 Lemma7_D2RequiresQuorum ==
+  Lemma7 ::
   LET ExistsQuorum1(r, v) ==
     LET Sv == { m \in msgs1[r]: m.v = v } IN
     2 * Cardinality(Senders1(Sv)) > N + T
@@ -153,6 +162,7 @@ Lemma7_D2RequiresQuorum ==
         => ExistsQuorum1(r, v)
 
 Lemma8_Q2RequiresNoQuorum ==
+  Lemma8 ::
   LET RoundsWithQ2 ==
     { r \in ROUNDS:
       \E m \in msgs2[r]: IsQ2(m) /\ AsQ2(m).src \in CORRECT }
@@ -179,6 +189,7 @@ SupportedValues(r) ==
   { v \in VALUES: ExistsSupport(v) }
 
 Lemma9_RoundsConnection ==
+  Lemma9 ::
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
       \* find the values that could go over T + 1 in every quorum of msgs2[r]
@@ -189,6 +200,7 @@ Lemma9_RoundsConnection ==
              (m.src \in CORRECT => m.v = v)
 
 Lemma13_ValueLock ==
+  Lemma13 ::
   LET supported == [ r \in ROUNDS |-> SupportedValues(r) ] IN
   \A id \in CORRECT, v \in VALUES:
     \/ round[id] = 1
@@ -198,6 +210,7 @@ Lemma13_ValueLock ==
           \/ value[id] \in S
 
 Lemma10_M1RequiresQuorum ==
+  Lemma10 ::
   LET RoundsWithM1 ==
       { r \in ROUNDS \ { 1 }: \E m \in msgs1[r]: m.src \in CORRECT }
   IN
@@ -209,6 +222,7 @@ Lemma10_M1RequiresQuorum ==
       /\ Q \subseteq Senders2(msgs2[r - 1])
 
 Lemma11_ValueOnQuorum ==
+  Lemma11 ::
   \A id \in CORRECT:
     LET r == round[id] IN
     r > 1 =>
@@ -233,6 +247,7 @@ Lemma11_ValueOnQuorum ==
            2 * Cardinality(DinQ) <= N + T
 
 Lemma12_CannotJumpRoundsWithoutQuorum ==
+  Lemma12 ::
   \A r \in ROUNDS:
     r + 1 \in ROUNDS =>
       \* if there is a correct replica in S1 of round r + 1 right now,
