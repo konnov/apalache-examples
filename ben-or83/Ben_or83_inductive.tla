@@ -48,6 +48,11 @@
  * - 1h to fix Lemma9_RoundsConnection
  * - 30 min to fix Lemma13_ValueLock
  * - 20 min to fix Lemma9_RoundsConnection, Lemma1_DecisionRequiresLastQuorum
+ *
+ * -------- speeding up and reducing RAM consumption -----
+ * - 3h to speed up Lemma8_Q2RequiresNoQuorum
+ * - 30 min to reduce RAM consumption in Lemma11_ValueOnQuorum
+ * - 20 min to reduce RAM consumption in Lemma1_DecisionRequiresLastQuorum
  *)
 EXTENDS FiniteSets, Integers, typedefs, Ben_or83
 
@@ -66,6 +71,8 @@ TypeOK ==
         ]
 
 \*********** AUXILIARY DEFINITIONS ***********/
+
+\* this definition is memory-hungry, see ExistsQuorum2LessRam
 ExistsQuorum2(r, v) ==
   \E Q \in SUBSET ALL:
     \E Qv \in SUBSET Q:
@@ -76,6 +83,7 @@ ExistsQuorum2(r, v) ==
       /\ cardQv >= T + 1
       /\ 2 * cardQv > N + T
 
+\* a more memory-efficient version of ExistsQuorum2
 ExistsQuorum2LessRam(r, v) ==
   LET nv == Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
       n == Cardinality(msgs2[r])
@@ -86,22 +94,18 @@ ExistsQuorum2LessRam(r, v) ==
 
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
-Lemma1_DecisionRequiresQuorum(id) ==
-  Lemma1 ::
-  decision[id] /= NO_DECISION =>
-    \E r \in ROUNDS:
-      /\ r <= round[id]
-      /\ ExistsQuorum2(r, decision[id])
-
 \* although Lemma1 is the most natural one, it is quite slow
 Lemma1_DecisionRequiresQuorumAll_Slow ==
-  Lemma1a ::
+  Lemma1 ::
   \A id \in CORRECT:
-    Lemma1_DecisionRequiresQuorum(id)
+    decision[id] /= NO_DECISION =>
+        \E r \in ROUNDS:
+        /\ r <= round[id]
+        /\ ExistsQuorum2(r, decision[id])
 
 \* This is a faster version of Lemma 1.
 \* Still, this lemma is rather slow, >21h.
-\* Moreover, it requires >37G of RAM.
+\* Moreover, it requires >40G of RAM.
 \* See Lemma1_DecisionRequiresLastQuorumLessRam.
 Lemma1_DecisionRequiresLastQuorum ==
   Lemma1b ::
@@ -109,6 +113,7 @@ Lemma1_DecisionRequiresLastQuorum ==
     \/ decision[id] = NO_DECISION
     \/ round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
 
+\* This version reduces the RAM consumption from 40G to 7G.
 Lemma1_DecisionRequiresLastQuorumLessRam ==
   Lemma1c ::
   \A id \in CORRECT:
