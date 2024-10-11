@@ -187,12 +187,12 @@ Lemma8_Q2RequiresNoQuorumFaster ==
   IN
   \A r \in RoundsWithQ2:
     \* follows from Step2
-    LET n0 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
-        n1 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] }
+    LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] })
+        n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] })
         \* we wrap the map in a filter to constrain the set bound
-        nf == { id \in FAULTY: id \in { m.src: m \in msgs1[r] } }
+        nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } })
     IN
-    /\ n0 + n1 + nf >= N - T
+    /\ (n0 + n1 + nf) >= N - T
     /\ 2 * n0 <= N
     /\ 2 * n1 <= N
 
