@@ -41,6 +41,7 @@
  * - Using 'simulate' to debug the lemmas
  * - 5 min to add Lemma13_ValueLock
  * - 1.5h to fix Lemma9_RoundsConnection and Lemma13_ValueLock
+ * - 2h to add Lemma8_Q2RequiresNoQuorumFaster
  *
  * -------- checking the inductive step for MC_n6t1f1_inductive.tla -----
  * - 15 min to fix Lemma2_NoEquivocation1ByCorrect, Lemma3_NoEquivocation2ByCorrect, Lemma4_MessagesNotFromFuture
@@ -178,6 +179,23 @@ Lemma8_Q2RequiresNoQuorum ==
         IN
         2 * Cardinality(Sv) <= N
 
+Lemma8_Q2RequiresNoQuorumFaster ==
+  Lemma8a ::
+  LET RoundsWithQ2 ==
+    { r \in ROUNDS:
+      \E m \in msgs2[r]: IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+  IN
+  \A r \in RoundsWithQ2:
+    \* follows from Step2
+    LET n0 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
+        n1 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] }
+        \* we wrap the map in a filter to constrain the set bound
+        nf == { id \in FAULTY: id \in { m.src: m \in msgs1[r] } }
+    IN
+    /\ n0 + n1 + nf >= N - T
+    /\ 2 * n0 <= N
+    /\ 2 * n1 <= N
+
 SupportedValues(r) ==
   LET ExistsSupport(v) ==
     LET Sv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v }) IN
@@ -269,7 +287,7 @@ IndInv ==
   /\ Lemma5_RoundNeedsSentMessages
   /\ Lemma6_DecisionDefinesValue
   /\ Lemma7_D2RequiresQuorum
-  /\ Lemma8_Q2RequiresNoQuorum
+  /\ Lemma8_Q2RequiresNoQuorumFaster
   /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
   /\ Lemma11_ValueOnQuorum
