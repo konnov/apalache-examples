@@ -76,6 +76,14 @@ ExistsQuorum2(r, v) ==
       /\ cardQv >= T + 1
       /\ 2 * cardQv > N + T
 
+ExistsQuorum2LessRam(r, v) ==
+  LET nv == Cardinality({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+      n == Cardinality(msgs2[r])
+  IN
+  /\ n >= N - T
+  /\ nv >= T + 1
+  /\ 2 * nv > N + T
+
 \*********** LEMMAS THAT CONSTITUTE THE INDUCTIVE INVARIANT ***********/
 
 Lemma1_DecisionRequiresQuorum(id) ==
@@ -93,11 +101,19 @@ Lemma1_DecisionRequiresQuorumAll_Slow ==
 
 \* This is a faster version of Lemma 1.
 \* Still, this lemma is rather slow, >21h.
+\* Moreover, it requires >37G of RAM.
+\* See Lemma1_DecisionRequiresLastQuorumLessRam.
 Lemma1_DecisionRequiresLastQuorum ==
   Lemma1b ::
   \A id \in CORRECT:
     \/ decision[id] = NO_DECISION
     \/ round[id] > 1 /\ ExistsQuorum2(round[id] - 1, decision[id])
+
+Lemma1_DecisionRequiresLastQuorumLessRam ==
+  Lemma1c ::
+  \A id \in CORRECT:
+    \/ decision[id] = NO_DECISION
+    \/ round[id] > 1 /\ ExistsQuorum2LessRam(round[id] - 1, decision[id])
 
 Lemma2_NoEquivocation1ByCorrect ==
   Lemma2 ::
@@ -263,7 +279,8 @@ Lemma11_ValueOnQuorum ==
            IN
            2 * Cardinality(DinQ) <= N + T
 
-\* using cardinalities and arithmetics instead of quorum sets
+\* Using cardinalities and arithmetics instead of quorum sets.
+\* This reduced RAM consumption from 27G to 7G.
 Lemma11_ValueOnQuorumLessRam ==
   Lemma11a ::
   \A id \in CORRECT:
@@ -311,7 +328,7 @@ IndInv ==
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
   /\ Lemma13_ValueLock
   \* this lemma is rather slow
-  /\ Lemma1_DecisionRequiresLastQuorum
+  /\ Lemma1_DecisionRequiresLastQuorumLessRam
 
 \******** THE INDUCTIVE INVARIANT + THE SHAPE INVARIANT ***********/
 IndInit ==
