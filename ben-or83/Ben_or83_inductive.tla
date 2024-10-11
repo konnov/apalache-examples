@@ -237,6 +237,7 @@ Lemma10_M1RequiresQuorum ==
   \A r \in RoundsWithM1:
     Cardinality(Senders2(msgs2[r - 1])) >= N - T
 
+\* this lemma leads to RAM explosion of 27G, see Lemma11_ValueOnQuorumLessRam
 Lemma11_ValueOnQuorum ==
   Lemma11 ::
   \A id \in CORRECT:
@@ -262,6 +263,26 @@ Lemma11_ValueOnQuorum ==
            IN
            2 * Cardinality(DinQ) <= N + T
 
+\* using cardinalities and arithmetics instead of quorum sets
+Lemma11_ValueOnQuorumLessRam ==
+  Lemma11a ::
+  \A id \in CORRECT:
+    LET r == round[id] IN
+    r > 1 =>
+      \/ LET v == value[id]
+             Qv == Senders2({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = v })
+         IN
+         2 * Cardinality(Qv) > N + T
+      \/ LET n0 == Cardinality({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+             n1 == Cardinality({ m \in msgs2[r - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+             nq == Cardinality({ m \in msgs2[r - 1]: IsQ2(m) })
+         IN
+         \E x0, x1 \in 0..N:
+           /\ x0 <= n0 /\ x1 <= n1
+           /\ x0 + x1 + nq >= N - T
+           /\ 2 * x0 <= N + T
+           /\ 2 * x1 <= N + T
+
 Lemma12_CannotJumpRoundsWithoutQuorum ==
   Lemma12 ::
   \A r \in ROUNDS:
@@ -286,7 +307,7 @@ IndInv ==
   /\ Lemma8_Q2RequiresNoQuorumFaster
   /\ Lemma9_RoundsConnection
   /\ Lemma10_M1RequiresQuorum
-  /\ Lemma11_ValueOnQuorum
+  /\ Lemma11_ValueOnQuorumLessRam
   /\ Lemma12_CannotJumpRoundsWithoutQuorum
   /\ Lemma13_ValueLock
   \* this lemma is rather slow
