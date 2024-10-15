@@ -123,7 +123,7 @@ Step2(id) ==
           /\ 2 * Weights[v] > N + T
           \* "...then send the message (2, r, v, D) to all processes"
           /\ msgs2' = [msgs2 EXCEPT ![r] = @ \union { D2(id, r, v) }]
-        \//\ \A v \in VALUES: 2 * Weights[v] <= N
+        \//\ \A v \in VALUES: 2 * Weights[v] <= N + T
           \* "Else send the message (2, r, ?) to all processes"
           /\ msgs2' = [msgs2 EXCEPT ![r] = @ \union { Q2(id, r) }]
   /\ step' = [ step EXCEPT ![id] = S3 ]
