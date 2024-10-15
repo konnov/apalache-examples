@@ -56,19 +56,19 @@ VARIABLES
   \* @type: REPLICA -> STEP;
   step,
   \* Type-1 messages sent by the correct and faulty replicas, mapped by rounds.
-  \* @type: Int -> Set($msgA);
+  \* @type: Int -> Set($msgOne);
   msgs1,
   \* Type-2 messages sent by the correct and faulty replicas, mapped by rounds.
-  \* @type: Int -> Set($msgB);
+  \* @type: Int -> Set($msgTwo);
   msgs2
 
-\* @type: Set($msgA) => Set(REPLICA);
+\* @type: Set($msgOne) => Set(REPLICA);
 Senders1(m1s) ==
   \* Filter the set of ALL, as it has fixed size, in contrast to m1s.
   \* This is especially important, when we call Cardinality on the result.
   { id \in ALL: \E m \in m1s: m.src = id }
 
-\* @type: Set($msgB) => Set(REPLICA);
+\* @type: Set($msgTwo) => Set(REPLICA);
 Senders2(m2s) ==
   \* Filter the set of ALL, as it has fixed size, in contrast to m2s.
   \* This is especially important, when we call Cardinality on the result.

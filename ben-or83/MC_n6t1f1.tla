@@ -24,10 +24,10 @@ VARIABLES
   \* @type: REPLICA -> STEP;
   step,
   \* Type-1 messages sent by the correct and faulty replicas, mapped by rounds.
-  \* @type: Int -> Set($msgA);
+  \* @type: Int -> Set($msgOne);
   msgs1,
   \* Type-2 messages sent by the correct and faulty replicas, mapped by rounds.
-  \* @type: Int -> Set($msgB);
+  \* @type: Int -> Set($msgTwo);
   msgs2
 
 INSTANCE Ben_or83
