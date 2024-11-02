@@ -6,9 +6,10 @@ set terminal pngcairo size 800,600 enhanced font 'Verdana,14'
 set output output_name
 
 # Title and labels
-set title "Cactus Plot"
+set title "Running times"
 set xlabel "Number of instances solved"
-set ylabel "Time (seconds)"
+set ylabel "Time (seconds, logarithmic)"
+set logscale y
 
 # Grid and style
 set grid
