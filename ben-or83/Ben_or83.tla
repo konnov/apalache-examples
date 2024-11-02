@@ -190,6 +190,13 @@ AgreementInv ==
         \/ decision[id2] = NO_DECISION
         \/ decision[id1] = decision[id2]
 
+\* Once a correct replica decides, it never changes its decision
+FinalityInv ==
+    \A id \in CORRECT:
+        \/ decision[id] = NO_DECISION
+        \/ \/ decision'[id] /= NO_DECISION
+           \/ decision'[id] = decision[id]
+
 \****************** EXAMPLES   *****************************
 
 \* An example of a replica that has made a decision

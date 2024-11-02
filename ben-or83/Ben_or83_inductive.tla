@@ -6,19 +6,19 @@
  *
  * To make sure that we have constructed an inductive invariant, we have to check:
  *
- * 1. That IndInv => AgreementInv:
+ * 1. That IndInit => AgreementInv:
  *
  * $ apalache-mc check --init=IndInit --inv=AgreementInv --length=0 MC_n6t1f0_inductive.tla
  *
  * On my computer, it finished in 10 min 13 sec using 5.3G of RAM.
  *
- * 2. That Init => IndInv:
+ * 2. That InitWithFaults => IndInv:
  *
- * $ apalache-mc check --init=Init --inv=IndInv --length=0 MC_n6t1f0_inductive.tla
+ * $ apalache-mc check --init=InitWithFaults --inv=IndInv --length=0 MC_n6t1f0_inductive.tla
  *
- * 3. That IndInit /\ Next => IndInv' (running 3 jobs in parallel):
+ * 3. That IndInit /\ Next => IndInv' (running all jobs in parallel):
  *
- * $ seq 0 17 | parallel --delay 1 -j 8 \
+ * $ seq 0 12 | parallel --delay 1 -j 13 \
  *   apalache-mc check --length=1 --inv=IndInv --init=IndInit \
  *   --tuning-options='search.invariantFilter=1-\>'state{} --out-dir=out/{} MC_n6t1f0_inductive.tla
  *
