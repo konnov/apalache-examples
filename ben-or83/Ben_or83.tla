@@ -102,6 +102,7 @@ InitWithFaults ==
 
 \* @type: REPLICA => Bool;
 Step1(id) ==
+  Step1::
   LET r == round[id] IN
   /\ step[id] = S1
   \* "send the message (1, r, x_P) to all the processes"
@@ -110,6 +111,7 @@ Step1(id) ==
   /\ UNCHANGED << value, decision, round, msgs2 >>
 
 Step2(id) ==
+  Step2::
   LET r == round[id] IN
   /\ step[id] = S2
   /\ \E received \in SUBSET msgs1[r]:
@@ -130,6 +132,7 @@ Step2(id) ==
   /\ UNCHANGED << value, decision, round, msgs1 >>
 
 Step3(id) ==
+  Step3::
   LET r == round[id] IN
   /\ step[id] = S3
   /\ \E received \in SUBSET msgs2[r]:
@@ -163,6 +166,7 @@ Step3(id) ==
 
 FaultyStep ==
     \* the faulty replicas collectively inject messages for a single round
+    Faulty::
     /\ \E r \in ROUNDS:
         /\ \E F1 \in SUBSET [ src: FAULTY, r: { r }, v: VALUES ]:
             msgs1' = [ msgs1 EXCEPT ![r] = @ \union F1 ]
@@ -207,4 +211,24 @@ DecisionEx ==
 AllDecisionEx ==
     ~(\A id \in CORRECT: decision[id] /= NO_DECISION)
 
+\* simple view
+View == <<
+    { value[id]: id \in CORRECT },
+    { decision[id]: id \in CORRECT },
+    { round[id]: id \in CORRECT },
+    { step[id]: id \in CORRECT }
+>>
+
+\* Count the number of replicas that map to a value.
+\* @type: (REPLICA -> a) => (a -> Int);
+CountImg(f) ==
+    LET V == {f[id]: id \in CORRECT} IN
+    [ v \in V |-> Cardinality({ id \in CORRECT: f[id] = v })]
+
+PreciseView == <<
+    CountImg(value),
+    CountImg(decision),
+    CountImg(round),
+    CountImg(step)
+>>
 ======================================================================================
