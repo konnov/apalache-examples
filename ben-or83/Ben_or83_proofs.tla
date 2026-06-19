@@ -1629,6 +1629,40 @@ THEOREM Pres_L7_S1 ==
              /\ N + T \in Nat
         BY Senders1_Sub, FS_CardinalityType, ConstNat
   <1> QED BY <1>old, <1>mono, <1>types, Arith_DoubleGtMono
+THEOREM Pres_L7_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma7_D2RequiresQuorum'
+  <1>l7. Lemma7_D2RequiresQuorum BY DEF IndInv
+  <1>p. /\ \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr]
+        /\ \A rr \in ROUNDS : \A m \in msgs2'[rr] :
+              m \notin msgs2[rr] =>
+                ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
+                      \E m \in msgs2'[r] : IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in CORRECT
+               PROVE  LET ExistsQuorum1(rr, vv) ==
+                         LET Sv == { m \in msgs1'[rr]: m.v = vv } IN
+                         2 * Cardinality(Senders1(Sv)) > N + T
+                      IN ExistsQuorum1(r, v)
+        BY DEF Lemma7_D2RequiresQuorum
+  <1> PICK md \in msgs2'[r] : IsD2(md) /\ AsD2(md).v = v /\ AsD2(md).src \in CORRECT
+        OBVIOUS
+  <1>oldD2. md \in msgs2[r] BY <1>p, DisjointCF
+  <1>old. LET ExistsQuorum1(rr, vv) ==
+             LET Sv == { m \in msgs1[rr]: m.v = vv } IN
+             2 * Cardinality(Senders1(Sv)) > N + T
+          IN ExistsQuorum1(r, v)
+        BY <1>l7, <1>oldD2 DEF Lemma7_D2RequiresQuorum
+  <1>sub. { m \in msgs1[r] : m.v = v } \subseteq { m \in msgs1'[r] : m.v = v }
+        BY <1>p
+  <1>mono. Cardinality(Senders1({ m \in msgs1[r] : m.v = v }))
+              <= Cardinality(Senders1({ m \in msgs1'[r] : m.v = v }))
+        BY <1>sub, Senders1_Mono
+  <1>types. Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) \in Nat
+             /\ Cardinality(Senders1({ m \in msgs1'[r] : m.v = v })) \in Nat
+             /\ N + T \in Nat
+        BY Senders1_Sub, FS_CardinalityType, ConstNat
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_DoubleGtMono
 THEOREM Pres_L7_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma7_D2RequiresQuorum'
@@ -1642,8 +1676,10 @@ THEOREM Pres_Lemma7 ==
     <2> QED BY Pres_L7_S1
   <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma7_D2RequiresQuorum'
         OMITTED \* TODO: substantive Step2 case for Lemma7_D2RequiresQuorum
-  <1>o3. ASSUME FaultyStep PROVE Lemma7_D2RequiresQuorum'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma7_D2RequiresQuorum
+  <1>o3. FaultyStep => Lemma7_D2RequiresQuorum'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma7_D2RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L7_F
   <1> QED BY Pres_L7_S3, Pres_L7_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L8: a correct Q2 means no type-1 quorum existed =====
