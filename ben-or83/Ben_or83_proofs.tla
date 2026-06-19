@@ -1650,6 +1650,43 @@ THEOREM Pres_L10_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma10_M1RequiresQuorum'
   BY DEF IndInv, Lemma10_M1RequiresQuorum, Step3
+THEOREM Pres_L10_S1 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step1(id0)
+  PROVE  Lemma10_M1RequiresQuorum'
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom1. DOMAIN msgs1 = ROUNDS BY Msgs1DomR
+  <1>upd. /\ msgs1' = [ msgs1 EXCEPT
+                ![round[id0]] = msgs1[round[id0]] \union { M1(id0, round[id0], value[id0]) } ]
+          /\ msgs2' = msgs2
+          BY DEF Step1
+  <1>s1. step[id0] = S1 BY DEF Step1
+  <1> SUFFICES ASSUME NEW r \in { rr \in ROUNDS \ { 1 } :
+                                  \E m \in msgs1'[rr] : m.src \in CORRECT }
+        PROVE Cardinality(Senders2(msgs2'[r - 1])) >= N - T
+        BY DEF Lemma10_M1RequiresQuorum
+  <1>rin. r \in ROUNDS /\ r # 1 /\ \E m \in msgs1'[r] : m.src \in CORRECT
+        OBVIOUS
+  <1> PICK m \in msgs1'[r] : m.src \in CORRECT BY <1>rin
+  <1>split. m \in msgs1[r]
+              \/ (r = round[id0] /\ m = M1(id0, round[id0], value[id0]))
+        BY <1>upd, <1>dom1, <1>r0
+  <1>old. CASE m \in msgs1[r]
+    <2>rinOld. r \in ROUNDS \ { 1 } /\ \E mm \in msgs1[r] : mm.src \in CORRECT
+          BY <1>old, <1>rin
+    <2>q. Cardinality(Senders2(msgs2[r - 1])) >= N - T
+          BY <1>l10, <2>rinOld DEF Lemma10_M1RequiresQuorum
+    <2> QED BY <2>q, <1>upd
+  <1>new. CASE r = round[id0] /\ m = M1(id0, round[id0], value[id0])
+    <2>pred. r - 1 \in ROUNDS BY <1>rin, RoundPredInRounds
+    <2>next. (r - 1) + 1 \in ROUNDS
+              /\ \E id \in CORRECT : round[id] = (r - 1) + 1 /\ step[id] = S1
+          BY <1>new, <1>r0, <1>s1, ConstNat, RoundsNat
+    <2>q. Cardinality(Senders2(msgs2[r - 1])) >= N - T
+          BY <1>l12, <2>pred, <2>next DEF Lemma12_CannotJumpRoundsWithoutQuorum
+    <2> QED BY <2>q, <1>upd
+  <1> QED BY <1>split, <1>old, <1>new
 THEOREM Pres_L10_S2 ==
   ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
   PROVE  Lemma10_M1RequiresQuorum'
@@ -1691,8 +1728,10 @@ THEOREM Pres_L10_ST ==
 THEOREM Pres_Lemma10 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma10_M1RequiresQuorum'
-  <1>o1. ASSUME NEW id \in CORRECT, Step1(id) PROVE Lemma10_M1RequiresQuorum'
-        OMITTED \* TODO: substantive Step1 case for Lemma10_M1RequiresQuorum
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step1(id) => Lemma10_M1RequiresQuorum'
+    <2> SUFFICES ASSUME Step1(id) PROVE Lemma10_M1RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L10_S1
   <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma10_M1RequiresQuorum'
     <2> SUFFICES ASSUME Step2(id) PROVE Lemma10_M1RequiresQuorum'
           OBVIOUS
