@@ -549,6 +549,19 @@ THEOREM TypeOKPrimeIntro ==
   PROVE  TypeOK'
   BY DEF TypeOK
 
+THEOREM Msgs2PrimeWitnessIntro ==
+  ASSUME NEW AD \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW AQ \in SUBSET [ src: ALL, r: ROUNDS ],
+         msgs2' = [ rr \in ROUNDS |->
+           { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+             \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  PROVE  \E B1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+            B1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+          msgs2' = [ rr \in ROUNDS |->
+            { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
+              \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } } ]
+  OBVIOUS
+
 THEOREM Msgs1AddOneRep ==
   ASSUME NEW A \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
          NEW rr0 \in ROUNDS,
@@ -559,7 +572,93 @@ THEOREM Msgs1AddOneRep ==
   PROVE  [ f EXCEPT ![rr0] = f[rr0] \union { M1(src0, rr0, val0) } ]
          = [ rr \in ROUNDS |->
               { m \in A \union { M1(src0, rr0, val0) } : m.r = rr } ]
-  OMITTED \* TODO: routine function/set extensionality helper for TypeOK witness updates.
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union { M1(src0, rr0, val0) } ]
+             rhs == [ rr \in ROUNDS |->
+                       { m \in A \union { M1(src0, rr0, val0) } : m.r = rr } ]
+  <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
+    <2>m1r. M1(src0, rr0, val0).r = rr0 BY DEF M1
+    <2>eq. CASE rr = rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>eq, <2>m1r, SMT DEF lhs, rhs, M1
+    <2>ne. CASE rr # rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>ne, <2>m1r, SMT DEF lhs, rhs, M1
+    <2> QED BY <2>eq, <2>ne
+  <1> QED BY <1>vals DEF lhs, rhs
+
+THEOREM Msgs2AddDRep ==
+  ASSUME NEW AD \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW AQ \in SUBSET [ src: ALL, r: ROUNDS ],
+         NEW rr0 \in ROUNDS,
+         NEW src0 \in ALL,
+         NEW val0 \in VALUES,
+         NEW f,
+         f = [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union { D2(src0, rr0, val0) } ]
+         = [ rr \in ROUNDS |->
+             { D2(mm.src, rr, mm.v):
+                 mm \in { m \in AD \union { [ src |-> src0, r |-> rr0, v |-> val0 ] }:
+                   m.r = rr } }
+               \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union { D2(src0, rr0, val0) } ]
+             rhs == [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v):
+                   mm \in { m \in AD \union { [ src |-> src0, r |-> rr0, v |-> val0 ] }:
+                     m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
+    <2>newr. [ src |-> src0, r |-> rr0, v |-> val0 ].r = rr0 OBVIOUS
+    <2>eq. CASE rr = rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>eq, <2>newr, VariantAx, SMT DEF lhs, rhs, D2
+    <2>ne. CASE rr # rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>ne, <2>newr, VariantAx, SMT DEF lhs, rhs, D2
+    <2> QED BY <2>eq, <2>ne
+  <1> QED BY <1>vals DEF lhs, rhs
+
+THEOREM Msgs2AddQRep ==
+  ASSUME NEW AD \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW AQ \in SUBSET [ src: ALL, r: ROUNDS ],
+         NEW rr0 \in ROUNDS,
+         NEW src0 \in ALL,
+         NEW f,
+         f = [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union { Q2(src0, rr0) } ]
+         = [ rr \in ROUNDS |->
+             { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+               \union { Q2(mm.src, rr):
+                 mm \in { m \in AQ \union { [ src |-> src0, r |-> rr0 ] }:
+                   m.r = rr } } ]
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union { Q2(src0, rr0) } ]
+             rhs == [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+                 \union { Q2(mm.src, rr):
+                   mm \in { m \in AQ \union { [ src |-> src0, r |-> rr0 ] }:
+                     m.r = rr } } ]
+  <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
+    <2>newr. [ src |-> src0, r |-> rr0 ].r = rr0 OBVIOUS
+    <2>eq. CASE rr = rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>eq, <2>newr, VariantAx, SMT DEF lhs, rhs, Q2
+    <2>ne. CASE rr # rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>ne, <2>newr, VariantAx, SMT DEF lhs, rhs, Q2
+    <2> QED BY <2>eq, <2>ne
+  <1> QED BY <1>vals DEF lhs, rhs
 
 \*****************************************************************************
 \* FAULTY-STEP CONSEQUENCES.
@@ -758,7 +857,57 @@ THEOREM TypePres ==
               msgs2' = [ rr \in ROUNDS |->
                 { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
                   \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } } ]
-        OMITTED \* TODO: rebuild msgs2 existential witness for Step2 without triggering standalone WITNESS obligations.
+        <4> PICK received \in SUBSET msgs1[round[id]] :
+              /\ Cardinality(Senders1(received)) >= N - T
+              /\ LET Weights == [ v \in VALUES |->
+                   Cardinality(Senders1({ m \in received: m.v = v })) ]
+                 IN
+                 \/ \E v \in VALUES:
+                      /\ 2 * Weights[v] > N + T
+                      /\ msgs2' =
+                           [ msgs2 EXCEPT ![round[id]] =
+                               msgs2[round[id]] \union { D2(id, round[id], v) } ]
+                 \/ /\ \A v \in VALUES: 2 * Weights[v] <= N + T
+                    /\ msgs2' =
+                         [ msgs2 EXCEPT ![round[id]] =
+                             msgs2[round[id]] \union { Q2(id, round[id]) } ]
+            BY <2>3 DEF Step2
+        <4> DEFINE Weights == [ v \in VALUES |->
+                   Cardinality(Senders1({ m \in received: m.v = v })) ]
+        <4>d. CASE \E v \in VALUES:
+                  /\ 2 * Weights[v] > N + T
+                  /\ msgs2' =
+                       [ msgs2 EXCEPT ![round[id]] =
+                           msgs2[round[id]] \union { D2(id, round[id], v) } ]
+          <5> PICK v \in VALUES:
+                /\ 2 * Weights[v] > N + T
+                /\ msgs2' =
+                     [ msgs2 EXCEPT ![round[id]] =
+                         msgs2[round[id]] \union { D2(id, round[id], v) } ]
+              BY <4>d
+          <5> DEFINE A1Dp == A1D \union { [ src |-> id, r |-> round[id], v |-> v ] }
+          <5>1. A1Dp \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ]
+                BY <3>r0, <3>idall DEF A1Dp
+          <5>2. msgs2' = [ rr \in ROUNDS |->
+                  { D2(mm.src, rr, mm.v): mm \in { m \in A1Dp: m.r = rr } }
+                    \union { Q2(mm.src, rr): mm \in { m \in A1Q: m.r = rr } } ]
+                BY <4>d, <3>r0, <3>idall, Msgs2AddDRep DEF A1Dp, Step2
+          <5>qok. A1Q \in SUBSET [ src: ALL, r: ROUNDS ] OBVIOUS
+          <5> QED BY <5>1, <5>2, <5>qok, Msgs2PrimeWitnessIntro
+        <4>q. CASE /\ \A v \in VALUES: 2 * Weights[v] <= N + T
+                    /\ msgs2' =
+                         [ msgs2 EXCEPT ![round[id]] =
+                             msgs2[round[id]] \union { Q2(id, round[id]) } ]
+          <5> DEFINE A1Qp == A1Q \union { [ src |-> id, r |-> round[id] ] }
+          <5>1. A1Qp \in SUBSET [ src: ALL, r: ROUNDS ]
+                BY <3>r0, <3>idall DEF A1Qp
+          <5>2. msgs2' = [ rr \in ROUNDS |->
+                  { D2(mm.src, rr, mm.v): mm \in { m \in A1D: m.r = rr } }
+                    \union { Q2(mm.src, rr): mm \in { m \in A1Qp: m.r = rr } } ]
+                BY <4>q, <3>r0, <3>idall, Msgs2AddQRep DEF A1Qp, Step2
+          <5>dok. A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] OBVIOUS
+          <5> QED BY <5>dok, <5>1, <5>2, Msgs2PrimeWitnessIntro
+        <4> QED BY <4>d, <4>q
       <3> QED BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6 DEF TypeOK
     <2>4. CASE Step3(id)
           \* value/decision/round/step updates stay in type; msgs unchanged.
