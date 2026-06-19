@@ -57,6 +57,9 @@ ASSUME FleqT == 0 <= F /\ F <= T /\ 0 <= T
 \* The protocol parameters are natural numbers (counts of replicas).
 ASSUME ConstNat == N \in Nat /\ T \in Nat /\ F \in Nat
 
+\* Restatement of the base spec assumption, named for proof steps.
+ASSUME NoDecisionNotValue == NO_DECISION \notin VALUES
+
 \* ROUNDS is the set of positive natural rounds. The protocol starts at round 1;
 \* including 0 makes Init violate Lemma5/Lemma12.
 ASSUME RoundsNat == ROUNDS = Nat \ {0}
@@ -478,6 +481,37 @@ THEOREM Msgs2QSrcInAll ==
   PROVE  \A m \in msgs2[rr] : IsQ2(m) => AsQ2(m).src \in ALL
   BY Msgs2Decomp, ShapeSrcQFromExists
 
+THEOREM ShapeHelperV ==
+  ASSUME NEW rr, NEW A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ], NEW A1Q, NEW m,
+         m \in DPof(A1D, rr) \union QPof(A1Q, rr), IsD2(m)
+  PROVE  AsD2(m).v \in VALUES
+  <1>1. m \notin QPof(A1Q, rr)
+        <2> SUFFICES ASSUME m \in QPof(A1Q, rr) PROVE FALSE OBVIOUS
+        <2>1. PICK mq \in { m \in A1Q: m.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
+        <2> QED BY <2>1, VariantAx
+  <1>2. PICK md \in { m \in A1D: m.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
+  <1>3. md \in A1D BY <1>2
+  <1> QED BY <1>2, <1>3, VariantAx
+
+THEOREM ShapeVFromExists ==
+  ASSUME NEW rr, NEW mset,
+         \E A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+            A1Q \in SUBSET [ src: ALL, r: ROUNDS ] : mset = DPof(A1D, rr) \union QPof(A1Q, rr)
+  PROVE  \A m \in mset : IsD2(m) => AsD2(m).v \in VALUES
+  <1> SUFFICES ASSUME NEW A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+                      NEW A1Q \in SUBSET [ src: ALL, r: ROUNDS ],
+                      mset = DPof(A1D, rr) \union QPof(A1Q, rr)
+               PROVE  \A m \in mset : IsD2(m) => AsD2(m).v \in VALUES
+        OBVIOUS
+  <1>1. SUFFICES \A m \in DPof(A1D, rr) \union QPof(A1Q, rr) : IsD2(m) => AsD2(m).v \in VALUES
+        OBVIOUS
+  <1> QED BY ShapeHelperV
+
+THEOREM Msgs2VInValues ==
+  ASSUME TypeOK, NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2[rr] : IsD2(m) => AsD2(m).v \in VALUES
+  BY Msgs2Decomp, ShapeVFromExists
+
 \* Type-1 message shape from TypeOK (simpler than msgs2: no Variants).
 THEOREM Msgs1Shape ==
   ASSUME TypeOK, NEW rr \in ROUNDS
@@ -622,6 +656,41 @@ THEOREM QStep2Mono ==
         BY <1>sup, <1>finSup, FS_Subset
   <1>mono. Cardinality(QSet(r))
               <= Cardinality({ m \in msgs2'[r] : IsQ2(m) })
+        BY <1>sub, <1>finNew, FS_Subset
+  <1> QED BY <1>finNew, <1>mono
+
+THEOREM Msgs2Finite ==
+  ASSUME TypeOK, NEW r \in ROUNDS
+  PROVE  IsFiniteSet(msgs2[r])
+  <1>v0. 0 \in VALUES BY DEF VALUES
+  <1>v1. 1 \in VALUES BY DEF VALUES
+  <1>f0. IsFiniteSet(DvSet(r, 0)) BY <1>v0, D2SetFinite
+  <1>f1. IsFiniteSet(DvSet(r, 1)) BY <1>v1, D2SetFinite
+  <1>fq. IsFiniteSet(QSet(r)) BY Q2SetFinite
+  <1>sub. msgs2[r] \subseteq (DvSet(r, 0) \union DvSet(r, 1)) \union QSet(r)
+        BY Msgs2VInValues, VariantAx DEF DvSet, QSet, VALUES
+  <1>fin01. IsFiniteSet(DvSet(r, 0) \union DvSet(r, 1)) BY <1>f0, <1>f1, FS_Union
+  <1>finAll. IsFiniteSet((DvSet(r, 0) \union DvSet(r, 1)) \union QSet(r))
+        BY <1>fin01, <1>fq, FS_Union
+  <1> QED BY <1>sub, <1>finAll, FS_Subset
+
+THEOREM Msgs2Step2Mono ==
+  ASSUME TypeOK, NEW id0 \in CORRECT, Step2(id0), NEW r \in ROUNDS
+  PROVE  /\ IsFiniteSet(msgs2'[r])
+          /\ Cardinality(msgs2[r]) <= Cardinality(msgs2'[r])
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>nm. PICK nm :
+        msgs2' = [ msgs2 EXCEPT ![round[id0]] = msgs2[round[id0]] \union { nm } ]
+        BY VariantAx DEF Step2
+  <1>sub. msgs2[r] \subseteq msgs2'[r]
+        BY <1>nm, <1>r0, <1>dom2
+  <1>finOld. IsFiniteSet(msgs2[r]) BY Msgs2Finite
+  <1>sup. msgs2'[r] \subseteq msgs2[r] \union { nm }
+        BY <1>nm, <1>r0, <1>dom2
+  <1>finSup. IsFiniteSet(msgs2[r] \union { nm }) BY <1>finOld, FS_AddElement
+  <1>finNew. IsFiniteSet(msgs2'[r]) BY <1>sup, <1>finSup, FS_Subset
+  <1>mono. Cardinality(msgs2[r]) <= Cardinality(msgs2'[r])
         BY <1>sub, <1>finNew, FS_Subset
   <1> QED BY <1>finNew, <1>mono
 
@@ -2519,6 +2588,79 @@ THEOREM Pres_L1_S1 ==
   ASSUME IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
   BY DEF IndInv, Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam, Step1
+THEOREM Pres_L1_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
+  <1>l1. Lemma1_DecisionRequiresLastQuorumLessRam BY DEF IndInv
+  <1>dom. decision \in [ CORRECT -> VALUES \union { NO_DECISION } ]
+           /\ round \in [ CORRECT -> ROUNDS ]
+        BY DEF TypeOK
+  <1>fr. decision' = decision /\ round' = round BY DEF Step2
+  <1> SUFFICES ASSUME NEW id \in CORRECT
+        PROVE \/ decision'[id] = NO_DECISION
+              \/ /\ round'[id] > 1
+                 /\ LET nv == Cardinality({ m \in msgs2'[round'[id] - 1]:
+                                           IsD2(m) /\ AsD2(m).v = decision'[id] })
+                        n == Cardinality(msgs2'[round'[id] - 1])
+                    IN
+                    /\ n >= N - T
+                    /\ nv >= T + 1
+                    /\ 2 * nv > N + T
+        BY DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+  <1>dec. CASE decision'[id] = NO_DECISION
+    <2> QED BY <1>dec
+  <1>non. CASE decision'[id] # NO_DECISION
+    <2>v. decision[id] \in VALUES BY <1>dom, <1>fr, <1>non, NoDecisionNotValue
+    <2>old. /\ round[id] > 1
+             /\ LET nv == Cardinality({ m \in msgs2[round[id] - 1]:
+                                       IsD2(m) /\ AsD2(m).v = decision[id] })
+                    n == Cardinality(msgs2[round[id] - 1])
+                IN
+                /\ n >= N - T
+                /\ nv >= T + 1
+                /\ 2 * nv > N + T
+          BY <1>l1, <1>fr, <1>non DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+    <2>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <2>old, RoundsNat
+    <2>rp. round[id] - 1 \in ROUNDS BY <2>rin, RoundPredInRounds
+    <2>oldN. Cardinality(msgs2[round[id] - 1]) >= N - T
+          BY <2>old DEF ExistsQuorum2LessRam
+    <2>oldNv. Cardinality(DvSet(round[id] - 1, decision[id])) >= T + 1
+          BY <2>old DEF ExistsQuorum2LessRam, DvSet
+    <2>oldTw. 2 * Cardinality(DvSet(round[id] - 1, decision[id])) > N + T
+          BY <2>old DEF ExistsQuorum2LessRam, DvSet
+    <2>mn. Cardinality(msgs2[round[id] - 1])
+              <= Cardinality(msgs2'[round[id] - 1])
+          BY <2>rp, Msgs2Step2Mono
+    <2>mv. Cardinality(DvSet(round[id] - 1, decision[id]))
+              <= Cardinality({ m \in msgs2'[round[id] - 1]:
+                                 IsD2(m) /\ AsD2(m).v = decision[id] })
+          BY <2>rp, <2>v, DvStep2Mono
+    <2>finOldN. IsFiniteSet(msgs2[round[id] - 1]) BY <2>rp, Msgs2Finite
+    <2>finNewN. IsFiniteSet(msgs2'[round[id] - 1]) BY <2>rp, Msgs2Step2Mono
+    <2>finOldV. IsFiniteSet(DvSet(round[id] - 1, decision[id])) BY <2>rp, <2>v, D2SetFinite
+    <2>finNewV. IsFiniteSet({ m \in msgs2'[round[id] - 1]:
+                                IsD2(m) /\ AsD2(m).v = decision[id] })
+          BY <2>rp, <2>v, DvStep2Mono
+    <2>types. /\ Cardinality(msgs2[round[id] - 1]) \in Nat
+               /\ Cardinality(msgs2'[round[id] - 1]) \in Nat
+               /\ Cardinality(DvSet(round[id] - 1, decision[id])) \in Nat
+               /\ Cardinality({ m \in msgs2'[round[id] - 1]:
+                                  IsD2(m) /\ AsD2(m).v = decision[id] }) \in Nat
+               /\ N - T \in Nat
+               /\ T + 1 \in Nat
+               /\ N + T \in Nat
+          BY <2>finOldN, <2>finNewN, <2>finOldV, <2>finNewV,
+             FS_CardinalityType, ConstNat, NgtT, FleqT
+    <2>newN. Cardinality(msgs2'[round[id] - 1]) >= N - T
+          BY <2>oldN, <2>mn, <2>types, Arith_GeTrans
+    <2>newNv. Cardinality({ m \in msgs2'[round[id] - 1]:
+                              IsD2(m) /\ AsD2(m).v = decision[id] }) >= T + 1
+          BY <2>oldNv, <2>mv, <2>types, Arith_GeTrans
+    <2>newTw. 2 * Cardinality({ m \in msgs2'[round[id] - 1]:
+                                  IsD2(m) /\ AsD2(m).v = decision[id] }) > N + T
+          BY <2>oldTw, <2>mv, <2>types, Arith_DoubleGtMono
+    <2> QED BY <2>old, <2>newN, <2>newNv, <2>newTw, <1>fr
+  <1> QED BY <1>dec, <1>non
 THEOREM Pres_L1_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
@@ -2526,8 +2668,10 @@ THEOREM Pres_L1_ST ==
 THEOREM Pres_Lemma1 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
-  <1>o1. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
-        OMITTED \* TODO: substantive Step2 case for Lemma1_DecisionRequiresLastQuorumLessRam
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma1_DecisionRequiresLastQuorumLessRam'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
+          OBVIOUS
+    <2> QED BY Pres_L1_S2
   <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
         OMITTED \* TODO: substantive Step3 case for Lemma1_DecisionRequiresLastQuorumLessRam
   <1>o3. ASSUME FaultyStep PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
