@@ -1663,6 +1663,77 @@ THEOREM Pres_L7_F ==
              /\ N + T \in Nat
         BY Senders1_Sub, FS_CardinalityType, ConstNat
   <1> QED BY <1>old, <1>mono, <1>types, Arith_DoubleGtMono
+THEOREM Pres_L7_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma7_D2RequiresQuorum'
+  <1>l7. Lemma7_D2RequiresQuorum BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>m1same. msgs1' = msgs1 BY DEF Step2
+  <1> PICK received \in SUBSET msgs1[round[id0]] :
+        /\ Cardinality(Senders1(received)) >= N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders1({ m \in received : m.v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ 2 * Weights[vv] > N + T
+                /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                    msgs2[round[id0]] \union { D2(id0, round[id0], vv) } ]
+           \/ /\ \A vv \in VALUES: 2 * Weights[vv] <= N + T
+              /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                    msgs2[round[id0]] \union { Q2(id0, round[id0]) } ]
+        BY DEF Step2
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders1({ m \in received : m.v = vv })) ]
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
+                      \E m \in msgs2'[r] : IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in CORRECT
+               PROVE  LET ExistsQuorum1(rr, vv) ==
+                         LET Sv == { m \in msgs1'[rr]: m.v = vv } IN
+                         2 * Cardinality(Senders1(Sv)) > N + T
+                      IN ExistsQuorum1(r, v)
+        BY DEF Lemma7_D2RequiresQuorum
+  <1> PICK md \in msgs2'[r] : IsD2(md) /\ AsD2(md).v = v /\ AsD2(md).src \in CORRECT
+        OBVIOUS
+  <1>oldMsg. CASE md \in msgs2[r]
+    <2>old. LET ExistsQuorum1(rr, vv) ==
+               LET Sv == { m \in msgs1[rr]: m.v = vv } IN
+               2 * Cardinality(Senders1(Sv)) > N + T
+            IN ExistsQuorum1(r, v)
+          BY <1>l7, <1>oldMsg DEF Lemma7_D2RequiresQuorum
+    <2> QED BY <2>old, <1>m1same
+  <1>newMsg. CASE md \notin msgs2[r]
+    <2>d. CASE \E vv \in VALUES:
+              /\ 2 * Weights[vv] > N + T
+              /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                    msgs2[round[id0]] \union { D2(id0, round[id0], vv) } ]
+      <3> PICK vd \in VALUES:
+            /\ 2 * Weights[vd] > N + T
+            /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                  msgs2[round[id0]] \union { D2(id0, round[id0], vd) } ]
+          BY <2>d
+      <3>eq. r = round[id0] /\ md = D2(id0, round[id0], vd)
+          BY <1>newMsg, <1>dom2, <1>r0
+      <3>veq. v = vd BY <3>eq, VariantAx
+      <3>sub. { m \in received : m.v = vd } \subseteq { m \in msgs1[round[id0]] : m.v = vd }
+          OBVIOUS
+      <3>mono. Cardinality(Senders1({ m \in received : m.v = vd }))
+                  <= Cardinality(Senders1({ m \in msgs1[round[id0]] : m.v = vd }))
+          BY <3>sub, Senders1_Mono
+      <3>types. Cardinality(Senders1({ m \in received : m.v = vd })) \in Nat
+                 /\ Cardinality(Senders1({ m \in msgs1[round[id0]] : m.v = vd })) \in Nat
+                 /\ N + T \in Nat
+          BY Senders1_Sub, FS_CardinalityType, ConstNat
+      <3>gt. 2 * Cardinality(Senders1({ m \in received : m.v = vd })) > N + T
+          BY <2>d DEF Weights
+      <3> QED BY <3>eq, <3>veq, <3>gt, <3>mono, <3>types, <1>m1same, Arith_DoubleGtMono
+    <2>q. CASE /\ \A vv \in VALUES: 2 * Weights[vv] <= N + T
+                /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                      msgs2[round[id0]] \union { Q2(id0, round[id0]) } ]
+      <3>eq. r = round[id0] /\ md = Q2(id0, round[id0])
+          BY <2>q, <1>newMsg, <1>dom2, <1>r0
+      <3> QED BY <3>eq, VariantAx
+    <2> QED BY <2>d, <2>q
+  <1> QED BY <1>oldMsg, <1>newMsg
 THEOREM Pres_L7_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma7_D2RequiresQuorum'
@@ -1674,8 +1745,10 @@ THEOREM Pres_Lemma7 ==
     <2> SUFFICES ASSUME Step1(id) PROVE Lemma7_D2RequiresQuorum'
           OBVIOUS
     <2> QED BY Pres_L7_S1
-  <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma7_D2RequiresQuorum'
-        OMITTED \* TODO: substantive Step2 case for Lemma7_D2RequiresQuorum
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma7_D2RequiresQuorum'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma7_D2RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L7_S2
   <1>o3. FaultyStep => Lemma7_D2RequiresQuorum'
     <2> SUFFICES ASSUME FaultyStep PROVE Lemma7_D2RequiresQuorum'
           OBVIOUS
