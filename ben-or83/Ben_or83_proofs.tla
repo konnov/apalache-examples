@@ -2003,6 +2003,29 @@ THEOREM Pres_L12_S2 ==
              /\ N - T \in Nat
         BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
   <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
+THEOREM Pres_L12_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma12_CannotJumpRoundsWithoutQuorum'
+  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
+  <1>p. /\ step' = step /\ round' = round
+        /\ \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, r + 1 \in ROUNDS,
+                      \E id \in CORRECT : round'[id] = r + 1 /\ step'[id] = S1
+               PROVE  Cardinality(Senders2(msgs2'[r])) >= N - T
+        BY DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>oldNext. \E id \in CORRECT : round[id] = r + 1 /\ step[id] = S1
+        BY <1>p
+  <1>old. Cardinality(Senders2(msgs2[r])) >= N - T
+        BY <1>l12, <1>oldNext DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>sub. msgs2[r] \subseteq msgs2'[r] BY <1>p
+  <1>mono. Cardinality(Senders2(msgs2[r])) <= Cardinality(Senders2(msgs2'[r]))
+        BY <1>sub, Senders2_Mono
+  <1>types. Cardinality(Senders2(msgs2[r])) \in Nat
+             /\ Cardinality(Senders2(msgs2'[r])) \in Nat
+             /\ N - T \in Nat
+        BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
 THEOREM Pres_L12_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma12_CannotJumpRoundsWithoutQuorum'
@@ -2020,8 +2043,10 @@ THEOREM Pres_Lemma12 ==
     <2> QED BY Pres_L12_S2
   <1>o3. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
         OMITTED \* TODO: substantive Step3 case for Lemma12_CannotJumpRoundsWithoutQuorum
-  <1>o4. ASSUME FaultyStep PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>o4. FaultyStep => Lemma12_CannotJumpRoundsWithoutQuorum'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L12_F
   <1> QED BY Pres_L12_ST, <1>o1, <1>o2, <1>o3, <1>o4 DEF Next, CorrectStep
 
 \* ===== L13: value lock -- a correct value at r matches Supported(r-1) =====
