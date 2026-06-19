@@ -1009,6 +1009,47 @@ THEOREM Pres_L3_S1 ==
   ASSUME IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma3_NoEquivocation2ByCorrect'
   BY DEF IndInv, Lemma3_NoEquivocation2ByCorrect, Step1
+THEOREM Pres_L3_S2 ==
+  ASSUME TypeOK, IndInv, NEW id \in CORRECT, Step2(id)
+  PROVE  Lemma3_NoEquivocation2ByCorrect'
+  <1>l3. Lemma3_NoEquivocation2ByCorrect BY DEF IndInv
+  <1>l4. Lemma4_MessagesNotFromFuture BY DEF IndInv
+  <1>r0. round[id] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>s2. step[id] = S2 BY DEF Step2
+  <1>dist. S2 # S3 BY DEF S2, S3
+  <1>nm. PICK nm :
+        /\ msgs2' = [ msgs2 EXCEPT ![round[id]] = msgs2[round[id]] \union { nm } ]
+        /\ (IF IsD2(nm) THEN AsD2(nm).src ELSE AsQ2(nm).src) = id
+        /\ (IF IsD2(nm) THEN AsD2(nm).r ELSE AsQ2(nm).r) = round[id]
+      BY VariantAx DEF Step2
+  <1>noOld. \A m \in msgs2[round[id]] :
+        (IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src) # id
+    <2> SUFFICES ASSUME NEW m \in msgs2[round[id]],
+                  (IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src) = id
+          PROVE FALSE
+        OBVIOUS
+    <2>mr. (IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r) = round[id]
+        BY <1>r0, Msgs2RShape, VariantAx
+    <2>srcCor. (IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src) \in CORRECT
+        OBVIOUS
+    <2>srcEq. (IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src) = id
+        OBVIOUS
+    <2>notS3. step[(IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src)] # S3
+        BY <2>srcEq, <1>s2, <1>dist
+    <2>roundSrc. round[(IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src)] = round[id]
+        BY <2>srcEq
+    <2>lt. (IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r) < round[id]
+        BY <1>l4, <1>r0, <2>srcCor, <2>notS3, <2>roundSrc DEF Lemma4_MessagesNotFromFuture
+    <2> QED BY <2>mr, <2>lt
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, NEW m1 \in msgs2'[r], NEW m2 \in msgs2'[r]
+        PROVE  /\ IsD2(m1) /\ IsD2(m2) /\ AsD2(m1).src = AsD2(m2).src =>
+                  (AsD2(m1).src \in CORRECT => AsD2(m1).v = AsD2(m2).v)
+               /\ IsQ2(m1) /\ IsD2(m2) /\ AsQ2(m1).src = AsD2(m2).src =>
+                  AsQ2(m1).src \in FAULTY
+      BY DEF Lemma3_NoEquivocation2ByCorrect
+  <1> QED BY <1>l3, <1>nm, <1>noOld, <1>dom2, <1>r0, VariantAx
+           DEF Lemma3_NoEquivocation2ByCorrect
 THEOREM Pres_L3_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma3_NoEquivocation2ByCorrect'
@@ -1017,13 +1058,21 @@ THEOREM Pres_L3_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma3_NoEquivocation2ByCorrect'
   BY DEF IndInv, Lemma3_NoEquivocation2ByCorrect, vars
+THEOREM Pres_L3_F ==
+  ASSUME IndInv, FaultyStep
+  PROVE  Lemma3_NoEquivocation2ByCorrect'
+  BY FaultyStepProps, DisjointCF DEF IndInv, Lemma3_NoEquivocation2ByCorrect
 THEOREM Pres_Lemma3 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma3_NoEquivocation2ByCorrect'
-  <1>o1. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma3_NoEquivocation2ByCorrect'
-        OMITTED \* TODO: Step2 adds one type-2 message; full TLAPS loses the local Step2 assumption in this nested proof shape.
-  <1>o2. ASSUME FaultyStep PROVE Lemma3_NoEquivocation2ByCorrect'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma3_NoEquivocation2ByCorrect
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma3_NoEquivocation2ByCorrect'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma3_NoEquivocation2ByCorrect'
+          OBVIOUS
+    <2> QED BY Pres_L3_S2
+  <1>o2. FaultyStep => Lemma3_NoEquivocation2ByCorrect'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma3_NoEquivocation2ByCorrect'
+          OBVIOUS
+    <2> QED BY Pres_L3_F
   <1> QED BY Pres_L3_S1, Pres_L3_S3, Pres_L3_ST, <1>o1, <1>o2 DEF Next, CorrectStep
 
 \* ===== L4: messages not from the future =====
