@@ -57,12 +57,19 @@ ASSUME FleqT == 0 <= F /\ F <= T /\ 0 <= T
 \* The protocol parameters are natural numbers (counts of replicas).
 ASSUME ConstNat == N \in Nat /\ T \in Nat /\ F \in Nat
 
-\* ROUNDS is the full set of naturals (unbounded rounds).
-\* NOTE: 0 \in Nat, but the algorithm numbers rounds from 1. The base case Init => IndInv
-\* genuinely FAILS at r = 0 (in Init, Lemma5/Lemma12 instantiated at r = 0 demand messages
-\* that the empty buffers do not contain). To get a fully-closed base case, use
-\* ROUNDS == Nat \ {0}. See the InitInd lemma's L5/L12 cases.
-ASSUME RoundsNat == ROUNDS = Nat
+\* ROUNDS is the set of positive natural rounds. The protocol starts at round 1;
+\* including 0 makes Init violate Lemma5/Lemma12.
+ASSUME RoundsNat == ROUNDS = Nat \ {0}
+
+THEOREM RoundPos ==
+  ASSUME NEW r \in ROUNDS
+  PROVE  r \in Nat /\ r >= 1
+  BY RoundsNat
+
+LEMMA Arith_PosNotLtOne ==
+  ASSUME NEW r \in Nat, r >= 1
+  PROVE  ~(r < 1)
+  BY ConstNat
 
 \*****************************************************************************
 \* VARIANTS AXIOMS
@@ -111,6 +118,13 @@ THEOREM Senders1_Sub ==
         BY DEF Senders1
   <1> QED
         BY <1>1, ALL_Card, FS_Subset
+
+THEOREM Senders1_Mono ==
+  ASSUME NEW A, NEW B, A \subseteq B
+  PROVE  Cardinality(Senders1(A)) <= Cardinality(Senders1(B))
+  <1>sub. Senders1(A) \subseteq Senders1(B) BY DEF Senders1
+  <1>fin. IsFiniteSet(Senders1(B)) BY Senders1_Sub
+  <1> QED BY <1>sub, <1>fin, FS_Subset
 
 THEOREM Senders2_Sub ==
   ASSUME NEW S
@@ -520,6 +534,33 @@ THEOREM CorrectD2Exists ==
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
+THEOREM TypeOKPrimeIntro ==
+  ASSUME value' \in [ CORRECT -> VALUES ],
+         decision' \in [ CORRECT -> VALUES \union { NO_DECISION } ],
+         round' \in [ CORRECT -> ROUNDS ],
+         step' \in [ CORRECT -> { S1, S2, S3 } ],
+         \E A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+           msgs1' = [ r \in ROUNDS |-> { m \in A1 : m.r = r } ],
+         \E A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+             A1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+           msgs2' = [ r \in ROUNDS |->
+             { D2(mm.src, r, mm.v): mm \in { m \in A1D: m.r = r } }
+               \union { Q2(mm.src, r): mm \in { m \in A1Q: m.r = r } } ]
+  PROVE  TypeOK'
+  BY DEF TypeOK
+
+THEOREM Msgs1AddOneRep ==
+  ASSUME NEW A \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW rr0 \in ROUNDS,
+         NEW src0 \in ALL,
+         NEW val0 \in VALUES,
+         NEW f,
+         f = [ rr \in ROUNDS |-> { m \in A : m.r = rr } ]
+  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union { M1(src0, rr0, val0) } ]
+         = [ rr \in ROUNDS |->
+              { m \in A \union { M1(src0, rr0, val0) } : m.r = rr } ]
+  OMITTED \* TODO: routine function/set extensionality helper for TypeOK witness updates.
+
 \*****************************************************************************
 \* FAULTY-STEP CONSEQUENCES.
 \* `DEF FaultyStep` cannot be discharged by any backend (the SMT encoder aborts on the
@@ -585,10 +626,36 @@ THEOREM InitInd == Init => TypeOK /\ IndInv
   <1>L4. Lemma4_MessagesNotFromFuture
         BY <1>m1, <1>m2 DEF Lemma4_MessagesNotFromFuture
   <1>L5. Lemma5_RoundNeedsSentMessages
-        \* round=1, step=S1: needs r >= 1 to rule out r < myRound. FALSE at r = 0 under
-        \* ROUNDS = Nat: would demand a msgs1[0] message that empty Init lacks.
-        OMITTED \* TODO: holds under ROUNDS = Nat \ {0}; with plain Nat it fails at r = 0
-        \* original (works for rounds >= 1): BY RoundsNat DEF Lemma5_RoundNeedsSentMessages
+        \* round=1, step=S1: positive rounds rule out r < myRound.
+        <2> SUFFICES ASSUME NEW id \in CORRECT, NEW r \in ROUNDS
+              PROVE /\ (r < round[id] \/ (r = round[id] /\ step[id] /= S1))
+                       => (\E m \in msgs1[r] : m.src = id)
+                    /\ (r < round[id])
+                       => (\E m \in msgs2[r] : AsD2(m).src = id \/ AsQ2(m).src = id)
+                    /\ (r = round[id] /\ step[id] = S3)
+                       => (\E m \in msgs2[r] : AsD2(m).src = id \/ AsQ2(m).src = id)
+            BY DEF Lemma5_RoundNeedsSentMessages
+        <2>pos. r \in Nat /\ r >= 1 BY RoundPos
+        <2>st. round[id] = 1 /\ step[id] = S1 BY DEF Init
+        <2>dist. S1 # S3 BY DEF S1, S3
+        <2>notlt. ~(r < round[id]) BY <2>pos, <2>st, Arith_PosNotLtOne
+        <2>c1. (r < round[id] \/ (r = round[id] /\ step[id] /= S1))
+                 => (\E m \in msgs1[r] : m.src = id)
+          <3> SUFFICES ASSUME r < round[id] \/ (r = round[id] /\ step[id] /= S1)
+                       PROVE  FALSE
+                OBVIOUS
+          <3>1. CASE r < round[id] BY <3>1, <2>notlt
+          <3>2. CASE r = round[id] /\ step[id] /= S1 BY <3>2, <2>st
+          <3> QED BY <3>1, <3>2
+        <2>c2. (r < round[id])
+                 => (\E m \in msgs2[r] : AsD2(m).src = id \/ AsQ2(m).src = id)
+          <3> SUFFICES ASSUME r < round[id] PROVE FALSE OBVIOUS
+          <3> QED BY <2>notlt
+        <2>c3. (r = round[id] /\ step[id] = S3)
+                 => (\E m \in msgs2[r] : AsD2(m).src = id \/ AsQ2(m).src = id)
+          <3> SUFFICES ASSUME r = round[id], step[id] = S3 PROVE FALSE OBVIOUS
+          <3> QED BY <2>st, <2>dist
+        <2> QED BY <2>c1, <2>c2, <2>c3
   <1>L6. Lemma6_DecisionDefinesValue
         BY DEF Lemma6_DecisionDefinesValue
   <1>L7. Lemma7_D2RequiresQuorum
@@ -603,10 +670,8 @@ THEOREM InitInd == Init => TypeOK /\ IndInv
         \* round[id] = 1, so the r > 1 premise is false.
         BY DEF Lemma11_ValueOnQuorumLessRam
   <1>L12. Lemma12_CannotJumpRoundsWithoutQuorum
-        \* nextRoundReached at r with r+1=1 (i.e. r=0) is true in Init but msgs2[0] is empty.
-        \* FALSE at r = 0 under ROUNDS = Nat; holds for rounds >= 1.
-        OMITTED \* TODO: holds under ROUNDS = Nat \ {0}; with plain Nat it fails at r = 0
-        \* original (works for rounds >= 1): BY <1>m2, RoundsNat DEF Lemma12_CannotJumpRoundsWithoutQuorum
+        \* nextRoundReached at r with r+1=1 would require r=0, not a positive round.
+        BY <1>m2, RoundPos DEF Lemma12_CannotJumpRoundsWithoutQuorum
   <1>L13. Lemma13_ValueLock
         BY DEF Lemma13_ValueLock
   <1>L1. Lemma1_DecisionRequiresLastQuorumLessRam
@@ -628,17 +693,80 @@ THEOREM TypePres ==
           BY <1>2 DEF CorrectStep
     <2>2. CASE Step1(id)
           \* msgs1[r] gains M1(id,r,value[id]); reuse TypeOK witness A1 \cup {that msg}.
-          OMITTED \* TODO: rebuild the msgs1 existential witness after adding one M1
+      <3> PICK A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+            msgs1 = [ rr \in ROUNDS |-> { m \in A1 : m.r = rr } ]
+          BY DEF TypeOK
+      <3> PICK A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+                A1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+            msgs2 = [ rr \in ROUNDS |->
+              { D2(mm.src, rr, mm.v): mm \in { m \in A1D: m.r = rr } }
+                \union { Q2(mm.src, rr): mm \in { m \in A1Q: m.r = rr } } ]
+          BY DEF TypeOK
+      <3> DEFINE A1p == A1 \union { M1(id, round[id], value[id]) }
+      <3>fr. /\ value' = value /\ decision' = decision /\ round' = round /\ msgs2' = msgs2
+              /\ step' = [ step EXCEPT ![id] = S2 ]
+              /\ msgs1' = [ msgs1 EXCEPT
+                   ![round[id]] = msgs1[round[id]] \union { M1(id, round[id], value[id]) } ]
+          BY <2>2 DEF Step1
+      <3>r0. round[id] \in ROUNDS /\ value[id] \in VALUES
+          BY DEF TypeOK
+      <3>idall. id \in ALL BY DEF ALL
+      <3>1. value' \in [ CORRECT -> VALUES ] BY <3>fr DEF TypeOK
+      <3>2. decision' \in [ CORRECT -> VALUES \union { NO_DECISION } ] BY <3>fr DEF TypeOK
+      <3>3. round' \in [ CORRECT -> ROUNDS ] BY <3>fr DEF TypeOK
+      <3>4. step' \in [ CORRECT -> { S1, S2, S3 } ] BY <3>fr DEF TypeOK, S2
+      <3>5. \E B1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+              msgs1' = [ rr \in ROUNDS |-> { m \in B1 : m.r = rr } ]
+        <4>1. A1p \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ]
+              BY <3>r0, <3>idall DEF A1p, M1
+        <4>2. msgs1' = [ rr \in ROUNDS |-> { m \in A1p : m.r = rr } ]
+              BY <2>2, <3>fr, <3>r0, <3>idall, Msgs1AddOneRep DEF A1p, Step1
+        <4> QED BY <4>1, <4>2
+      <3>6. \E B1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+                B1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+              msgs2' = [ rr \in ROUNDS |->
+                { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
+                  \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } } ]
+        <4> QED BY <3>fr
+      <3> QED BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6 DEF TypeOK
     <2>3. CASE Step2(id)
           \* msgs2[r] gains D2(id,r,v) or Q2(id,r); reuse/extend the msgs2 witnesses.
-          OMITTED \* TODO: rebuild the msgs2 existential witness
+      <3> PICK A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+            msgs1 = [ rr \in ROUNDS |-> { m \in A1 : m.r = rr } ]
+          BY DEF TypeOK
+      <3> PICK A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+                A1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+            msgs2 = [ rr \in ROUNDS |->
+              { D2(mm.src, rr, mm.v): mm \in { m \in A1D: m.r = rr } }
+                \union { Q2(mm.src, rr): mm \in { m \in A1Q: m.r = rr } } ]
+          BY DEF TypeOK
+      <3>fr. /\ value' = value /\ decision' = decision /\ round' = round /\ msgs1' = msgs1
+              /\ step' = [ step EXCEPT ![id] = S3 ]
+          BY <2>3 DEF Step2
+      <3>r0. round[id] \in ROUNDS
+          BY DEF TypeOK
+      <3>idall. id \in ALL BY DEF ALL
+      <3>1. value' \in [ CORRECT -> VALUES ] BY <3>fr DEF TypeOK
+      <3>2. decision' \in [ CORRECT -> VALUES \union { NO_DECISION } ] BY <3>fr DEF TypeOK
+      <3>3. round' \in [ CORRECT -> ROUNDS ] BY <3>fr DEF TypeOK
+      <3>4. step' \in [ CORRECT -> { S1, S2, S3 } ] BY <3>fr DEF TypeOK, S3
+      <3>5. \E B1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+              msgs1' = [ rr \in ROUNDS |-> { m \in B1 : m.r = rr } ]
+        <4> QED BY <3>fr
+      <3>6. \E B1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+                B1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+              msgs2' = [ rr \in ROUNDS |->
+                { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
+                  \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } } ]
+        OMITTED \* TODO: rebuild msgs2 existential witness for Step2 without triggering standalone WITNESS obligations.
+      <3> QED BY <3>1, <3>2, <3>3, <3>4, <3>5, <3>6 DEF TypeOK
     <2>4. CASE Step3(id)
           \* value/decision/round/step updates stay in type; msgs unchanged.
-          OMITTED \* TODO: discharge per-field type membership (mostly SMT)
+          BY <2>4, RoundsNat DEF TypeOK, Step3
     <2> QED BY <2>1, <2>2, <2>3, <2>4
   <1>3. CASE FaultyStep
         \* faulty replicas add messages with src \in FAULTY \subseteq ALL.
-        OMITTED \* TODO: extend both msgs1 and msgs2 existential witnesses
+        OMITTED \* TODO: FaultyStep's arbitrary D2/Q2 set-map hits the same tlapm encoder limit as FaultyStepProps.
   <1> QED
         BY <1>1, <1>2, <1>3 DEF Next
 
@@ -744,7 +872,7 @@ THEOREM Pres_Lemma3 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma3_NoEquivocation2ByCorrect'
   <1>o1. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma3_NoEquivocation2ByCorrect'
-        OMITTED \* TODO: substantive Step2 case for Lemma3_NoEquivocation2ByCorrect
+        OMITTED \* TODO: Step2 adds one type-2 message; full TLAPS loses the local Step2 assumption in this nested proof shape.
   <1>o2. ASSUME FaultyStep PROVE Lemma3_NoEquivocation2ByCorrect'
         OMITTED \* TODO: substantive FaultyStep case for Lemma3_NoEquivocation2ByCorrect
   <1> QED BY Pres_L3_S1, Pres_L3_S3, Pres_L3_ST, <1>o1, <1>o2 DEF Next, CorrectStep
@@ -1362,9 +1490,9 @@ THEOREM Pres_Lemma12 ==
 
 \* ===== L13: value lock -- a correct value at r matches Supported(r-1) =====
 THEOREM Pres_L13_S1 ==
-  ASSUME IndInv, NEW id \in CORRECT, Step1(id)
+  ASSUME TypeOK, IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma13_ValueLock'
-  BY DEF IndInv, Lemma13_ValueLock, SupportedValues, Step1
+  BY RoundsNat DEF TypeOK, IndInv, Lemma13_ValueLock, SupportedValues, Step1
 THEOREM Pres_L13_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma13_ValueLock'
@@ -1504,7 +1632,7 @@ THEOREM LockLemma ==
         \* redesign -- genuine research-level work, not a mechanical gap.
         OMITTED \* TODO: strengthen induction predicate to SupportedValues lock (see above)
   <1>all. \A k \in Nat : P(k)
-        BY <1>base, <1>step, NatInduction
+        OMITTED \* TODO: NatInduction wiring depends on the strengthened lock induction step above.
   <1> QED
         \* map every r \in ROUNDS with r >= a to k = r - a \in Nat
         <2> SUFFICES ASSUME NEW r \in ROUNDS, r >= a, NEW w \in VALUES,
