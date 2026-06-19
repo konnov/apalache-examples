@@ -1965,6 +1965,44 @@ THEOREM Pres_L12_S1 ==
   <1>old. Cardinality(Senders2(msgs2[r])) >= N - T
         BY <1>l12, <1>oldNext DEF Lemma12_CannotJumpRoundsWithoutQuorum
   <1> QED BY <1>old, <1>upd
+THEOREM Pres_L12_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma12_CannotJumpRoundsWithoutQuorum'
+  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
+  <1>doms. step \in [ CORRECT -> {S1,S2,S3} ] /\ round \in [ CORRECT -> ROUNDS ] BY DEF TypeOK
+  <1>dist. S1 # S3 BY DEF S1, S3
+  <1>upd. /\ step' = [ step EXCEPT ![id0] = S3 ]
+          /\ round' = round
+          BY DEF Step2
+  <1>st. \A x \in CORRECT : step'[x] = (IF x = id0 THEN S3 ELSE step[x])
+        BY <1>upd, <1>doms
+  <1>rd. \A x \in CORRECT : round'[x] = round[x]
+        BY <1>upd, <1>doms
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, r + 1 \in ROUNDS,
+                      \E id \in CORRECT : round'[id] = r + 1 /\ step'[id] = S1
+               PROVE  Cardinality(Senders2(msgs2'[r])) >= N - T
+        BY DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1> PICK id \in CORRECT : round'[id] = r + 1 /\ step'[id] = S1
+        OBVIOUS
+  <1>notId0. id # id0 BY <1>st, <1>dist
+  <1>oldNext. \E oldId \in CORRECT : round[oldId] = r + 1 /\ step[oldId] = S1
+        BY <1>notId0, <1>st, <1>rd
+  <1>old. Cardinality(Senders2(msgs2[r])) >= N - T
+        BY <1>l12, <1>oldNext DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>nm. PICK nm :
+        msgs2' = [ msgs2 EXCEPT ![round[id0]] = msgs2[round[id0]] \union { nm } ]
+        BY VariantAx DEF Step2
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>grow. msgs2[r] \subseteq msgs2'[r]
+        BY <1>nm, <1>r0, <1>dom2
+  <1>mono. Cardinality(Senders2(msgs2[r])) <= Cardinality(Senders2(msgs2'[r]))
+        BY <1>grow, Senders2_Mono
+  <1>types. Cardinality(Senders2(msgs2[r])) \in Nat
+             /\ Cardinality(Senders2(msgs2'[r])) \in Nat
+             /\ N - T \in Nat
+        BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
 THEOREM Pres_L12_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma12_CannotJumpRoundsWithoutQuorum'
@@ -1976,8 +2014,10 @@ THEOREM Pres_Lemma12 ==
     <2> SUFFICES ASSUME Step1(id) PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
           OBVIOUS
     <2> QED BY Pres_L12_S1
-  <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
-        OMITTED \* TODO: substantive Step2 case for Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma12_CannotJumpRoundsWithoutQuorum'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L12_S2
   <1>o3. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
         OMITTED \* TODO: substantive Step3 case for Lemma12_CannotJumpRoundsWithoutQuorum
   <1>o4. ASSUME FaultyStep PROVE Lemma12_CannotJumpRoundsWithoutQuorum'
