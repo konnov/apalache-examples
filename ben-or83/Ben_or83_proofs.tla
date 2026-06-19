@@ -567,6 +567,48 @@ THEOREM Msgs2DomR ==
         BY DEF TypeOK
   <1> QED OBVIOUS
 
+THEOREM Msgs2PrimeDecomp ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \E A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+            A1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+              msgs2'[rr] = DPof(A1D, rr) \union QPof(A1Q, rr)
+  <1> PICK B1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+           B1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+        msgs2' = [ r \in ROUNDS |->
+            { D2(mm.src, r, mm.v): mm \in { m \in B1D: m.r = r } }
+                \union { Q2(mm.src, r): mm \in { m \in B1Q: m.r = r } } ]
+        BY DEF TypeOK
+  <1>1. msgs2'[rr] = { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } }
+        OBVIOUS
+  <1>2. msgs2'[rr] = DPof(B1D, rr) \union QPof(B1Q, rr) BY <1>1, SetEqHelper
+  <1> QED BY <1>2
+
+THEOREM Msgs2PrimeShape ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2'[rr] : IsD2(m) => AsD2(m).r = rr
+  BY Msgs2PrimeDecomp, ShapeFromExists
+
+THEOREM Msgs2PrimeSrcInAll ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2'[rr] : IsD2(m) => AsD2(m).src \in ALL
+  BY Msgs2PrimeDecomp, ShapeSrcFromExists
+
+THEOREM Msgs2PrimeQSrcInAll ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2'[rr] : IsQ2(m) => AsQ2(m).src \in ALL
+  BY Msgs2PrimeDecomp, ShapeSrcQFromExists
+
+THEOREM Msgs2PrimeRShape ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2'[rr] : (IsD2(m) => AsD2(m).r = rr) /\ (IsQ2(m) => AsQ2(m).r = rr)
+  BY Msgs2PrimeDecomp, ShapeRFromExists
+
+THEOREM Msgs2PrimeVInValues ==
+  ASSUME TypeOK', NEW rr \in ROUNDS
+  PROVE  \A m \in msgs2'[rr] : IsD2(m) => AsD2(m).v \in VALUES
+  BY Msgs2PrimeDecomp, ShapeVFromExists
+
 \*****************************************************************************
 \* D2-MESSAGE COUNTING for a fixed (round, value): the set DvSet(r,v) of all D2(v)
 \* messages is finite (injects into ALL via sender), and at least one has a CORRECT
@@ -576,6 +618,10 @@ DvSet(r, v) == { m \in msgs2[r] : IsD2(m) /\ AsD2(m).v = v }
 DvFn(r, v) == [ m \in DvSet(r, v) |-> AsD2(m).src ]
 QSet(r) == { m \in msgs2[r] : IsQ2(m) }
 QFn(r) == [ m \in QSet(r) |-> AsQ2(m).src ]
+DvPSet(r, v) == { m \in msgs2'[r] : IsD2(m) /\ AsD2(m).v = v }
+DvPFn(r, v) == [ m \in DvPSet(r, v) |-> AsD2(m).src ]
+QPSet(r) == { m \in msgs2'[r] : IsQ2(m) }
+QPFn(r) == [ m \in QPSet(r) |-> AsQ2(m).src ]
 
 THEOREM DvInjective ==
   ASSUME NEW r, NEW v, \A m \in msgs2[r] : IsD2(m) => AsD2(m).r = r,
@@ -610,6 +656,42 @@ THEOREM Q2SetFinite ==
   <1>2. \A a, b \in QSet(r) : QFn(r)[a] = QFn(r)[b] => a = b BY <1>r, QInjective
   <1>3. QFn(r) \in Injection(QSet(r), ALL) BY <1>1, <1>2 DEF Injection, IsInjective
   <1>4. IsFiniteSet(QSet(r)) /\ Cardinality(QSet(r)) <= Cardinality(ALL)
+        BY <1>3, ALL_Card, FS_Injection
+  <1> QED BY <1>4, ALL_Card
+
+THEOREM DvPInjective ==
+  ASSUME NEW r, NEW v, \A m \in msgs2'[r] : IsD2(m) => AsD2(m).r = r,
+         NEW a \in DvPSet(r, v), NEW b \in DvPSet(r, v), DvPFn(r, v)[a] = DvPFn(r, v)[b]
+  PROVE  a = b
+  BY Zenon, VariantAx DEF DvPSet, DvPFn
+
+THEOREM D2PSetFinite ==
+  ASSUME TypeOK', NEW r \in ROUNDS, NEW v \in VALUES
+  PROVE  IsFiniteSet(DvPSet(r, v)) /\ Cardinality(DvPSet(r, v)) <= N
+  <1>r. \A m \in msgs2'[r] : IsD2(m) => AsD2(m).r = r BY Msgs2PrimeShape
+  <1>s. \A m \in msgs2'[r] : IsD2(m) => AsD2(m).src \in ALL BY Msgs2PrimeSrcInAll
+  <1>1. DvPFn(r, v) \in [ DvPSet(r, v) -> ALL ] BY <1>s DEF DvPSet, DvPFn
+  <1>2. \A a, b \in DvPSet(r, v) : DvPFn(r, v)[a] = DvPFn(r, v)[b] => a = b BY <1>r, DvPInjective
+  <1>3. DvPFn(r, v) \in Injection(DvPSet(r, v), ALL) BY <1>1, <1>2 DEF Injection, IsInjective
+  <1>4. IsFiniteSet(DvPSet(r, v)) /\ Cardinality(DvPSet(r, v)) <= Cardinality(ALL)
+        BY <1>3, ALL_Card, FS_Injection
+  <1> QED BY <1>4, ALL_Card
+
+THEOREM QPInjective ==
+  ASSUME NEW r, \A m \in msgs2'[r] : IsQ2(m) => AsQ2(m).r = r,
+         NEW a \in QPSet(r), NEW b \in QPSet(r), QPFn(r)[a] = QPFn(r)[b]
+  PROVE  a = b
+  BY Zenon, VariantAx DEF QPSet, QPFn
+
+THEOREM QPSetFinite ==
+  ASSUME TypeOK', NEW r \in ROUNDS
+  PROVE  IsFiniteSet(QPSet(r)) /\ Cardinality(QPSet(r)) <= N
+  <1>r. \A m \in msgs2'[r] : IsQ2(m) => AsQ2(m).r = r BY Msgs2PrimeRShape
+  <1>s. \A m \in msgs2'[r] : IsQ2(m) => AsQ2(m).src \in ALL BY Msgs2PrimeQSrcInAll
+  <1>1. QPFn(r) \in [ QPSet(r) -> ALL ] BY <1>s DEF QPSet, QPFn
+  <1>2. \A a, b \in QPSet(r) : QPFn(r)[a] = QPFn(r)[b] => a = b BY <1>r, QPInjective
+  <1>3. QPFn(r) \in Injection(QPSet(r), ALL) BY <1>1, <1>2 DEF Injection, IsInjective
+  <1>4. IsFiniteSet(QPSet(r)) /\ Cardinality(QPSet(r)) <= Cardinality(ALL)
         BY <1>3, ALL_Card, FS_Injection
   <1> QED BY <1>4, ALL_Card
 
@@ -671,6 +753,21 @@ THEOREM Msgs2Finite ==
         BY Msgs2VInValues, VariantAx DEF DvSet, QSet, VALUES
   <1>fin01. IsFiniteSet(DvSet(r, 0) \union DvSet(r, 1)) BY <1>f0, <1>f1, FS_Union
   <1>finAll. IsFiniteSet((DvSet(r, 0) \union DvSet(r, 1)) \union QSet(r))
+        BY <1>fin01, <1>fq, FS_Union
+  <1> QED BY <1>sub, <1>finAll, FS_Subset
+
+THEOREM Msgs2PrimeFinite ==
+  ASSUME TypeOK', NEW r \in ROUNDS
+  PROVE  IsFiniteSet(msgs2'[r])
+  <1>v0. 0 \in VALUES BY DEF VALUES
+  <1>v1. 1 \in VALUES BY DEF VALUES
+  <1>f0. IsFiniteSet(DvPSet(r, 0)) BY <1>v0, D2PSetFinite
+  <1>f1. IsFiniteSet(DvPSet(r, 1)) BY <1>v1, D2PSetFinite
+  <1>fq. IsFiniteSet(QPSet(r)) BY QPSetFinite
+  <1>sub. msgs2'[r] \subseteq (DvPSet(r, 0) \union DvPSet(r, 1)) \union QPSet(r)
+        BY Msgs2PrimeVInValues, VariantAx DEF DvPSet, QPSet, VALUES
+  <1>fin01. IsFiniteSet(DvPSet(r, 0) \union DvPSet(r, 1)) BY <1>f0, <1>f1, FS_Union
+  <1>finAll. IsFiniteSet((DvPSet(r, 0) \union DvPSet(r, 1)) \union QPSet(r))
         BY <1>fin01, <1>fq, FS_Union
   <1> QED BY <1>sub, <1>finAll, FS_Subset
 
@@ -879,6 +976,39 @@ THEOREM FaultyStepProps ==
               m \notin msgs2[rr] =>
                 ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
   OMITTED \* see note above: provable from DEF FaultyStep; admitted due to a tlapm encoder limit
+
+THEOREM DvFaultyMono ==
+  ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS, NEW v \in VALUES
+  PROVE  /\ IsFiniteSet(DvPSet(r, v))
+          /\ Cardinality(DvSet(r, v)) <= Cardinality(DvPSet(r, v))
+  <1>p. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr] BY FaultyStepProps
+  <1>sub. DvSet(r, v) \subseteq DvPSet(r, v) BY <1>p DEF DvSet, DvPSet
+  <1>fin. IsFiniteSet(DvPSet(r, v)) BY D2PSetFinite
+  <1>mono. Cardinality(DvSet(r, v)) <= Cardinality(DvPSet(r, v))
+        BY <1>sub, <1>fin, FS_Subset
+  <1> QED BY <1>fin, <1>mono
+
+THEOREM QFaultyMono ==
+  ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS
+  PROVE  /\ IsFiniteSet(QPSet(r))
+          /\ Cardinality(QSet(r)) <= Cardinality(QPSet(r))
+  <1>p. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr] BY FaultyStepProps
+  <1>sub. QSet(r) \subseteq QPSet(r) BY <1>p DEF QSet, QPSet
+  <1>fin. IsFiniteSet(QPSet(r)) BY QPSetFinite
+  <1>mono. Cardinality(QSet(r)) <= Cardinality(QPSet(r))
+        BY <1>sub, <1>fin, FS_Subset
+  <1> QED BY <1>fin, <1>mono
+
+THEOREM Msgs2FaultyMono ==
+  ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS
+  PROVE  /\ IsFiniteSet(msgs2'[r])
+          /\ Cardinality(msgs2[r]) <= Cardinality(msgs2'[r])
+  <1>p. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr] BY FaultyStepProps
+  <1>sub. msgs2[r] \subseteq msgs2'[r] BY <1>p
+  <1>fin. IsFiniteSet(msgs2'[r]) BY Msgs2PrimeFinite
+  <1>mono. Cardinality(msgs2[r]) <= Cardinality(msgs2'[r])
+        BY <1>sub, <1>fin, FS_Subset
+  <1> QED BY <1>fin, <1>mono
 
 \*****************************************************************************
 \* SECTION B -- TYPE PRESERVATION + BASE CASE
@@ -2389,6 +2519,124 @@ THEOREM Pres_L11_S2 ==
   <1>ngt. CASE ~(round'[id] > 1)
     <2> QED BY <1>ngt
   <1> QED BY <1>gt, <1>ngt
+THEOREM Pres_L11_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma11_ValueOnQuorumLessRam'
+  <1>l11. Lemma11_ValueOnQuorumLessRam BY DEF IndInv
+  <1>tokp. TypeOK' BY TypePres DEF Next
+  <1>dom. value \in [ CORRECT -> VALUES ] /\ round \in [ CORRECT -> ROUNDS ] BY DEF TypeOK
+  <1>fr. value' = value /\ round' = round BY FaultyStepProps
+  <1>p. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr] BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW id \in CORRECT
+        PROVE LET r == round'[id] IN
+          r > 1 =>
+            \/ LET v == value'[id]
+                   Qv == Senders2({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = v })
+               IN
+               2 * Cardinality(Qv) > N + T
+            \/ LET n0 == Cardinality({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+                   n1 == Cardinality({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+                   nq == Cardinality({ m \in msgs2'[r - 1]: IsQ2(m) })
+               IN
+               \E x0, x1 \in 0..N:
+                 /\ x0 <= n0 /\ x1 <= n1
+                 /\ x0 + x1 + nq >= N - T
+                 /\ 2 * x0 <= N + T
+                 /\ 2 * x1 <= N + T
+        BY DEF Lemma11_ValueOnQuorumLessRam
+  <1>gt. CASE round'[id] > 1
+    <2>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <1>gt, <1>fr, RoundsNat
+    <2>rp. round[id] - 1 \in ROUNDS BY <2>rin, RoundPredInRounds
+    <2>old. \/ LET v == value[id]
+                    Qv == Senders2({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = v })
+                IN
+                2 * Cardinality(Qv) > N + T
+             \/ LET n0 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+                    n1 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+                    nq == Cardinality({ m \in msgs2[round[id] - 1]: IsQ2(m) })
+                IN
+                \E x0, x1 \in 0..N:
+                  /\ x0 <= n0 /\ x1 <= n1
+                  /\ x0 + x1 + nq >= N - T
+                  /\ 2 * x0 <= N + T
+                  /\ 2 * x1 <= N + T
+          BY <1>l11, <1>fr, <1>gt DEF Lemma11_ValueOnQuorumLessRam
+    <2>one. CASE LET v == value[id]
+                    Qv == Senders2({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = v })
+                IN
+                2 * Cardinality(Qv) > N + T
+      <3> DEFINE oldQ == Senders2({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = value[id] })
+                 newQ == Senders2({ m \in msgs2'[round[id] - 1]: IsD2(m) /\ AsD2(m).v = value[id] })
+      <3>sub. { m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = value[id] }
+                  \subseteq { m \in msgs2'[round[id] - 1]: IsD2(m) /\ AsD2(m).v = value[id] }
+            BY <2>rp, <1>p
+      <3>mono. Cardinality(oldQ) <= Cardinality(newQ)
+            BY <3>sub, Senders2_Mono DEF oldQ, newQ
+      <3>types. Cardinality(oldQ) \in Nat /\ Cardinality(newQ) \in Nat /\ N + T \in Nat
+            BY Senders2_Sub, FS_CardinalityType, ConstNat
+      <3>gtNew. 2 * Cardinality(newQ) > N + T
+            BY <2>one, <3>mono, <3>types, Arith_DoubleGtMono DEF oldQ
+      <3> QED BY <3>gtNew, <1>fr DEF newQ
+    <2>two. CASE LET n0 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+                    n1 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+                    nq == Cardinality({ m \in msgs2[round[id] - 1]: IsQ2(m) })
+                IN
+                \E x0, x1 \in 0..N:
+                  /\ x0 <= n0 /\ x1 <= n1
+                  /\ x0 + x1 + nq >= N - T
+                  /\ 2 * x0 <= N + T
+                  /\ 2 * x1 <= N + T
+      <3> PICK x0 \in 0..N, x1 \in 0..N :
+            LET n0 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+                n1 == Cardinality({ m \in msgs2[round[id] - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+                nq == Cardinality({ m \in msgs2[round[id] - 1]: IsQ2(m) })
+            IN
+              /\ x0 <= n0 /\ x1 <= n1
+              /\ x0 + x1 + nq >= N - T
+              /\ 2 * x0 <= N + T
+              /\ 2 * x1 <= N + T
+            BY <2>two
+      <3>v0. 0 \in VALUES BY DEF VALUES
+      <3>v1. 1 \in VALUES BY DEF VALUES
+      <3>m0. Cardinality(DvSet(round[id] - 1, 0))
+                <= Cardinality(DvPSet(round[id] - 1, 0))
+            BY <1>tokp, <2>rp, <3>v0, DvFaultyMono
+      <3>m1. Cardinality(DvSet(round[id] - 1, 1))
+                <= Cardinality(DvPSet(round[id] - 1, 1))
+            BY <1>tokp, <2>rp, <3>v1, DvFaultyMono
+      <3>mq. Cardinality(QSet(round[id] - 1))
+                <= Cardinality(QPSet(round[id] - 1))
+            BY <1>tokp, <2>rp, QFaultyMono
+      <3>fin0p. IsFiniteSet(DvPSet(round[id] - 1, 0))
+            BY <1>tokp, <2>rp, <3>v0, DvFaultyMono
+      <3>fin1p. IsFiniteSet(DvPSet(round[id] - 1, 1))
+            BY <1>tokp, <2>rp, <3>v1, DvFaultyMono
+      <3>finqp. IsFiniteSet(QPSet(round[id] - 1))
+            BY <1>tokp, <2>rp, QFaultyMono
+      <3>fin0. IsFiniteSet(DvSet(round[id] - 1, 0)) BY <2>rp, <3>v0, D2SetFinite
+      <3>fin1. IsFiniteSet(DvSet(round[id] - 1, 1)) BY <2>rp, <3>v1, D2SetFinite
+      <3>finq. IsFiniteSet(QSet(round[id] - 1)) BY <2>rp, Q2SetFinite
+      <3>types. /\ x0 \in Nat /\ x1 \in Nat
+                 /\ Cardinality(DvSet(round[id] - 1, 0)) \in Nat
+                 /\ Cardinality(DvSet(round[id] - 1, 1)) \in Nat
+                 /\ Cardinality(QSet(round[id] - 1)) \in Nat
+                 /\ Cardinality(DvPSet(round[id] - 1, 0)) \in Nat
+                 /\ Cardinality(DvPSet(round[id] - 1, 1)) \in Nat
+                 /\ Cardinality(QPSet(round[id] - 1)) \in Nat
+                 /\ N - T \in Nat
+            BY <3>fin0, <3>fin1, <3>finq, <3>fin0p, <3>fin1p, <3>finqp,
+               FS_CardinalityType, ConstNat, NgtT, FleqT
+      <3>c0. x0 <= Cardinality(DvPSet(round[id] - 1, 0))
+            BY <3>m0, <3>types, Arith_GeTrans DEF DvSet
+      <3>c1. x1 <= Cardinality(DvPSet(round[id] - 1, 1))
+            BY <3>m1, <3>types, Arith_GeTrans DEF DvSet
+      <3>csum. x0 + x1 + Cardinality(QPSet(round[id] - 1)) >= N - T
+            BY <3>mq, <3>types, Arith_SumThirdMonoGe DEF QSet
+      <3> QED BY <3>c0, <3>c1, <3>csum, <1>fr DEF DvPSet, QPSet
+    <2> QED BY <2>old, <2>one, <2>two
+  <1>ngt. CASE ~(round'[id] > 1)
+    <2> QED BY <1>ngt
+  <1> QED BY <1>gt, <1>ngt
 THEOREM Pres_L11_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma11_ValueOnQuorumLessRam'
@@ -2402,8 +2650,10 @@ THEOREM Pres_Lemma11 ==
     <2> QED BY Pres_L11_S2
   <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma11_ValueOnQuorumLessRam'
         OMITTED \* TODO: substantive Step3 case for Lemma11_ValueOnQuorumLessRam
-  <1>o3. ASSUME FaultyStep PROVE Lemma11_ValueOnQuorumLessRam'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma11_ValueOnQuorumLessRam
+  <1>o3. FaultyStep => Lemma11_ValueOnQuorumLessRam'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma11_ValueOnQuorumLessRam'
+          OBVIOUS
+    <2> QED BY Pres_L11_F
   <1> QED BY Pres_L11_S1, Pres_L11_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L12: reaching round r+1 needs N-T type-2 messages in r =====
@@ -2661,6 +2911,74 @@ THEOREM Pres_L1_S2 ==
           BY <2>oldTw, <2>mv, <2>types, Arith_DoubleGtMono
     <2> QED BY <2>old, <2>newN, <2>newNv, <2>newTw, <1>fr
   <1> QED BY <1>dec, <1>non
+THEOREM Pres_L1_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
+  <1>l1. Lemma1_DecisionRequiresLastQuorumLessRam BY DEF IndInv
+  <1>tokp. TypeOK' BY TypePres DEF Next
+  <1>dom. decision \in [ CORRECT -> VALUES \union { NO_DECISION } ]
+           /\ round \in [ CORRECT -> ROUNDS ]
+        BY DEF TypeOK
+  <1>fr. decision' = decision /\ round' = round BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW id \in CORRECT
+        PROVE \/ decision'[id] = NO_DECISION
+              \/ /\ round'[id] > 1
+                 /\ LET nv == Cardinality({ m \in msgs2'[round'[id] - 1]:
+                                           IsD2(m) /\ AsD2(m).v = decision'[id] })
+                        n == Cardinality(msgs2'[round'[id] - 1])
+                    IN
+                    /\ n >= N - T
+                    /\ nv >= T + 1
+                    /\ 2 * nv > N + T
+        BY DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+  <1>dec. CASE decision'[id] = NO_DECISION
+    <2> QED BY <1>dec
+  <1>non. CASE decision'[id] # NO_DECISION
+    <2>v. decision[id] \in VALUES BY <1>dom, <1>fr, <1>non, NoDecisionNotValue
+    <2>old. /\ round[id] > 1
+             /\ LET nv == Cardinality({ m \in msgs2[round[id] - 1]:
+                                       IsD2(m) /\ AsD2(m).v = decision[id] })
+                    n == Cardinality(msgs2[round[id] - 1])
+                IN
+                /\ n >= N - T
+                /\ nv >= T + 1
+                /\ 2 * nv > N + T
+          BY <1>l1, <1>fr, <1>non DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+    <2>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <2>old, RoundsNat
+    <2>rp. round[id] - 1 \in ROUNDS BY <2>rin, RoundPredInRounds
+    <2>oldN. Cardinality(msgs2[round[id] - 1]) >= N - T
+          BY <2>old DEF ExistsQuorum2LessRam
+    <2>oldNv. Cardinality(DvSet(round[id] - 1, decision[id])) >= T + 1
+          BY <2>old DEF ExistsQuorum2LessRam, DvSet
+    <2>oldTw. 2 * Cardinality(DvSet(round[id] - 1, decision[id])) > N + T
+          BY <2>old DEF ExistsQuorum2LessRam, DvSet
+    <2>mn. Cardinality(msgs2[round[id] - 1])
+              <= Cardinality(msgs2'[round[id] - 1])
+          BY <1>tokp, <2>rp, Msgs2FaultyMono
+    <2>mv. Cardinality(DvSet(round[id] - 1, decision[id]))
+              <= Cardinality(DvPSet(round[id] - 1, decision[id]))
+          BY <1>tokp, <2>rp, <2>v, DvFaultyMono
+    <2>finOldN. IsFiniteSet(msgs2[round[id] - 1]) BY <2>rp, Msgs2Finite
+    <2>finNewN. IsFiniteSet(msgs2'[round[id] - 1]) BY <1>tokp, <2>rp, Msgs2FaultyMono
+    <2>finOldV. IsFiniteSet(DvSet(round[id] - 1, decision[id])) BY <2>rp, <2>v, D2SetFinite
+    <2>finNewV. IsFiniteSet(DvPSet(round[id] - 1, decision[id])) BY <1>tokp, <2>rp, <2>v, DvFaultyMono
+    <2>types. /\ Cardinality(msgs2[round[id] - 1]) \in Nat
+               /\ Cardinality(msgs2'[round[id] - 1]) \in Nat
+               /\ Cardinality(DvSet(round[id] - 1, decision[id])) \in Nat
+               /\ Cardinality(DvPSet(round[id] - 1, decision[id])) \in Nat
+               /\ N - T \in Nat
+               /\ T + 1 \in Nat
+               /\ N + T \in Nat
+          BY <2>finOldN, <2>finNewN, <2>finOldV, <2>finNewV,
+             FS_CardinalityType, ConstNat, NgtT, FleqT
+    <2>newN. Cardinality(msgs2'[round[id] - 1]) >= N - T
+          BY <2>oldN, <2>mn, <2>types, Arith_GeTrans
+    <2>newNv. Cardinality(DvPSet(round[id] - 1, decision[id])) >= T + 1
+          BY <2>oldNv, <2>mv, <2>types, Arith_GeTrans
+    <2>newTw. 2 * Cardinality(DvPSet(round[id] - 1, decision[id])) > N + T
+          BY <2>oldTw, <2>mv, <2>types, Arith_DoubleGtMono
+    <2> QED BY <2>old, <2>newN, <2>newNv, <2>newTw, <1>fr DEF DvPSet
+  <1> QED BY <1>dec, <1>non
 THEOREM Pres_L1_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
@@ -2674,8 +2992,10 @@ THEOREM Pres_Lemma1 ==
     <2> QED BY Pres_L1_S2
   <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
         OMITTED \* TODO: substantive Step3 case for Lemma1_DecisionRequiresLastQuorumLessRam
-  <1>o3. ASSUME FaultyStep PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma1_DecisionRequiresLastQuorumLessRam
+  <1>o3. FaultyStep => Lemma1_DecisionRequiresLastQuorumLessRam'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
+          OBVIOUS
+    <2> QED BY Pres_L1_F
   <1> QED BY Pres_L1_S1, Pres_L1_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 \* --- ASSEMBLED INDUCTIVE STEP ------------------------------------------------
 THEOREM Inductive ==
