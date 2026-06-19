@@ -10,12 +10,12 @@
  * Status: STRUCTURE MACHINE-CHECKED. `tlapm` proves all 310 non-omitted obligations
  * (the full decomposition: base case, type preservation, the [Next]_vars case algebra
  * for all 13 preservation lemmas, every frame case, and the Section D agreement
- * skeleton incl. the NaturalsInduction wiring). What remains are `OMITTED` admits,
+ * skeleton incl. the NaturalsInduction wiring). What remains are explicit admits,
  * each tagged `TODO`, for the genuinely hard leaves: the quorum/cardinality arguments
  * (a value gaining/keeping a quorum) and the LockLemma inductive step. Fill them in
  * priority order (see Ben_or83_inductive.tla header and the project plan).
  *
- * Two `OMITTED` leaves are NOT mathematical TODOs but caveats:
+ * Two admitted leaves are NOT mathematical TODOs but caveats:
  *   - InitInd L5/L12: FALSE at round 0 under ROUNDS = Nat (algorithm numbers rounds
  *     from 1); use ROUNDS == Nat \ {0} for a fully-closed base case.
  *   - Pres_L6_F: trivially true (FaultyStep does not touch value/decision) but blocked
@@ -150,6 +150,39 @@ THEOREM Senders2_Mono ==
   <1>sub. Senders2(A) \subseteq Senders2(B) BY DEF Senders2
   <1>fin. IsFiniteSet(Senders2(B)) BY Senders2_Sub
   <1> QED BY <1>sub, <1>fin, FS_Subset
+
+SenderWitness2(S) ==
+  [ id \in Senders2(S) |->
+      CHOOSE m \in S :
+        (IsD2(m) /\ AsD2(m).src = id) \/ (IsQ2(m) /\ AsQ2(m).src = id) ]
+
+THEOREM Senders2_CardLeSet ==
+  ASSUME NEW S, IsFiniteSet(S)
+  PROVE  Cardinality(Senders2(S)) <= Cardinality(S)
+  <1>fn. SenderWitness2(S) \in [ Senders2(S) -> S ]
+        BY DEF SenderWitness2, Senders2
+  <1>inj. \A a, b \in Senders2(S) :
+             SenderWitness2(S)[a] = SenderWitness2(S)[b] => a = b
+    <2> SUFFICES ASSUME NEW a \in Senders2(S), NEW b \in Senders2(S),
+                         SenderWitness2(S)[a] = SenderWitness2(S)[b]
+                  PROVE  a = b
+          OBVIOUS
+    <2>ea. \E m \in S :
+              (IsD2(m) /\ AsD2(m).src = a) \/ (IsQ2(m) /\ AsQ2(m).src = a)
+          BY DEF Senders2
+    <2>eb. \E m \in S :
+              (IsD2(m) /\ AsD2(m).src = b) \/ (IsQ2(m) /\ AsQ2(m).src = b)
+          BY DEF Senders2
+    <2>wa. (IsD2(SenderWitness2(S)[a]) /\ AsD2(SenderWitness2(S)[a]).src = a)
+              \/ (IsQ2(SenderWitness2(S)[a]) /\ AsQ2(SenderWitness2(S)[a]).src = a)
+          BY <2>ea DEF SenderWitness2
+    <2>wb. (IsD2(SenderWitness2(S)[b]) /\ AsD2(SenderWitness2(S)[b]).src = b)
+              \/ (IsQ2(SenderWitness2(S)[b]) /\ AsQ2(SenderWitness2(S)[b]).src = b)
+          BY <2>eb DEF SenderWitness2
+    <2> QED BY <2>wa, <2>wb, VariantAx
+  <1>i. SenderWitness2(S) \in Injection(Senders2(S), S)
+        BY <1>fn, <1>inj DEF Injection, IsInjective
+  <1> QED BY <1>i, FS_Injection
 
 \* Any subset of ALL is finite with cardinality at most N.
 THEOREM SubAll_Finite ==
