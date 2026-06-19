@@ -177,6 +177,11 @@ LEMMA Arith_GeTrans ==
   PROVE  b >= c
   BY ConstNat
 
+LEMMA Arith_DoubleGtMono ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat, 2 * a > c, a <= b
+  PROVE  2 * b > c
+  BY ConstNat
+
 \* CORE QUORUM INTERSECTION: two quorums of >= N - T senders intersect, and the
 \* intersection necessarily contains a correct replica (since N > 5*T).
 THEOREM QuorumIntersect ==
@@ -1590,6 +1595,40 @@ THEOREM Pres_L7_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma7_D2RequiresQuorum'
   BY DEF IndInv, Lemma7_D2RequiresQuorum, Step3
+THEOREM Pres_L7_S1 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step1(id0)
+  PROVE  Lemma7_D2RequiresQuorum'
+  <1>l7. Lemma7_D2RequiresQuorum BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom1. DOMAIN msgs1 = ROUNDS BY Msgs1DomR
+  <1>upd. /\ msgs1' = [ msgs1 EXCEPT
+                ![round[id0]] = msgs1[round[id0]] \union { M1(id0, round[id0], value[id0]) } ]
+          /\ msgs2' = msgs2
+          BY DEF Step1
+  <1>grow. \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr]
+        BY <1>upd, <1>dom1, <1>r0
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
+                      \E m \in msgs2'[r] : IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in CORRECT
+               PROVE  LET ExistsQuorum1(rr, vv) ==
+                         LET Sv == { m \in msgs1'[rr]: m.v = vv } IN
+                         2 * Cardinality(Senders1(Sv)) > N + T
+                      IN ExistsQuorum1(r, v)
+        BY DEF Lemma7_D2RequiresQuorum
+  <1>old. LET ExistsQuorum1(rr, vv) ==
+             LET Sv == { m \in msgs1[rr]: m.v = vv } IN
+             2 * Cardinality(Senders1(Sv)) > N + T
+          IN ExistsQuorum1(r, v)
+        BY <1>l7, <1>upd DEF Lemma7_D2RequiresQuorum
+  <1>sub. { m \in msgs1[r] : m.v = v } \subseteq { m \in msgs1'[r] : m.v = v }
+        BY <1>grow
+  <1>mono. Cardinality(Senders1({ m \in msgs1[r] : m.v = v }))
+              <= Cardinality(Senders1({ m \in msgs1'[r] : m.v = v }))
+        BY <1>sub, Senders1_Mono
+  <1>types. Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) \in Nat
+             /\ Cardinality(Senders1({ m \in msgs1'[r] : m.v = v })) \in Nat
+             /\ N + T \in Nat
+        BY Senders1_Sub, FS_CardinalityType, ConstNat
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_DoubleGtMono
 THEOREM Pres_L7_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma7_D2RequiresQuorum'
@@ -1597,8 +1636,10 @@ THEOREM Pres_L7_ST ==
 THEOREM Pres_Lemma7 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma7_D2RequiresQuorum'
-  <1>o1. ASSUME NEW id \in CORRECT, Step1(id) PROVE Lemma7_D2RequiresQuorum'
-        OMITTED \* TODO: substantive Step1 case for Lemma7_D2RequiresQuorum
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step1(id) => Lemma7_D2RequiresQuorum'
+    <2> SUFFICES ASSUME Step1(id) PROVE Lemma7_D2RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L7_S1
   <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma7_D2RequiresQuorum'
         OMITTED \* TODO: substantive Step2 case for Lemma7_D2RequiresQuorum
   <1>o3. ASSUME FaultyStep PROVE Lemma7_D2RequiresQuorum'
