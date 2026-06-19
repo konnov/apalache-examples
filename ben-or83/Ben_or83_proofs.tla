@@ -1721,6 +1721,32 @@ THEOREM Pres_L10_S2 ==
              /\ N - T \in Nat
         BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
   <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
+THEOREM Pres_L10_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma10_M1RequiresQuorum'
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>p. /\ \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+        /\ \A rr \in ROUNDS : \A m \in msgs1'[rr] : m \notin msgs1[rr] => m.src \in FAULTY
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW r \in { rr \in ROUNDS \ { 1 } :
+                                  \E m \in msgs1'[rr] : m.src \in CORRECT }
+        PROVE Cardinality(Senders2(msgs2'[r - 1])) >= N - T
+        BY DEF Lemma10_M1RequiresQuorum
+  <1>rin. r \in ROUNDS /\ r # 1 /\ \E m \in msgs1'[r] : m.src \in CORRECT
+        OBVIOUS
+  <1> PICK m \in msgs1'[r] : m.src \in CORRECT BY <1>rin
+  <1>oldMsg. m \in msgs1[r] BY <1>p, DisjointCF
+  <1>old. Cardinality(Senders2(msgs2[r - 1])) >= N - T
+        BY <1>l10, <1>rin, <1>oldMsg DEF Lemma10_M1RequiresQuorum
+  <1>pred. r - 1 \in ROUNDS BY <1>rin, RoundPredInRounds
+  <1>sub. msgs2[r - 1] \subseteq msgs2'[r - 1] BY <1>p, <1>pred
+  <1>mono. Cardinality(Senders2(msgs2[r - 1])) <= Cardinality(Senders2(msgs2'[r - 1]))
+        BY <1>sub, Senders2_Mono
+  <1>types. Cardinality(Senders2(msgs2[r - 1])) \in Nat
+             /\ Cardinality(Senders2(msgs2'[r - 1])) \in Nat
+             /\ N - T \in Nat
+        BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
 THEOREM Pres_L10_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma10_M1RequiresQuorum'
@@ -1736,8 +1762,10 @@ THEOREM Pres_Lemma10 ==
     <2> SUFFICES ASSUME Step2(id) PROVE Lemma10_M1RequiresQuorum'
           OBVIOUS
     <2> QED BY Pres_L10_S2
-  <1>o3. ASSUME FaultyStep PROVE Lemma10_M1RequiresQuorum'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma10_M1RequiresQuorum
+  <1>o3. FaultyStep => Lemma10_M1RequiresQuorum'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma10_M1RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L10_F
   <1> QED BY Pres_L10_S3, Pres_L10_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L11: a correct replica's value at r>1 is backed by msgs2[r-1] =====
