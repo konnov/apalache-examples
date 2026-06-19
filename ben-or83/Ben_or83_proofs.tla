@@ -187,6 +187,12 @@ LEMMA Arith_SuccCancel ==
   PROVE  a = b
   BY ConstNat
 
+LEMMA Arith_SumThirdMonoGe ==
+  ASSUME NEW x \in Nat, NEW y \in Nat, NEW z \in Nat, NEW zp \in Nat,
+         NEW c \in Nat, z <= zp, x + y + z >= c
+  PROVE  x + y + zp >= c
+  BY ConstNat
+
 \* CORE QUORUM INTERSECTION: two quorums of >= N - T senders intersect, and the
 \* intersection necessarily contains a correct replica (since N > 5*T).
 THEOREM QuorumIntersect ==
@@ -1765,6 +1771,83 @@ THEOREM Pres_L8_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma8_Q2RequiresNoQuorumFaster'
   BY DEF IndInv, Lemma8_Q2RequiresNoQuorumFaster, Step3
+THEOREM Pres_L8_S1 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step1(id0)
+  PROVE  Lemma8_Q2RequiresNoQuorumFaster'
+  <1>l8. Lemma8_Q2RequiresNoQuorumFaster BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom1. DOMAIN msgs1 = ROUNDS BY Msgs1DomR
+  <1>upd. /\ msgs1' = [ msgs1 EXCEPT
+                ![round[id0]] = msgs1[round[id0]] \union { M1(id0, round[id0], value[id0]) } ]
+          /\ msgs2' = msgs2
+          BY DEF Step1
+  <1>grow. \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr]
+        BY <1>upd, <1>dom1, <1>r0
+  <1> SUFFICES ASSUME NEW r \in { rr \in ROUNDS :
+                                  \E m \in msgs2'[rr] : IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+        PROVE LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] })
+                  n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] })
+                  nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } })
+              IN
+              \E x0, x1 \in 0..N:
+                /\ x0 <= n0 /\ x1 <= n1
+                /\ x0 + x1 + nf >= N - T
+                /\ 2 * x0 <= N
+                /\ 2 * x1 <= N
+        BY DEF Lemma8_Q2RequiresNoQuorumFaster
+  <1>oldRound. r \in { rr \in ROUNDS :
+                       \E m \in msgs2[rr] : IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+        BY <1>upd
+  <1> PICK x0 \in 0..N, x1 \in 0..N :
+        LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] })
+            n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] })
+            nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } })
+        IN
+          /\ x0 <= n0 /\ x1 <= n1
+          /\ x0 + x1 + nf >= N - T
+          /\ 2 * x0 <= N
+          /\ 2 * x1 <= N
+        BY <1>l8, <1>oldRound DEF Lemma8_Q2RequiresNoQuorumFaster
+  <1>sub0. { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
+              \subseteq { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] }
+        BY <1>grow
+  <1>sub1. { id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] }
+              \subseteq { id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] }
+        BY <1>grow
+  <1>subf. { id \in FAULTY: id \in { m.src: m \in msgs1[r] } }
+              \subseteq { id \in FAULTY: id \in { m.src: m \in msgs1'[r] } }
+        BY <1>grow
+  <1>fin0p. IsFiniteSet({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] })
+        BY FiniteCF, FS_Subset
+  <1>fin1p. IsFiniteSet({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] })
+        BY FiniteCF, FS_Subset
+  <1>finfp. IsFiniteSet({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } })
+        BY FiniteCF, FS_Subset
+  <1>mono0. Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] })
+              <= Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] })
+        BY <1>sub0, <1>fin0p, FS_Subset
+  <1>mono1. Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] })
+              <= Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] })
+        BY <1>sub1, <1>fin1p, FS_Subset
+  <1>monof. Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } })
+              <= Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } })
+        BY <1>subf, <1>finfp, FS_Subset
+  <1>types. /\ x0 \in Nat /\ x1 \in Nat
+             /\ Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }) \in Nat
+             /\ Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] }) \in Nat
+             /\ Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } }) \in Nat
+             /\ Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] }) \in Nat
+             /\ Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] }) \in Nat
+             /\ Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } }) \in Nat
+             /\ N - T \in Nat
+        BY <1>fin0p, <1>fin1p, <1>finfp, FiniteCF, FS_Subset, FS_CardinalityType, NgtT, ConstNat, FleqT
+  <1>c0. x0 <= Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] })
+        BY <1>mono0, <1>types, Arith_GeTrans
+  <1>c1. x1 <= Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] })
+        BY <1>mono1, <1>types, Arith_GeTrans
+  <1>csum. x0 + x1 + Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } }) >= N - T
+        BY <1>monof, <1>types, Arith_SumThirdMonoGe
+  <1> QED BY <1>c0, <1>c1, <1>csum
 THEOREM Pres_L8_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma8_Q2RequiresNoQuorumFaster'
@@ -1772,8 +1855,10 @@ THEOREM Pres_L8_ST ==
 THEOREM Pres_Lemma8 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma8_Q2RequiresNoQuorumFaster'
-  <1>o1. ASSUME NEW id \in CORRECT, Step1(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
-        OMITTED \* TODO: substantive Step1 case for Lemma8_Q2RequiresNoQuorumFaster
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step1(id) => Lemma8_Q2RequiresNoQuorumFaster'
+    <2> SUFFICES ASSUME Step1(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
+          OBVIOUS
+    <2> QED BY Pres_L8_S1
   <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
         OMITTED \* TODO: substantive Step2 case for Lemma8_Q2RequiresNoQuorumFaster
   <1>o3. ASSUME FaultyStep PROVE Lemma8_Q2RequiresNoQuorumFaster'
