@@ -71,6 +71,11 @@ LEMMA Arith_PosNotLtOne ==
   PROVE  ~(r < 1)
   BY ConstNat
 
+LEMMA RoundPredInRounds ==
+  ASSUME NEW r \in ROUNDS, r # 1
+  PROVE  r - 1 \in ROUNDS
+  BY RoundsNat, ConstNat
+
 \*****************************************************************************
 \* VARIANTS AXIOMS
 \*
@@ -135,6 +140,13 @@ THEOREM Senders2_Sub ==
   <1> QED
         BY <1>1, ALL_Card, FS_Subset
 
+THEOREM Senders2_Mono ==
+  ASSUME NEW A, NEW B, A \subseteq B
+  PROVE  Cardinality(Senders2(A)) <= Cardinality(Senders2(B))
+  <1>sub. Senders2(A) \subseteq Senders2(B) BY DEF Senders2
+  <1>fin. IsFiniteSet(Senders2(B)) BY Senders2_Sub
+  <1> QED BY <1>sub, <1>fin, FS_Subset
+
 \* Any subset of ALL is finite with cardinality at most N.
 THEOREM SubAll_Finite ==
   ASSUME NEW Q, Q \subseteq ALL
@@ -159,6 +171,11 @@ LEMMA Arith_TplusOneNotFaulty ==
   ASSUME NEW a \in Nat, a >= T + 1, a <= F
   PROVE  FALSE
   BY FleqT, ConstNat
+
+LEMMA Arith_GeTrans ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat, a >= c, a <= b
+  PROVE  b >= c
+  BY ConstNat
 
 \* CORE QUORUM INTERSECTION: two quorums of >= N - T senders intersect, and the
 \* intersection necessarily contains a correct replica (since N > 5*T).
@@ -1633,6 +1650,40 @@ THEOREM Pres_L10_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma10_M1RequiresQuorum'
   BY DEF IndInv, Lemma10_M1RequiresQuorum, Step3
+THEOREM Pres_L10_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma10_M1RequiresQuorum'
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>m1same. msgs1' = msgs1 BY DEF Step2
+  <1>nm. PICK nm :
+        msgs2' = [ msgs2 EXCEPT ![round[id0]] = msgs2[round[id0]] \union { nm } ]
+      BY VariantAx DEF Step2
+  <1>grow. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE msgs2[rr] \subseteq msgs2'[rr] OBVIOUS
+    <2>eq. CASE rr = round[id0]
+      <3> QED BY <2>eq, <1>nm, <1>r0, <1>dom2
+    <2>ne. CASE rr # round[id0]
+      <3> QED BY <2>ne, <1>nm, <1>r0, <1>dom2
+    <2> QED BY <2>eq, <2>ne
+  <1> SUFFICES ASSUME NEW r \in { rr \in ROUNDS \ { 1 } :
+                                  \E m \in msgs1'[rr] : m.src \in CORRECT }
+        PROVE Cardinality(Senders2(msgs2'[r - 1])) >= N - T
+        BY DEF Lemma10_M1RequiresQuorum
+  <1>rin. r \in ROUNDS /\ r # 1 /\ \E m \in msgs1[r] : m.src \in CORRECT
+        BY <1>m1same
+  <1>old. Cardinality(Senders2(msgs2[r - 1])) >= N - T
+        BY <1>l10, <1>rin DEF Lemma10_M1RequiresQuorum
+  <1>pred. r - 1 \in ROUNDS BY <1>rin, RoundPredInRounds
+  <1>sub. msgs2[r - 1] \subseteq msgs2'[r - 1] BY <1>grow, <1>pred
+  <1>mono. Cardinality(Senders2(msgs2[r - 1])) <= Cardinality(Senders2(msgs2'[r - 1]))
+        BY <1>sub, Senders2_Mono
+  <1>types. Cardinality(Senders2(msgs2[r - 1])) \in Nat
+             /\ Cardinality(Senders2(msgs2'[r - 1])) \in Nat
+             /\ N - T \in Nat
+        BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
+  <1> QED BY <1>old, <1>mono, <1>types, Arith_GeTrans
 THEOREM Pres_L10_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma10_M1RequiresQuorum'
@@ -1642,8 +1693,10 @@ THEOREM Pres_Lemma10 ==
   PROVE  Lemma10_M1RequiresQuorum'
   <1>o1. ASSUME NEW id \in CORRECT, Step1(id) PROVE Lemma10_M1RequiresQuorum'
         OMITTED \* TODO: substantive Step1 case for Lemma10_M1RequiresQuorum
-  <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma10_M1RequiresQuorum'
-        OMITTED \* TODO: substantive Step2 case for Lemma10_M1RequiresQuorum
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma10_M1RequiresQuorum'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma10_M1RequiresQuorum'
+          OBVIOUS
+    <2> QED BY Pres_L10_S2
   <1>o3. ASSUME FaultyStep PROVE Lemma10_M1RequiresQuorum'
         OMITTED \* TODO: substantive FaultyStep case for Lemma10_M1RequiresQuorum
   <1> QED BY Pres_L10_S3, Pres_L10_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
