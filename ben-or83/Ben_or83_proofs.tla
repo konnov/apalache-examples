@@ -3529,7 +3529,8 @@ THEOREM LockLemma ==
         \* redesign -- genuine research-level work, not a mechanical gap.
         OMITTED \* TODO: strengthen induction predicate to SupportedValues lock (see above)
   <1>all. \A k \in Nat : P(k)
-        OMITTED \* TODO: NatInduction wiring depends on the strengthened lock induction step above.
+    <2> HIDE DEF P
+    <2> QED BY <1>base, <1>step, NatInduction
   <1> QED
         \* map every r \in ROUNDS with r >= a to k = r - a \in Nat
         <2> SUFFICES ASSUME NEW r \in ROUNDS, r >= a, NEW w \in VALUES,
