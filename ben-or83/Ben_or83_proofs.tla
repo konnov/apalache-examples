@@ -780,6 +780,14 @@ THEOREM D2PSetFinite ==
         BY <1>3, ALL_Card, FS_Injection
   <1> QED BY <1>4, ALL_Card
 
+THEOREM DvPSenderWitness ==
+  ASSUME NEW r, NEW v, NEW src \in Senders2(DvPSet(r, v))
+  PROVE  \E m \in DvPSet(r, v) : IsD2(m) /\ AsD2(m).src = src
+  <1>pick. PICK m \in DvPSet(r, v) :
+        (IsD2(m) /\ AsD2(m).src = src) \/ (IsQ2(m) /\ AsQ2(m).src = src)
+        BY DEF Senders2
+  <1> QED BY <1>pick, VariantAx DEF DvPSet
+
 THEOREM QPInjective ==
   ASSUME NEW r, \A m \in msgs2'[r] : IsQ2(m) => AsQ2(m).r = r,
          NEW a \in QPSet(r), NEW b \in QPSet(r), QPFn(r)[a] = QPFn(r)[b]
@@ -1046,6 +1054,29 @@ THEOREM SupportedUnique ==
           BY <2>1, <2>2, MajorityIntersect
     <2> QED BY <2>3 DEF Senders1
   <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+SupportedValuesP(r) ==
+  LET ExistsSupport(v) ==
+    LET Sv == Senders2(DvPSet(r, v)) IN
+    LET Others == Senders2({ m \in msgs2'[r]: IsQ2(m) \/ AsD2(m).v /= v }) IN
+    /\ Cardinality(Senders2(msgs2'[r])) >= N - T
+    /\ Cardinality(Sv) >= T + 1
+    /\ Cardinality(Others) < N - 2 * T
+  IN
+  { v \in VALUES: ExistsSupport(v) }
+
+THEOREM TplusOneHasCorrect ==
+  ASSUME NEW S, S \subseteq ALL, Cardinality(S) >= T + 1
+  PROVE  \E id \in S : id \in CORRECT
+  <1>fin. IsFiniteSet(S) BY SubAll_Finite
+  <1>card. Cardinality(S) \in Nat BY <1>fin, FS_CardinalityType
+  <1>bad. S \ CORRECT \subseteq FAULTY BY DEF ALL
+  <1>bd. Cardinality(S \ CORRECT) <= F BY <1>bad, FiniteCF, FS_Subset, NTF
+  <1> QED
+    <2>suf. SUFFICES ASSUME \A id \in S : id \notin CORRECT PROVE FALSE OBVIOUS
+    <2>eq. S = S \ CORRECT BY <2>suf
+    <2>le. Cardinality(S) <= F BY <2>eq, <1>bd
+    <2> QED BY <1>card, <1>, <2>le, Arith_TplusOneNotFaulty
 
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
@@ -1391,6 +1422,24 @@ THEOREM FaultyStepProps ==
         BY <1>f2, <1>dom2, UpdateUnion2NewInAdded
     <2> QED BY <1>f2, <2>added, FaultyMsgs2AddedFaulty
   <1> QED BY <1>frame, <1>m1mono, <1>m2mono, <1>m1new, <1>m2new
+
+THEOREM SupportedPHasOldCorrectD2 ==
+  ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS, NEW v \in SupportedValuesP(r)
+  PROVE  \E m \in msgs2[r] : IsD2(m) /\ AsD2(m).v = v /\ AsD2(m).src \in CORRECT
+  <1>vval. v \in VALUES BY DEF SupportedValuesP
+  <1>sv. Cardinality(Senders2(DvPSet(r, v))) >= T + 1
+        BY DEF SupportedValuesP, DvPSet
+  <1>sub. Senders2(DvPSet(r, v)) \subseteq ALL BY Senders2_Sub
+  <1>pickSrc. PICK src \in Senders2(DvPSet(r, v)) : src \in CORRECT
+        BY <1>sub, <1>sv, TplusOneHasCorrect
+  <1>pickM. PICK m \in DvPSet(r, v) : IsD2(m) /\ AsD2(m).src = src
+        BY <1>pickSrc, DvPSenderWitness
+  <1>old. m \in msgs2[r]
+    <2>oldSuf. SUFFICES ASSUME m \notin msgs2[r] PROVE FALSE OBVIOUS
+    <2>faulty. AsD2(m).src \in FAULTY
+          BY FaultyStepProps, <1>pickM, <2>oldSuf DEF DvPSet
+    <2> QED BY <1>pickSrc, <1>pickM, <2>faulty, DisjointCF
+  <1> QED BY <1>old, <1>pickSrc, <1>pickM DEF DvPSet
 
 THEOREM DvFaultyMono ==
   ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS, NEW v \in VALUES
