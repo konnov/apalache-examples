@@ -7,17 +7,13 @@
  *      step `IndInv /\ [Next]_vars => IndInv'` (Section C).
  *   2. `IndInv => AgreementInv` (Section D).
  *
- * Status: STRUCTURE MACHINE-CHECKED. `tlapm` proves all 310 non-omitted obligations
+ * Status: STRUCTURE MACHINE-CHECKED. `tlapm` proves the non-omitted obligations
  * (the full decomposition: base case, type preservation, the [Next]_vars case algebra
  * for all 13 preservation lemmas, every frame case, and the Section D agreement
  * skeleton incl. the NaturalsInduction wiring). What remains are explicit admits,
  * each tagged `TODO`, for the genuinely hard leaves: the quorum/cardinality arguments
  * (a value gaining/keeping a quorum) and the LockLemma inductive step. Fill them in
  * priority order (see Ben_or83_inductive.tla header and the project plan).
- *
- * One admitted leaf is a proof-engineering caveat, not a mathematical TODO:
- *   - FaultyStepProps: provable from DEF FaultyStep; kept admitted because this
- *     TLAPS build still struggles with the bundled FaultyStep consequence proof.
  *
  * Checked with: tlapm (TLAPS) + stdlib FiniteSetTheorems, NaturalsInduction, TLAPS,
  * and the community `Variants` module on the search path:
@@ -1186,23 +1182,161 @@ THEOREM Msgs2AddSetsRep ==
     <2> QED BY <2>eq, <2>ne
   <1> QED BY <1>vals DEF lhs, rhs
 
+THEOREM UpdateUnionMono ==
+  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW F
+  PROVE  \A rr \in ROUNDS :
+           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+  <1> SUFFICES ASSUME NEW rr \in ROUNDS
+              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+        OBVIOUS
+  <1>eq. CASE rr = rr0
+    <2> SUFFICES ASSUME NEW x \in f[rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+          OBVIOUS
+    <2> QED BY <1>eq, SMT
+  <1>ne. CASE rr # rr0
+    <2> SUFFICES ASSUME NEW x \in f[rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+          OBVIOUS
+    <2> QED BY <1>ne, SMT
+  <1> QED BY <1>eq, <1>ne
+
+THEOREM UpdateUnionNewInAdded ==
+  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW F,
+         DOMAIN f = ROUNDS,
+         NEW rr \in ROUNDS, NEW m,
+         m \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr],
+         m \notin f[rr]
+  PROVE  rr = rr0 /\ m \in F
+  <1>eq. CASE rr = rr0
+    <2>1. m \in f[rr0] \union F BY <1>eq, SMT
+    <2>2. m \notin f[rr0] BY <1>eq, SMT
+    <2>3. m \in F BY <2>1, <2>2
+    <2> QED BY <1>eq, <2>3
+  <1>ne. CASE rr # rr0
+    <2> FALSE BY <1>ne, SMT
+    <2> QED BY <2>
+  <1> QED BY <1>eq, <1>ne
+
+THEOREM UpdateUnion2Mono ==
+  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW F, NEW G
+  PROVE  \A rr \in ROUNDS :
+           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+  <1> SUFFICES ASSUME NEW rr \in ROUNDS
+              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+        OBVIOUS
+  <1>eq. CASE rr = rr0
+    <2> SUFFICES ASSUME NEW x \in f[rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+          OBVIOUS
+    <2> QED BY <1>eq, SMT
+  <1>ne. CASE rr # rr0
+    <2> SUFFICES ASSUME NEW x \in f[rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+          OBVIOUS
+    <2> QED BY <1>ne, SMT
+  <1> QED BY <1>eq, <1>ne
+
+THEOREM UpdateUnion2NewInAdded ==
+  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW F, NEW G,
+         DOMAIN f = ROUNDS,
+         NEW rr \in ROUNDS, NEW m,
+         m \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr],
+         m \notin f[rr]
+  PROVE  rr = rr0 /\ m \in F \union G
+  <1>eq. CASE rr = rr0
+    <2>1. m \in (f[rr0] \union F) \union G BY <1>eq, SMT
+    <2>2. m \notin f[rr0] BY <1>eq, SMT
+    <2>3. m \in F \union G BY <2>1, <2>2
+    <2> QED BY <1>eq, <2>3
+  <1>ne. CASE rr # rr0
+    <2> FALSE BY <1>ne, SMT
+    <2> QED BY <2>
+  <1> QED BY <1>eq, <1>ne
+
+THEOREM FaultyMsgs2AddedFaulty ==
+  ASSUME NEW rr0 \in ROUNDS,
+         NEW F2D \in SUBSET FaultyD2Records(rr0),
+         NEW F2Q \in SUBSET FaultyQ2Records(rr0),
+         NEW m,
+         m \in { D2(mm.src, rr0, mm.v): mm \in F2D }
+              \union { Q2(mm.src, rr0): mm \in F2Q }
+  PROVE  (IsD2(m) => AsD2(m).src \in FAULTY)
+         /\ (IsQ2(m) => AsQ2(m).src \in FAULTY)
+  <1>d. CASE m \in { D2(mm.src, rr0, mm.v): mm \in F2D }
+    <2> PICK mm \in F2D : m = D2(mm.src, rr0, mm.v) BY <1>d
+    <2> QED BY <2>, VariantAx DEF FaultyD2Records
+  <1>q. CASE m \in { Q2(mm.src, rr0): mm \in F2Q }
+    <2> PICK mm \in F2Q : m = Q2(mm.src, rr0) BY <1>q
+    <2> QED BY <2>, VariantAx DEF FaultyQ2Records
+  <1> QED BY <1>d, <1>q
+
 \*****************************************************************************
 \* FAULTY-STEP CONSEQUENCES.
-\* The normalized FaultyStep is enough to prove TypePres directly, but this bundled
-\* consequence theorem still overloads the backends when proved as one obligation.
-\* We keep it as the single admitted theorem for the remaining per-lemma FaultyStep
-\* consequences: the per-replica state is unchanged, message buffers only grow, and
-\* every newly added message has a FAULTY sender.
+\* FaultyStepProps packages the common per-lemma consequences under TypeOK:
+\* the per-replica state is unchanged, message buffers only grow, and every newly
+\* added message has a FAULTY sender. The proof is split through small EXCEPT-update
+\* helpers so TLAPS does not have to solve the whole consequence theorem at once.
 \*****************************************************************************
 THEOREM FaultyStepProps ==
-  ASSUME FaultyStep
+  ASSUME TypeOK, FaultyStep
   PROVE  /\ value' = value /\ decision' = decision /\ round' = round /\ step' = step
          /\ \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr] /\ msgs2[rr] \subseteq msgs2'[rr]
          /\ \A rr \in ROUNDS : \A m \in msgs1'[rr] : m \notin msgs1[rr] => m.src \in FAULTY
          /\ \A rr \in ROUNDS : \A m \in msgs2'[rr] :
               m \notin msgs2[rr] =>
                 ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
-  OMITTED \* see note above: provable from DEF FaultyStep; admitted due to a tlapm encoder limit
+  <1>fs. PICK rr0 \in ROUNDS :
+          /\ \E F1 \in SUBSET [ src: FAULTY, r: { rr0 }, v: VALUES ] :
+               msgs1' = [ msgs1 EXCEPT ![rr0] = msgs1[rr0] \union F1 ]
+          /\ \E F2D \in SUBSET FaultyD2Records(rr0) :
+               \E F2Q \in SUBSET FaultyQ2Records(rr0) :
+                 msgs2' = [ msgs2 EXCEPT ![rr0] =
+                    msgs2[rr0]
+                      \union { D2(mm.src, rr0, mm.v): mm \in F2D }
+                      \union { Q2(mm.src, rr0): mm \in F2Q } ]
+          /\ UNCHANGED << value, decision, round, step >>
+        BY DEF FaultyStep
+  <1>f1. PICK F1 \in SUBSET [ src: FAULTY, r: { rr0 }, v: VALUES ] :
+          msgs1' = [ msgs1 EXCEPT ![rr0] = msgs1[rr0] \union F1 ]
+        BY <1>fs
+  <1>f2. PICK F2D \in SUBSET FaultyD2Records(rr0),
+              F2Q \in SUBSET FaultyQ2Records(rr0) :
+          msgs2' = [ msgs2 EXCEPT ![rr0] =
+                    msgs2[rr0]
+                      \union { D2(mm.src, rr0, mm.v): mm \in F2D }
+                      \union { Q2(mm.src, rr0): mm \in F2Q } ]
+        BY <1>fs
+  <1>frame. value' = value /\ decision' = decision /\ round' = round /\ step' = step
+        BY <1>fs DEF vars
+  <1>dom1. DOMAIN msgs1 = ROUNDS BY Msgs1DomR
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>m1mono. \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr]
+        BY <1>f1, <1>dom1, UpdateUnionMono
+  <1>m2mono. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+        BY <1>f2, <1>dom2, UpdateUnion2Mono
+  <1>m1new. \A rr \in ROUNDS : \A m \in msgs1'[rr] :
+              m \notin msgs1[rr] => m.src \in FAULTY
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS, NEW m \in msgs1'[rr],
+                         m \notin msgs1[rr]
+                PROVE  m.src \in FAULTY
+          OBVIOUS
+    <2>added. rr = rr0 /\ m \in F1 BY <1>f1, <1>dom1, UpdateUnionNewInAdded
+    <2> QED BY <1>f1, <2>added
+  <1>m2new. \A rr \in ROUNDS : \A m \in msgs2'[rr] :
+              m \notin msgs2[rr] =>
+                ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS, NEW m \in msgs2'[rr],
+                         m \notin msgs2[rr]
+                PROVE  (IsD2(m) => AsD2(m).src \in FAULTY)
+                       /\ (IsQ2(m) => AsQ2(m).src \in FAULTY)
+          OBVIOUS
+    <2>added. rr = rr0
+               /\ m \in { D2(mm.src, rr0, mm.v): mm \in F2D }
+                       \union { Q2(mm.src, rr0): mm \in F2Q }
+        BY <1>f2, <1>dom2, UpdateUnion2NewInAdded
+    <2> QED BY <1>f2, <2>added, FaultyMsgs2AddedFaulty
+  <1> QED BY <1>frame, <1>m1mono, <1>m2mono, <1>m1new, <1>m2new
 
 THEOREM DvFaultyMono ==
   ASSUME TypeOK, TypeOK', FaultyStep, NEW r \in ROUNDS, NEW v \in VALUES
@@ -1682,7 +1816,7 @@ THEOREM Pres_L3_ST ==
   PROVE  Lemma3_NoEquivocation2ByCorrect'
   BY DEF IndInv, Lemma3_NoEquivocation2ByCorrect, vars
 THEOREM Pres_L3_F ==
-  ASSUME IndInv, FaultyStep
+  ASSUME TypeOK, IndInv, FaultyStep
   PROVE  Lemma3_NoEquivocation2ByCorrect'
   BY FaultyStepProps, DisjointCF DEF IndInv, Lemma3_NoEquivocation2ByCorrect
 THEOREM Pres_Lemma3 ==
@@ -2176,7 +2310,7 @@ THEOREM Pres_L6_S2 ==
   BY DEF IndInv, Lemma6_DecisionDefinesValue, Step2
 \* FaultyStep leaves value/decision unchanged (frame), via FaultyStepProps.
 THEOREM Pres_L6_F ==
-  ASSUME IndInv, FaultyStep
+  ASSUME TypeOK, IndInv, FaultyStep
   PROVE  Lemma6_DecisionDefinesValue'
   <1>1. value' = value /\ decision' = decision BY FaultyStepProps
   <1> QED BY <1>1 DEF IndInv, Lemma6_DecisionDefinesValue
