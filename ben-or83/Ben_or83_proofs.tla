@@ -993,6 +993,60 @@ THEOREM CorrectD2Exists ==
           <2> QED BY <2>1, <2>2 DEF ALL
   <1> QED BY <1>pick, <1>cor DEF DvSet
 
+\* A round cannot support two different values. A supported value has at least
+\* T+1 D2 senders, hence at least one correct D2 sender; Lemma7 turns that into
+\* a type-1 majority, and two such majorities intersect in a correct sender.
+THEOREM SupportedUnique ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in SupportedValues(r), NEW w \in SupportedValues(r)
+  PROVE  v = w
+  <1> USE DEF IndInv
+  <1>vv. v \in VALUES BY DEF SupportedValues
+  <1>wv. w \in VALUES BY DEF SupportedValues
+  <1>sv. Cardinality(Senders2(DvSet(r, v))) >= T + 1
+        BY DEF SupportedValues, DvSet
+  <1>sw. Cardinality(Senders2(DvSet(r, w))) >= T + 1
+        BY DEF SupportedValues, DvSet
+  <1>finv. IsFiniteSet(DvSet(r, v)) BY <1>vv, D2SetFinite
+  <1>finw. IsFiniteSet(DvSet(r, w)) BY <1>wv, D2SetFinite
+  <1>lev. Cardinality(Senders2(DvSet(r, v))) <= Cardinality(DvSet(r, v))
+        BY <1>finv, Senders2_CardLeSet
+  <1>lew. Cardinality(Senders2(DvSet(r, w))) <= Cardinality(DvSet(r, w))
+        BY <1>finw, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(DvSet(r, v))) \in Nat
+             /\ Cardinality(Senders2(DvSet(r, w))) \in Nat
+             /\ Cardinality(DvSet(r, v)) \in Nat
+             /\ Cardinality(DvSet(r, w)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finv, <1>finw, FS_CardinalityType, ConstNat, FleqT
+  <1>dv. Cardinality(DvSet(r, v)) >= T + 1
+        BY <1>sv, <1>lev, <1>types, Arith_GeTrans
+  <1>dw. Cardinality(DvSet(r, w)) >= T + 1
+        BY <1>sw, <1>lew, <1>types, Arith_GeTrans
+  <1>ev. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY <1>vv, <1>dv, CorrectD2Exists
+  <1>ew. \E mw \in msgs2[r] : IsD2(mw) /\ AsD2(mw).v = w /\ AsD2(mw).src \in CORRECT
+        BY <1>wv, <1>dw, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r] : m.v = v }
+              Sw == { m \in msgs1[r] : m.v = w }
+          IN 2 * Cardinality(Senders1(Sv)) > N + T
+             /\ 2 * Cardinality(Senders1(Sw)) > N + T
+        BY <1>vv, <1>wv, <1>ev, <1>ew DEF Lemma7_D2RequiresQuorum
+  <1>meet. \E id \in CORRECT :
+            (\E m \in msgs1[r] : m.src = id /\ m.v = v)
+            /\ (\E m \in msgs1[r] : m.src = id /\ m.v = w)
+    <2>1. Senders1({ m \in msgs1[r] : m.v = v }) \subseteq ALL
+          /\ Senders1({ m \in msgs1[r] : m.v = w }) \subseteq ALL
+          BY DEF Senders1
+    <2>2. 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+          /\ 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = w })) > N + T
+          BY <1>maj
+    <2>3. \E id \in Senders1({ m \in msgs1[r] : m.v = v })
+                \cap Senders1({ m \in msgs1[r] : m.v = w }) : id \in CORRECT
+          BY <2>1, <2>2, MajorityIntersect
+    <2> QED BY <2>3 DEF Senders1
+  <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
@@ -2671,6 +2725,72 @@ THEOREM Pres_Lemma8 ==
   <1> QED BY Pres_L8_S3, Pres_L8_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L9: rounds connection / value support carries forward =====
+THEOREM Pres_L9_S1 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step1(id0)
+  PROVE  Lemma9_RoundsConnection'
+  <1>l9. Lemma9_RoundsConnection BY DEF IndInv
+  <1>l13. Lemma13_ValueLock BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>val0. value[id0] \in VALUES BY DEF TypeOK
+  <1>dom1. DOMAIN msgs1 = ROUNDS BY Msgs1DomR
+  <1>upd. /\ msgs1' = [ msgs1 EXCEPT
+                ![round[id0]] = msgs1[round[id0]] \union { M1(id0, round[id0], value[id0]) } ]
+          /\ msgs2' = msgs2
+          /\ round' = round
+          /\ value' = value
+        BY DEF Step1
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, r + 1 \in ROUNDS
+        PROVE LET Supported == SupportedValues(r) IN
+              \/ Supported = {}
+              \/ \E v \in Supported:
+                   \A m \in msgs1'[r + 1]:
+                     (m.src \in CORRECT => m.v = v)
+        BY <1>upd DEF Lemma9_RoundsConnection, SupportedValues
+  <1>old. LET Supported == SupportedValues(r) IN
+            \/ Supported = {}
+            \/ \E v \in Supported:
+                 \A m \in msgs1[r + 1]:
+                   (m.src \in CORRECT => m.v = v)
+        BY <1>l9 DEF Lemma9_RoundsConnection
+  <1>empty. CASE SupportedValues(r) = {}
+    <2> QED BY <1>empty
+  <1>nonempty. CASE SupportedValues(r) # {}
+    <2>pickOld. PICK vOld \in SupportedValues(r) :
+          \A m \in msgs1[r + 1] : (m.src \in CORRECT => m.v = vOld)
+        BY <1>old, <1>nonempty
+    <2>sameRound. CASE r + 1 = round[id0]
+      <3>rnat. r \in Nat /\ r >= 1 BY RoundPos
+      <3>gt. round[id0] > 1 BY <2>sameRound, <3>rnat, ConstNat
+      <3>pred. round[id0] - 1 = r BY <2>sameRound, <3>rnat, ConstNat
+      <3>predIn. round[id0] - 1 \in ROUNDS BY <3>pred
+      <3>lock. LET S == SupportedValues(round[id0] - 1) IN
+                  \/ S = {}
+                  \/ value[id0] \in S
+            BY <1>l13, <1>val0, <3>gt, <3>predIn DEF Lemma13_ValueLock
+      <3>vin. value[id0] \in SupportedValues(r)
+            BY <3>lock, <3>pred, <1>nonempty
+      <3>veq. value[id0] = vOld
+            BY <1>val0, <2>pickOld, <3>vin, SupportedUnique
+      <3>all. \A m \in msgs1'[r + 1] : (m.src \in CORRECT => m.v = vOld)
+        <4> SUFFICES ASSUME NEW m \in msgs1'[r + 1], m.src \in CORRECT
+                    PROVE  m.v = vOld
+              OBVIOUS
+        <4>oldMsg. CASE m \in msgs1[r + 1]
+          <5> QED BY <2>pickOld, <4>oldMsg
+        <4>newMsg. CASE m \notin msgs1[r + 1]
+          <5>added. r + 1 = round[id0]
+                     /\ m \in { M1(id0, round[id0], value[id0]) }
+                BY <1>upd, <1>dom1, <1>r0, <4>newMsg, UpdateUnionNewInAdded
+          <5>meq. m = M1(id0, round[id0], value[id0]) BY <5>added
+          <5> QED BY <5>meq, <3>veq DEF M1
+        <4> QED BY <4>oldMsg, <4>newMsg
+      <3> QED BY <3>all, <2>pickOld
+    <2>otherRound. CASE r + 1 # round[id0]
+      <3>sameMsgs. msgs1'[r + 1] = msgs1[r + 1]
+            BY <1>upd, <1>dom1, <2>otherRound
+      <3> QED BY <2>pickOld, <3>sameMsgs
+    <2> QED BY <2>sameRound, <2>otherRound
+  <1> QED BY <1>empty, <1>nonempty
 THEOREM Pres_L9_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma9_RoundsConnection'
@@ -2682,8 +2802,10 @@ THEOREM Pres_L9_ST ==
 THEOREM Pres_Lemma9 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma9_RoundsConnection'
-  <1>o1. ASSUME NEW id \in CORRECT, Step1(id) PROVE Lemma9_RoundsConnection'
-        OMITTED \* TODO: substantive Step1 case for Lemma9_RoundsConnection
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step1(id) => Lemma9_RoundsConnection'
+    <2> SUFFICES ASSUME Step1(id) PROVE Lemma9_RoundsConnection'
+          OBVIOUS
+    <2> QED BY Pres_L9_S1
   <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma9_RoundsConnection'
         OMITTED \* TODO: substantive Step2 case for Lemma9_RoundsConnection
   <1>o3. ASSUME FaultyStep PROVE Lemma9_RoundsConnection'
