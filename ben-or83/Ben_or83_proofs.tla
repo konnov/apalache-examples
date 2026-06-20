@@ -521,6 +521,26 @@ THEOREM CorrectD2Exists ==
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
 \*****************************************************************************
+\* FAULTY-STEP CONSEQUENCES.
+\* `DEF FaultyStep` cannot be discharged by any backend (the SMT encoder aborts on the
+\* two-variable set comprehension `{ D2(src,r,v): src \in FAULTY, v \in VALUES }`, and
+\* Zenon/Isabelle fail). We therefore state FaultyStep's relevant CONSEQUENCES -- which
+\* avoid that construct -- as a single admitted theorem, and prove every per-lemma
+\* FaultyStep case from it. The consequences are: the per-replica state is unchanged, the
+\* message buffers only grow, and every newly added message has a FAULTY sender.
+\* (All provable from DEF FaultyStep on a tlapm whose encoder handles the construct.)
+\*****************************************************************************
+THEOREM FaultyStepProps ==
+  ASSUME FaultyStep
+  PROVE  /\ value' = value /\ decision' = decision /\ round' = round /\ step' = step
+         /\ \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr] /\ msgs2[rr] \subseteq msgs2'[rr]
+         /\ \A rr \in ROUNDS : \A m \in msgs1'[rr] : m \notin msgs1[rr] => m.src \in FAULTY
+         /\ \A rr \in ROUNDS : \A m \in msgs2'[rr] :
+              m \notin msgs2[rr] =>
+                ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
+  OMITTED \* see note above: provable from DEF FaultyStep; admitted due to a tlapm encoder limit
+
+\*****************************************************************************
 \* SECTION B -- TYPE PRESERVATION + BASE CASE
 \*****************************************************************************
 
@@ -687,12 +707,25 @@ THEOREM Pres_L2_S1 ==
               <3> QED BY <3>1, <1>nf, <2>4
         <2> QED BY <2>p1, <2>p2, <2>2, <2>3, <2>4
   <1> QED BY <1>A, <1>B
+\* FaultyStep case: new msgs1 messages have FAULTY src, so any CORRECT-sender message is
+\* old; no new equivocation among correct senders.
+THEOREM Pres_L2_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma2_NoEquivocation1ByCorrect'
+  <1>l2. Lemma2_NoEquivocation1ByCorrect BY DEF IndInv
+  <1>p. \A rr \in ROUNDS : \A m \in msgs1'[rr] : m \notin msgs1[rr] => m.src \in FAULTY
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, NEW m1 \in msgs1'[r], NEW m2 \in msgs1'[r],
+                      m1.src \in CORRECT, m1.src = m2.src
+               PROVE  m1.v = m2.v
+        BY DEF Lemma2_NoEquivocation1ByCorrect
+  <1>1. m1 \in msgs1[r] BY <1>p, DisjointCF
+  <1>2. m2 \in msgs1[r] BY <1>p, DisjointCF
+  <1> QED BY <1>1, <1>2, <1>l2 DEF Lemma2_NoEquivocation1ByCorrect
 THEOREM Pres_Lemma2 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma2_NoEquivocation1ByCorrect'
-  <1>o2. ASSUME FaultyStep PROVE Lemma2_NoEquivocation1ByCorrect'
-        OMITTED \* TODO: blocked by tlapm crash on DEF FaultyStep (two-variable set-map)
-  <1> QED BY Pres_L2_S1, Pres_L2_S2, Pres_L2_S3, Pres_L2_ST, <1>o2 DEF Next, CorrectStep
+  <1> QED BY Pres_L2_S1, Pres_L2_S2, Pres_L2_S3, Pres_L2_ST, Pres_L2_F DEF Next, CorrectStep
 
 \* ===== L3: no type-2 equivocation by correct (msgs2) =====
 THEOREM Pres_L3_S1 ==
@@ -950,12 +983,56 @@ THEOREM Pres_L4_S2 ==
           <3> QED BY <3>1, <3>2, <1>r0, <1>dist
     <2> QED BY <2>0, <2>old, <2>nw
   <1> QED BY <1>P1, <1>P2
+\* FaultyStep case: step/round unchanged and messages only grow with FAULTY-sender
+\* messages, so any CORRECT-sender message is old and satisfies the (unchanged) bound.
+THEOREM Pres_L4_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma4_MessagesNotFromFuture'
+  <1>l4. Lemma4_MessagesNotFromFuture BY DEF IndInv
+  <1>p. /\ step' = step /\ round' = round
+        /\ \A rr \in ROUNDS : \A m \in msgs1'[rr] : m \notin msgs1[rr] => m.src \in FAULTY
+        /\ \A rr \in ROUNDS : \A m \in msgs2'[rr] :
+              m \notin msgs2[rr] =>
+                ((IsD2(m) => AsD2(m).src \in FAULTY) /\ (IsQ2(m) => AsQ2(m).src \in FAULTY))
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW r \in ROUNDS
+        PROVE /\ \A m \in msgs1'[r] : m.src \in CORRECT =>
+                  /\ step'[m.src] /= S1 => (m.r <= round'[m.src])
+                  /\ step'[m.src] = S1 => (m.r < round'[m.src])
+              /\ \A m \in msgs2'[r] :
+                  LET src == IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src
+                      mr  == IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r
+                  IN src \in CORRECT =>
+                       /\ step'[src] = S3 => (mr <= round'[src])
+                       /\ step'[src] /= S3 => (mr < round'[src])
+        BY DEF Lemma4_MessagesNotFromFuture
+  <1>P1. \A m \in msgs1'[r] : m.src \in CORRECT =>
+            /\ step'[m.src] /= S1 => (m.r <= round'[m.src])
+            /\ step'[m.src] = S1 => (m.r < round'[m.src])
+    <2> SUFFICES ASSUME NEW m \in msgs1'[r], m.src \in CORRECT PROVE
+                   /\ step'[m.src] /= S1 => (m.r <= round'[m.src])
+                   /\ step'[m.src] = S1 => (m.r < round'[m.src]) OBVIOUS
+    <2>1. m \in msgs1[r] BY <1>p, DisjointCF
+    <2> QED BY <2>1, <1>l4, <1>p DEF Lemma4_MessagesNotFromFuture
+  <1>P2. \A m \in msgs2'[r] :
+            LET src == IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src
+                mr  == IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r
+            IN src \in CORRECT =>
+                 /\ step'[src] = S3 => (mr <= round'[src])
+                 /\ step'[src] /= S3 => (mr < round'[src])
+    <2> SUFFICES ASSUME NEW m \in msgs2'[r],
+                  (IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src) \in CORRECT
+                 PROVE LET src == IF IsD2(m) THEN AsD2(m).src ELSE AsQ2(m).src
+                           mr  == IF IsD2(m) THEN AsD2(m).r ELSE AsQ2(m).r
+                       IN /\ step'[src] = S3 => (mr <= round'[src])
+                          /\ step'[src] /= S3 => (mr < round'[src]) OBVIOUS
+    <2>1. m \in msgs2[r] BY <1>p, DisjointCF, VariantAx
+    <2> QED BY <2>1, <1>l4, <1>p DEF Lemma4_MessagesNotFromFuture
+  <1> QED BY <1>P1, <1>P2
 THEOREM Pres_Lemma4 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma4_MessagesNotFromFuture'
-  <1>o4. ASSUME FaultyStep PROVE Lemma4_MessagesNotFromFuture'
-        OMITTED \* unproven: no backend discharges DEF FaultyStep (multi-var SetOf in msgs2)
-  <1> QED BY Pres_L4_S1, Pres_L4_S2, Pres_L4_S3, Pres_L4_ST, <1>o4 DEF Next, CorrectStep
+  <1> QED BY Pres_L4_S1, Pres_L4_S2, Pres_L4_S3, Pres_L4_ST, Pres_L4_F DEF Next, CorrectStep
 
 \* ===== L5: a non-initial round requires previously sent messages =====
 THEOREM Pres_L5_ST ==
@@ -1115,12 +1192,29 @@ THEOREM Pres_L5_S3 ==
     <2>2. r = round[id] /\ step[id] = S3 BY <2>1, <1>rd, <1>st
     <2> QED BY <2>2, <1>old
   <1> QED BY <1>c1, <1>c2, <1>c3
+\* FaultyStep case: step/round unchanged, messages only grow, so every required message
+\* (a CORRECT replica's own message) still exists.
+THEOREM Pres_L5_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma5_RoundNeedsSentMessages'
+  <1>l5. Lemma5_RoundNeedsSentMessages BY DEF IndInv
+  <1>p. /\ step' = step /\ round' = round
+        /\ \A rr \in ROUNDS : msgs1[rr] \subseteq msgs1'[rr] /\ msgs2[rr] \subseteq msgs2'[rr]
+        BY FaultyStepProps
+  <1> SUFFICES ASSUME NEW id \in CORRECT, NEW r \in ROUNDS
+        PROVE /\ (r < round'[id] \/ (r = round'[id] /\ step'[id] /= S1)) => (\E m \in msgs1'[r]: m.src = id)
+              /\ (r < round'[id]) => (\E m \in msgs2'[r]: AsD2(m).src = id \/ AsQ2(m).src = id)
+              /\ (r = round'[id] /\ step'[id] = S3) => (\E m \in msgs2'[r]: AsD2(m).src = id \/ AsQ2(m).src = id)
+        BY DEF Lemma5_RoundNeedsSentMessages
+  <1>old. /\ (r < round[id] \/ (r = round[id] /\ step[id] /= S1)) => (\E m \in msgs1[r]: m.src = id)
+          /\ (r < round[id]) => (\E m \in msgs2[r]: AsD2(m).src = id \/ AsQ2(m).src = id)
+          /\ (r = round[id] /\ step[id] = S3) => (\E m \in msgs2[r]: AsD2(m).src = id \/ AsQ2(m).src = id)
+          BY <1>l5 DEF Lemma5_RoundNeedsSentMessages
+  <1> QED BY <1>old, <1>p
 THEOREM Pres_Lemma5 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma5_RoundNeedsSentMessages'
-  <1>o4. ASSUME FaultyStep PROVE Lemma5_RoundNeedsSentMessages'
-        OMITTED \* unproven: no backend discharges DEF FaultyStep (multi-var SetOf in msgs2)
-  <1> QED BY Pres_L5_S1, Pres_L5_S2, Pres_L5_S3, Pres_L5_ST, <1>o4 DEF Next, CorrectStep
+  <1> QED BY Pres_L5_S1, Pres_L5_S2, Pres_L5_S3, Pres_L5_ST, Pres_L5_F DEF Next, CorrectStep
 
 \* ===== L6: a decision fixes the value (decision,value) =====
 THEOREM Pres_L6_S1 ==
@@ -1131,14 +1225,12 @@ THEOREM Pres_L6_S2 ==
   ASSUME IndInv, NEW id \in CORRECT, Step2(id)
   PROVE  Lemma6_DecisionDefinesValue'
   BY DEF IndInv, Lemma6_DecisionDefinesValue, Step2
+\* FaultyStep leaves value/decision unchanged (frame), via FaultyStepProps.
 THEOREM Pres_L6_F ==
   ASSUME IndInv, FaultyStep
   PROVE  Lemma6_DecisionDefinesValue'
-  \* TRIVIAL frame case: FaultyStep leaves value/decision unchanged. But ANY `DEF
-  \* FaultyStep` crashes every tlapm backend (the SMT flattener `n_flatten.ml` aborts on
-  \* the two-variable set-map `{ D2(src,r,v): src \in FAULTY, v \in VALUES }`; Zenon/Isa
-  \* also fail). So we admit this obviously-true case.
-  OMITTED \* TODO: blocked by a tlapm backend crash on FaultyStep's multi-bound set-map
+  <1>1. value' = value /\ decision' = decision BY FaultyStepProps
+  <1> QED BY <1>1 DEF IndInv, Lemma6_DecisionDefinesValue
 THEOREM Pres_L6_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma6_DecisionDefinesValue'
