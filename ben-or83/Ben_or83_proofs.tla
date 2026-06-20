@@ -1055,6 +1055,50 @@ THEOREM SupportedUnique ==
     <2> QED BY <2>3 DEF Senders1
   <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
 
+THEOREM QuorumDominatesSupported ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(r, v),
+         NEW w \in SupportedValues(r)
+  PROVE  w = v
+  <1> USE DEF IndInv
+  <1>wv. w \in VALUES BY DEF SupportedValues
+  <1>sv. Cardinality(Senders2(DvSet(r, w))) >= T + 1
+        BY DEF SupportedValues, DvSet
+  <1>finw. IsFiniteSet(DvSet(r, w)) BY <1>wv, D2SetFinite
+  <1>lew. Cardinality(Senders2(DvSet(r, w))) <= Cardinality(DvSet(r, w))
+        BY <1>finw, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(DvSet(r, w))) \in Nat
+             /\ Cardinality(DvSet(r, w)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finw, FS_CardinalityType, ConstNat, FleqT
+  <1>dw. Cardinality(DvSet(r, w)) >= T + 1
+        BY <1>sv, <1>lew, <1>types, Arith_GeTrans
+  <1>dv. Cardinality(DvSet(r, v)) >= T + 1
+        BY DEF ExistsQuorum2LessRam, DvSet
+  <1>ev. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY <1>dv, CorrectD2Exists
+  <1>ew. \E mw \in msgs2[r] : IsD2(mw) /\ AsD2(mw).v = w /\ AsD2(mw).src \in CORRECT
+        BY <1>wv, <1>dw, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r] : m.v = v }
+              Sw == { m \in msgs1[r] : m.v = w }
+          IN 2 * Cardinality(Senders1(Sv)) > N + T
+             /\ 2 * Cardinality(Senders1(Sw)) > N + T
+        BY <1>wv, <1>ev, <1>ew DEF Lemma7_D2RequiresQuorum
+  <1>meet. \E id \in CORRECT :
+            (\E m \in msgs1[r] : m.src = id /\ m.v = v)
+            /\ (\E m \in msgs1[r] : m.src = id /\ m.v = w)
+    <2>1. Senders1({ m \in msgs1[r] : m.v = v }) \subseteq ALL
+          /\ Senders1({ m \in msgs1[r] : m.v = w }) \subseteq ALL
+          BY DEF Senders1
+    <2>2. 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+          /\ 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = w })) > N + T
+          BY <1>maj
+    <2>3. \E id \in Senders1({ m \in msgs1[r] : m.v = v })
+                \cap Senders1({ m \in msgs1[r] : m.v = w }) : id \in CORRECT
+          BY <2>1, <2>2, MajorityIntersect
+    <2> QED BY <2>3 DEF Senders1
+  <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
 SupportedValuesP(r) ==
   LET ExistsSupport(v) ==
     LET Sv == Senders2(DvPSet(r, v)) IN
