@@ -184,6 +184,41 @@ THEOREM Senders2_CardLeSet ==
         BY <1>fn, <1>inj DEF Injection, IsInjective
   <1> QED BY <1>i, FS_Injection
 
+D2SrcFn(S) == [ m \in S |-> AsD2(m).src ]
+
+THEOREM D2Fixed_CardLeSenders ==
+  ASSUME NEW S, NEW r, NEW v,
+         \A m \in S : IsD2(m) /\ AsD2(m).src \in ALL
+                       /\ AsD2(m).r = r /\ AsD2(m).v = v
+  PROVE  Cardinality(S) <= Cardinality(Senders2(S))
+  <1>fn. D2SrcFn(S) \in [ S -> Senders2(S) ]
+        BY DEF D2SrcFn, Senders2
+  <1>inj. \A a, b \in S : D2SrcFn(S)[a] = D2SrcFn(S)[b] => a = b
+    <2> SUFFICES ASSUME NEW a \in S, NEW b \in S, D2SrcFn(S)[a] = D2SrcFn(S)[b]
+                 PROVE  a = b
+          OBVIOUS
+    <2> QED BY VariantAx DEF D2SrcFn
+  <1>i. D2SrcFn(S) \in Injection(S, Senders2(S))
+        BY <1>fn, <1>inj DEF Injection, IsInjective
+  <1> QED BY <1>i, Senders2_Sub, FS_Injection
+
+Q2SrcFn(S) == [ m \in S |-> AsQ2(m).src ]
+
+THEOREM Q2Fixed_CardLeSenders ==
+  ASSUME NEW S, NEW r,
+         \A m \in S : IsQ2(m) /\ AsQ2(m).src \in ALL /\ AsQ2(m).r = r
+  PROVE  Cardinality(S) <= Cardinality(Senders2(S))
+  <1>fn. Q2SrcFn(S) \in [ S -> Senders2(S) ]
+        BY DEF Q2SrcFn, Senders2
+  <1>inj. \A a, b \in S : Q2SrcFn(S)[a] = Q2SrcFn(S)[b] => a = b
+    <2> SUFFICES ASSUME NEW a \in S, NEW b \in S, Q2SrcFn(S)[a] = Q2SrcFn(S)[b]
+                 PROVE  a = b
+          OBVIOUS
+    <2> QED BY VariantAx DEF Q2SrcFn
+  <1>i. Q2SrcFn(S) \in Injection(S, Senders2(S))
+        BY <1>fn, <1>inj DEF Injection, IsInjective
+  <1> QED BY <1>i, Senders2_Sub, FS_Injection
+
 \* Any subset of ALL is finite with cardinality at most N.
 THEOREM SubAll_Finite ==
   ASSUME NEW Q, Q \subseteq ALL
@@ -229,6 +264,47 @@ LEMMA Arith_SumThirdMonoGe ==
          NEW c \in Nat, z <= zp, x + y + z >= c
   PROVE  x + y + zp >= c
   BY ConstNat
+
+LEMMA Arith_ThreeLeTrans ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat,
+         NEW x \in Nat, NEW y \in Nat, NEW z \in Nat,
+         NEW n \in Nat,
+         n <= a + b + c,
+         a <= x, b <= y, c <= z
+  PROVE  n <= x + y + z
+  BY ConstNat
+
+LEMMA Arith_SumMinusLeSum ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW i \in Nat
+  PROVE  a + b - i <= a + b
+  BY ConstNat
+
+THEOREM CardUnion3LeSum ==
+  ASSUME NEW A, NEW B, NEW C,
+         IsFiniteSet(A), IsFiniteSet(B), IsFiniteSet(C)
+  PROVE  Cardinality((A \union B) \union C)
+           <= Cardinality(A) + Cardinality(B) + Cardinality(C)
+  <1>ab. IsFiniteSet(A \union B) BY FS_Union
+  <1>abc. IsFiniteSet((A \union B) \union C) BY <1>ab, FS_Union
+  <1>iab. IsFiniteSet(A \cap B) BY FS_Intersection
+  <1>iabc. IsFiniteSet((A \union B) \cap C) BY <1>ab, FS_Intersection
+  <1>eqab. Cardinality(A \union B)
+             = Cardinality(A) + Cardinality(B) - Cardinality(A \cap B)
+        BY FS_Union
+  <1>eqabc. Cardinality((A \union B) \union C)
+             = Cardinality(A \union B) + Cardinality(C) - Cardinality((A \union B) \cap C)
+        BY <1>ab, FS_Union
+  <1>types. /\ Cardinality(A) \in Nat /\ Cardinality(B) \in Nat /\ Cardinality(C) \in Nat
+             /\ Cardinality(A \union B) \in Nat
+             /\ Cardinality((A \union B) \union C) \in Nat
+             /\ Cardinality(A \cap B) \in Nat
+             /\ Cardinality((A \union B) \cap C) \in Nat
+        BY <1>ab, <1>abc, <1>iab, <1>iabc, FS_CardinalityType
+  <1>cab. Cardinality(A \union B) <= Cardinality(A) + Cardinality(B)
+        BY <1>eqab, <1>types, Arith_SumMinusLeSum
+  <1>cabc. Cardinality((A \union B) \union C) <= Cardinality(A \union B) + Cardinality(C)
+        BY <1>eqabc, <1>types, Arith_SumMinusLeSum
+  <1> QED BY <1>cab, <1>cabc, <1>types, ConstNat
 
 \* CORE QUORUM INTERSECTION: two quorums of >= N - T senders intersect, and the
 \* intersection necessarily contains a correct replica (since N > 5*T).
@@ -823,6 +899,68 @@ THEOREM Msgs2Step2Mono ==
   <1>mono. Cardinality(msgs2[r]) <= Cardinality(msgs2'[r])
         BY <1>sub, <1>finNew, FS_Subset
   <1> QED BY <1>finNew, <1>mono
+
+DPart(S, v) == { m \in S : IsD2(m) /\ AsD2(m).v = v }
+QPart(S) == { m \in S : IsQ2(m) }
+
+THEOREM Msgs2SenderPartitionBound ==
+  ASSUME TypeOK, NEW r \in ROUNDS, NEW S, S \subseteq msgs2[r]
+  PROVE  Cardinality(Senders2(S))
+           <= Cardinality(DPart(S, 0)) + Cardinality(DPart(S, 1)) + Cardinality(QPart(S))
+  <1>v0. 0 \in VALUES BY DEF VALUES
+  <1>v1. 1 \in VALUES BY DEF VALUES
+  <1>finS. IsFiniteSet(S) BY Msgs2Finite, FS_Subset
+  <1>finD0. IsFiniteSet(DPart(S, 0)) BY <1>finS, FS_Subset DEF DPart
+  <1>finD1. IsFiniteSet(DPart(S, 1)) BY <1>finS, FS_Subset DEF DPart
+  <1>finQ. IsFiniteSet(QPart(S)) BY <1>finS, FS_Subset DEF QPart
+  <1>shape. /\ \A m \in S : IsD2(m) => /\ AsD2(m).src \in ALL
+                                           /\ AsD2(m).r = r
+                                           /\ AsD2(m).v \in VALUES
+             /\ \A m \in S : IsQ2(m) => /\ AsQ2(m).src \in ALL
+                                           /\ AsQ2(m).r = r
+        BY Msgs2Shape, Msgs2SrcInAll, Msgs2VInValues, Msgs2RShape, Msgs2QSrcInAll
+  <1>part. Senders2(S)
+              \subseteq (Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
+                           \union Senders2(QPart(S))
+        BY <1>shape, VariantAx DEF Senders2, DPart, QPart, VALUES
+  <1>finS0. IsFiniteSet(Senders2(DPart(S, 0))) BY Senders2_Sub
+  <1>finS1. IsFiniteSet(Senders2(DPart(S, 1))) BY Senders2_Sub
+  <1>finSQ. IsFiniteSet(Senders2(QPart(S))) BY Senders2_Sub
+  <1>finUnion. IsFiniteSet((Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
+                           \union Senders2(QPart(S)))
+        BY <1>finS0, <1>finS1, <1>finSQ, FS_Union
+  <1>mono. Cardinality(Senders2(S))
+              <= Cardinality((Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
+                           \union Senders2(QPart(S)))
+        BY <1>part, <1>finUnion, FS_Subset
+  <1>union. Cardinality((Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
+                           \union Senders2(QPart(S)))
+              <= Cardinality(Senders2(DPart(S, 0)))
+                   + Cardinality(Senders2(DPart(S, 1)))
+                   + Cardinality(Senders2(QPart(S)))
+        BY <1>finS0, <1>finS1, <1>finSQ, CardUnion3LeSum
+  <1>s0. Cardinality(Senders2(DPart(S, 0))) <= Cardinality(DPart(S, 0))
+        BY <1>finD0, Senders2_CardLeSet
+  <1>s1. Cardinality(Senders2(DPart(S, 1))) <= Cardinality(DPart(S, 1))
+        BY <1>finD1, Senders2_CardLeSet
+  <1>sq. Cardinality(Senders2(QPart(S))) <= Cardinality(QPart(S))
+        BY <1>finQ, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(S)) \in Nat
+             /\ Cardinality((Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
+                           \union Senders2(QPart(S))) \in Nat
+             /\ Cardinality(Senders2(DPart(S, 0))) \in Nat
+             /\ Cardinality(Senders2(DPart(S, 1))) \in Nat
+             /\ Cardinality(Senders2(QPart(S))) \in Nat
+             /\ Cardinality(DPart(S, 0)) \in Nat
+             /\ Cardinality(DPart(S, 1)) \in Nat
+             /\ Cardinality(QPart(S)) \in Nat
+        BY <1>finUnion, <1>finD0, <1>finD1, <1>finQ, Senders2_Sub, FS_CardinalityType
+  <1>sumSend. Cardinality(Senders2(S))
+                <= Cardinality(Senders2(DPart(S, 0)))
+                   + Cardinality(Senders2(DPart(S, 1)))
+                   + Cardinality(Senders2(QPart(S)))
+        BY <1>mono, <1>union, <1>types, Arith_GeTrans
+  <1> QED BY <1>sumSend, <1>s0, <1>s1, <1>sq, <1>types, Arith_ThreeLeTrans
 
 \* Abstract arithmetic: >= T+1 elements, <= F of them excluded, leaves >= 1.
 LEMMA Arith_DiffPos ==
