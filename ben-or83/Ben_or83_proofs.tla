@@ -4756,6 +4756,167 @@ THEOREM Pres_L1_F ==
           BY <2>oldTw, <2>mv, <2>types, Arith_DoubleGtMono
     <2> QED BY <2>old, <2>newN, <2>newNv, <2>newTw, <1>fr DEF DvPSet
   <1> QED BY <1>dec, <1>non
+\* ===== L1 Step3: a decision requires a quorum2 in the immediately preceding round. =====
+\* Step3 leaves msgs2 unchanged; only id0's decision/round/value/step move. For id # id0 the
+\* old invariant carries verbatim. For id0 that DECIDES this step, the decision condition
+\* 2*Weights[v] > N+T directly yields the quorum at round[id0] = round'[id0]-1. The single
+\* remaining obligation -- id0 has ALREADY decided and advances without re-deciding -- is
+\* isolated in Pres_L1_S3_DecidedCarry below.
+
+\* ISOLATED HARD OBLIGATION. id0 already decided w = decision[id0] # NO_DECISION and takes a
+\* non-deciding Step3 (decision' = decision), advancing round[id0] -> round[id0]+1. Lemma1c'
+\* then needs a strict w-quorum at round[id0]. This reduces to ruling out the no-majority
+\* disjunct of Lemma11a' for the decided value: Lemma13' gives only w in
+\* SupportedValues(round[id0]) (>= T+1 support), not the strict 2*nv > N+T quorum. Closing
+\* this is the SupportedValues strict-quorum-persistence argument still open in THEOREM
+\* Inductive (the "strengthen induction predicate to SupportedValues lock" admit). Not yet
+\* verified inductive for T >= 2 (the N=11 Apalache check OOM'd at 4-16G heap).
+THEOREM Pres_L1_S3_DecidedCarry ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0),
+         decision' = decision, decision[id0] # NO_DECISION
+  PROVE  /\ Cardinality(msgs2'[round[id0]]) >= N - T
+         /\ Cardinality({ m \in msgs2'[round[id0]]: IsD2(m) /\ AsD2(m).v = decision[id0] }) >= T + 1
+         /\ 2 * Cardinality({ m \in msgs2'[round[id0]]: IsD2(m) /\ AsD2(m).v = decision[id0] }) > N + T
+  OMITTED \* TODO: SupportedValues strict-quorum persistence (cf. Inductive strengthening admit)
+
+THEOREM Pres_L1_S3 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0)
+  PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
+  <1>l1. Lemma1_DecisionRequiresLastQuorumLessRam BY DEF IndInv
+  <1>dom. /\ decision \in [ CORRECT -> VALUES \union { NO_DECISION } ]
+          /\ round \in [ CORRECT -> ROUNDS ]
+          /\ value \in [ CORRECT -> VALUES ]
+        BY DEF TypeOK
+  <1>r0. round[id0] \in ROUNDS /\ round[id0] \in Nat /\ round[id0] >= 1
+        BY <1>dom, RoundPos
+  <1>upd. /\ msgs2' = msgs2
+          /\ round' = [ round EXCEPT ![id0] = round[id0] + 1 ]
+        BY DEF Step3
+  <1>rd. \A x \in CORRECT : round'[x] = (IF x = id0 THEN round[id0] + 1 ELSE round[x])
+        BY <1>upd, <1>dom
+  <1> PICK received \in SUBSET msgs2[round[id0]] :
+        /\ Cardinality(Senders2(received)) = N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+           \/ /\ \A vv \in VALUES: Weights[vv] < T + 1
+              /\ \E next_v \in VALUES:
+                   /\ value' = [ value EXCEPT ![id0] = next_v ]
+                   /\ decision' = decision
+        BY DEF Step3
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+  <1> SUFFICES ASSUME NEW id \in CORRECT
+        PROVE \/ decision'[id] = NO_DECISION
+              \/ /\ round'[id] > 1
+                 /\ LET nv == Cardinality({ m \in msgs2'[round'[id] - 1]:
+                                           IsD2(m) /\ AsD2(m).v = decision'[id] })
+                        n == Cardinality(msgs2'[round'[id] - 1])
+                    IN
+                    /\ n >= N - T
+                    /\ nv >= T + 1
+                    /\ 2 * nv > N + T
+        BY DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+  <1>oldId. CASE id # id0
+    <2>dSame. decision'[id] = decision[id] BY <1>oldId, <1>dom DEF Step3
+    <2>rSame. round'[id] = round[id] BY <1>oldId, <1>rd
+    <2> QED BY <1>l1, <2>dSame, <2>rSame, <1>upd
+          DEF Lemma1_DecisionRequiresLastQuorumLessRam, ExistsQuorum2LessRam
+  <1>newId. CASE id = id0
+    <2>gt. round'[id] > 1 BY <1>newId, <1>rd, <1>r0, Arith_SuccGtOne
+    <2>pred. round'[id] - 1 = round[id0] BY <1>newId, <1>rd, <1>r0, Arith_PlusOneMinusOne
+    <2>high. CASE \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+      <3> PICK vv \in VALUES:
+            /\ Weights[vv] >= T + 1
+            /\ value' = [ value EXCEPT ![id0] = vv ]
+            /\ IF 2 * Weights[vv] > N + T
+               THEN decision' = [ decision EXCEPT ![id0] = vv ]
+               ELSE decision' = decision
+          BY <2>high
+      <3>decide. CASE 2 * Weights[vv] > N + T
+        <4>decp. decision' = [ decision EXCEPT ![id0] = vv ] BY <3>decide
+        <4>dvv. decision'[id] = vv BY <4>decp, <1>newId, <1>dom
+        <4>recsub. received \subseteq msgs2[round[id0]] OBVIOUS
+        <4>finM. IsFiniteSet(msgs2[round[id0]]) BY <1>r0, Msgs2Finite
+        <4>finDv. IsFiniteSet(DvSet(round[id0], vv))
+                  /\ Cardinality(DvSet(round[id0], vv)) <= N
+              BY <1>r0, Msgs2Finite, D2SetFinite
+        <4>RDsub. { m \in received: IsD2(m) /\ AsD2(m).v = vv } \subseteq DvSet(round[id0], vv)
+              BY <4>recsub DEF DvSet
+        <4>wDef. Weights[vv] = Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv }))
+              OBVIOUS
+        <4>senLe1. Cardinality(Senders2(received)) <= Cardinality(Senders2(msgs2[round[id0]]))
+              BY <4>recsub, Senders2_Mono
+        <4>senLe2. Cardinality(Senders2(msgs2[round[id0]])) <= Cardinality(msgs2[round[id0]])
+              BY <4>finM, Senders2_CardLeSet
+        <4>wLe1. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv }))
+                    <= Cardinality(Senders2(DvSet(round[id0], vv)))
+              BY <4>RDsub, Senders2_Mono
+        <4>wLe2. Cardinality(Senders2(DvSet(round[id0], vv)))
+                    <= Cardinality(DvSet(round[id0], vv))
+              BY <4>finDv, Senders2_CardLeSet
+        <4>types. /\ Cardinality(msgs2[round[id0]]) \in Nat
+                  /\ Cardinality(Senders2(msgs2[round[id0]])) \in Nat
+                  /\ Cardinality(Senders2(received)) \in Nat
+                  /\ Cardinality(DvSet(round[id0], vv)) \in Nat
+                  /\ Cardinality(Senders2(DvSet(round[id0], vv))) \in Nat
+                  /\ Weights[vv] \in Nat
+                  /\ N - T \in Nat /\ T + 1 \in Nat /\ N + T \in Nat
+              BY <4>finM, <4>finDv, <4>wDef, Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+        <4>nGe. Cardinality(msgs2[round[id0]]) >= N - T
+              BY <4>senLe1, <4>senLe2, <4>types, Arith_LeTrans
+        <4>wLeNv. Weights[vv] <= Cardinality(DvSet(round[id0], vv))
+              BY <4>wDef, <4>wLe1, <4>wLe2, <4>types, Arith_LeTrans
+        <4>nvGe. Cardinality(DvSet(round[id0], vv)) >= T + 1
+              BY <4>wLeNv, <4>types, Arith_GeTrans
+        <4>nv2. 2 * Cardinality(DvSet(round[id0], vv)) > N + T
+              BY <4>wLeNv, <3>decide, <4>types, Arith_DoubleGtMono
+        <4> QED BY <2>gt, <2>pred, <4>dvv, <4>nGe, <4>nvGe, <4>nv2, <1>upd DEF DvSet
+      <3>nodecide. CASE ~(2 * Weights[vv] > N + T)
+        <4>decp. decision' = decision BY <3>nodecide
+        <4>dcarry. decision'[id] = decision[id0] BY <4>decp, <1>newId
+        <4>n0. CASE decision[id0] = NO_DECISION
+          <5> QED BY <4>dcarry, <4>n0
+        <4>d0. CASE decision[id0] # NO_DECISION
+          <5>hard. /\ Cardinality(msgs2'[round[id0]]) >= N - T
+                   /\ Cardinality({ m \in msgs2'[round[id0]]:
+                                      IsD2(m) /\ AsD2(m).v = decision[id0] }) >= T + 1
+                   /\ 2 * Cardinality({ m \in msgs2'[round[id0]]:
+                                          IsD2(m) /\ AsD2(m).v = decision[id0] }) > N + T
+                BY <4>decp, <4>d0, Pres_L1_S3_DecidedCarry
+          <5> QED BY <5>hard, <2>gt, <2>pred, <4>dcarry
+        <4> QED BY <4>n0, <4>d0
+      <3> QED BY <3>decide, <3>nodecide
+    <2>low. CASE /\ \A vv \in VALUES: Weights[vv] < T + 1
+                 /\ \E next_v \in VALUES:
+                      /\ value' = [ value EXCEPT ![id0] = next_v ]
+                      /\ decision' = decision
+      <3>decp. decision' = decision BY <2>low
+      <3>dcarry. decision'[id] = decision[id0] BY <3>decp, <1>newId
+      <3>n0. CASE decision[id0] = NO_DECISION
+        <4> QED BY <3>dcarry, <3>n0
+      <3>d0. CASE decision[id0] # NO_DECISION
+        <4>hard. /\ Cardinality(msgs2'[round[id0]]) >= N - T
+                 /\ Cardinality({ m \in msgs2'[round[id0]]:
+                                    IsD2(m) /\ AsD2(m).v = decision[id0] }) >= T + 1
+                 /\ 2 * Cardinality({ m \in msgs2'[round[id0]]:
+                                        IsD2(m) /\ AsD2(m).v = decision[id0] }) > N + T
+              BY <3>decp, <3>d0, Pres_L1_S3_DecidedCarry
+        <4> QED BY <4>hard, <2>gt, <2>pred, <3>dcarry
+      <3> QED BY <3>n0, <3>d0
+    <2> QED BY <2>high, <2>low
+  <1> QED BY <1>oldId, <1>newId
 THEOREM Pres_L1_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma1_DecisionRequiresLastQuorumLessRam'
@@ -4767,8 +4928,10 @@ THEOREM Pres_Lemma1 ==
     <2> SUFFICES ASSUME Step2(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
           OBVIOUS
     <2> QED BY Pres_L1_S2
-  <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
-        OMITTED \* TODO: substantive Step3 case for Lemma1_DecisionRequiresLastQuorumLessRam
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step3(id) => Lemma1_DecisionRequiresLastQuorumLessRam'
+    <2> SUFFICES ASSUME Step3(id) PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
+          OBVIOUS
+    <2> QED BY Pres_L1_S3
   <1>o3. FaultyStep => Lemma1_DecisionRequiresLastQuorumLessRam'
     <2> SUFFICES ASSUME FaultyStep PROVE Lemma1_DecisionRequiresLastQuorumLessRam'
           OBVIOUS
