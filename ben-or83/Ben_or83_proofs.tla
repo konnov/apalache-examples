@@ -15,11 +15,9 @@
  * (a value gaining/keeping a quorum) and the LockLemma inductive step. Fill them in
  * priority order (see Ben_or83_inductive.tla header and the project plan).
  *
- * Two admitted leaves are NOT mathematical TODOs but caveats:
- *   - InitInd L5/L12: FALSE at round 0 under ROUNDS = Nat (algorithm numbers rounds
- *     from 1); use ROUNDS == Nat \ {0} for a fully-closed base case.
- *   - Pres_L6_F: trivially true (FaultyStep does not touch value/decision) but blocked
- *     by a tlapm backend crash on FaultyStep's two-variable set-map.
+ * One admitted leaf is a proof-engineering caveat, not a mathematical TODO:
+ *   - FaultyStepProps: provable from DEF FaultyStep; kept admitted because this
+ *     TLAPS build still struggles with the bundled FaultyStep consequence proof.
  *
  * Checked with: tlapm (TLAPS) + stdlib FiniteSetTheorems, NaturalsInduction, TLAPS,
  * and the community `Variants` module on the search path:
@@ -1128,15 +1126,73 @@ THEOREM Msgs2AddQRep ==
     <2> QED BY <2>eq, <2>ne
   <1> QED BY <1>vals DEF lhs, rhs
 
+THEOREM Msgs1AddSetRep ==
+  ASSUME NEW A \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW rr0 \in ROUNDS,
+         NEW F \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ],
+         NEW f,
+         f = [ rr \in ROUNDS |-> { m \in A : m.r = rr } ]
+  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union F ]
+         = [ rr \in ROUNDS |-> { m \in A \union F : m.r = rr } ]
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union F ]
+             rhs == [ rr \in ROUNDS |-> { m \in A \union F : m.r = rr } ]
+  <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
+    <2>eq. CASE rr = rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>eq, SMT DEF lhs, rhs
+    <2>ne. CASE rr # rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>ne, SMT DEF lhs, rhs
+    <2> QED BY <2>eq, <2>ne
+  <1> QED BY <1>vals DEF lhs, rhs
+
+THEOREM Msgs2AddSetsRep ==
+  ASSUME NEW AD \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+         NEW AQ \in SUBSET [ src: ALL, r: ROUNDS ],
+         NEW rr0 \in ROUNDS,
+         NEW FD \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ],
+         NEW FQ \in SUBSET [ src: ALL, r: { rr0 } ],
+         NEW f,
+         f = [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v): mm \in { m \in AD: m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in AQ: m.r = rr } } ]
+  PROVE  [ f EXCEPT ![rr0] =
+             f[rr0]
+               \union { D2(mm.src, rr0, mm.v): mm \in FD }
+               \union { Q2(mm.src, rr0): mm \in FQ } ]
+         = [ rr \in ROUNDS |->
+             { D2(mm.src, rr, mm.v): mm \in { m \in AD \union FD: m.r = rr } }
+               \union { Q2(mm.src, rr): mm \in { m \in AQ \union FQ: m.r = rr } } ]
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] =
+             f[rr0]
+               \union { D2(mm.src, rr0, mm.v): mm \in FD }
+               \union { Q2(mm.src, rr0): mm \in FQ } ]
+             rhs == [ rr \in ROUNDS |->
+               { D2(mm.src, rr, mm.v): mm \in { m \in AD \union FD: m.r = rr } }
+                 \union { Q2(mm.src, rr): mm \in { m \in AQ \union FQ: m.r = rr } } ]
+  <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
+    <2>eq. CASE rr = rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>eq, VariantAx, SMT DEF lhs, rhs, D2, Q2
+    <2>ne. CASE rr # rr0
+      <3> SUFFICES ASSUME NEW x PROVE x \in lhs[rr] <=> x \in rhs[rr]
+            BY SetExtensionality
+      <3> QED BY <2>ne, VariantAx, SMT DEF lhs, rhs, D2, Q2
+    <2> QED BY <2>eq, <2>ne
+  <1> QED BY <1>vals DEF lhs, rhs
+
 \*****************************************************************************
 \* FAULTY-STEP CONSEQUENCES.
-\* `DEF FaultyStep` cannot be discharged by any backend (the SMT encoder aborts on the
-\* two-variable set comprehension `{ D2(src,r,v): src \in FAULTY, v \in VALUES }`, and
-\* Zenon/Isabelle fail). We therefore state FaultyStep's relevant CONSEQUENCES -- which
-\* avoid that construct -- as a single admitted theorem, and prove every per-lemma
-\* FaultyStep case from it. The consequences are: the per-replica state is unchanged, the
-\* message buffers only grow, and every newly added message has a FAULTY sender.
-\* (All provable from DEF FaultyStep on a tlapm whose encoder handles the construct.)
+\* The normalized FaultyStep is enough to prove TypePres directly, but this bundled
+\* consequence theorem still overloads the backends when proved as one obligation.
+\* We keep it as the single admitted theorem for the remaining per-lemma FaultyStep
+\* consequences: the per-replica state is unchanged, message buffers only grow, and
+\* every newly added message has a FAULTY sender.
 \*****************************************************************************
 THEOREM FaultyStepProps ==
   ASSUME FaultyStep
@@ -1416,7 +1472,73 @@ THEOREM TypePres ==
     <2> QED BY <2>1, <2>2, <2>3, <2>4
   <1>3. CASE FaultyStep
         \* faulty replicas add messages with src \in FAULTY \subseteq ALL.
-        OMITTED \* TODO: FaultyStep's arbitrary D2/Q2 set-map hits the same tlapm encoder limit as FaultyStepProps.
+    <2> PICK A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+          msgs1 = [ rr \in ROUNDS |-> { m \in A1 : m.r = rr } ]
+        BY DEF TypeOK
+    <2> PICK A1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+              A1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+          msgs2 = [ rr \in ROUNDS |->
+            { D2(mm.src, rr, mm.v): mm \in { m \in A1D: m.r = rr } }
+              \union { Q2(mm.src, rr): mm \in { m \in A1Q: m.r = rr } } ]
+        BY DEF TypeOK
+    <2>fs. PICK rr0 \in ROUNDS :
+          /\ \E F1 \in SUBSET [ src: FAULTY, r: { rr0 }, v: VALUES ] :
+               msgs1' = [ msgs1 EXCEPT ![rr0] = msgs1[rr0] \union F1 ]
+          /\ \E F2D \in SUBSET FaultyD2Records(rr0) :
+               \E F2Q \in SUBSET FaultyQ2Records(rr0) :
+                 msgs2' = [ msgs2 EXCEPT ![rr0] =
+                    msgs2[rr0]
+                      \union { D2(mm.src, rr0, mm.v): mm \in F2D }
+                      \union { Q2(mm.src, rr0): mm \in F2Q } ]
+          /\ UNCHANGED << value, decision, round, step >>
+        BY <1>3 DEF FaultyStep
+    <2>f1. PICK F1 \in SUBSET [ src: FAULTY, r: { rr0 }, v: VALUES ] :
+          msgs1' = [ msgs1 EXCEPT ![rr0] = msgs1[rr0] \union F1 ]
+        BY <2>fs
+    <2>f2. PICK F2D \in SUBSET FaultyD2Records(rr0),
+              F2Q \in SUBSET FaultyQ2Records(rr0) :
+          msgs2' = [ msgs2 EXCEPT ![rr0] =
+                    msgs2[rr0]
+                      \union { D2(mm.src, rr0, mm.v): mm \in F2D }
+                      \union { Q2(mm.src, rr0): mm \in F2Q } ]
+        BY <2>fs
+    <2>fr. value' = value /\ decision' = decision /\ round' = round /\ step' = step
+        BY <2>fs DEF vars
+    <2> DEFINE A1p == A1 \union F1
+               A1Dp == A1D \union F2D
+               A1Qp == A1Q \union F2Q
+    <2>f1all. F1 \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ]
+        BY <2>fs, <2>f1 DEF ALL
+    <2>f2dall. F2D \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ]
+        BY <2>fs, <2>f2 DEF ALL, FaultyD2Records
+    <2>f2qall. F2Q \in SUBSET [ src: ALL, r: { rr0 } ]
+        BY <2>fs, <2>f2 DEF ALL, FaultyQ2Records
+    <2>1. value' \in [ CORRECT -> VALUES ] BY <2>fr DEF TypeOK
+    <2>2. decision' \in [ CORRECT -> VALUES \union { NO_DECISION } ] BY <2>fr DEF TypeOK
+    <2>3. round' \in [ CORRECT -> ROUNDS ] BY <2>fr DEF TypeOK
+    <2>4. step' \in [ CORRECT -> { S1, S2, S3 } ] BY <2>fr DEF TypeOK
+    <2>5. \E B1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+            msgs1' = [ rr \in ROUNDS |-> { m \in B1 : m.r = rr } ]
+      <3>1. A1p \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ]
+            BY <2>fs, <2>f1all DEF A1p
+      <3>2. msgs1' = [ rr \in ROUNDS |-> { m \in A1p : m.r = rr } ]
+            BY <2>f1, <2>f1all, Msgs1AddSetRep DEF A1p
+      <3> QED BY <3>1, <3>2
+    <2>6. \E B1D \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
+              B1Q \in SUBSET [ src: ALL, r: ROUNDS ] :
+            msgs2' = [ rr \in ROUNDS |->
+              { D2(mm.src, rr, mm.v): mm \in { m \in B1D: m.r = rr } }
+                \union { Q2(mm.src, rr): mm \in { m \in B1Q: m.r = rr } } ]
+      <3>1. A1Dp \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ]
+            BY <2>fs, <2>f2dall DEF A1Dp
+      <3>2. A1Qp \in SUBSET [ src: ALL, r: ROUNDS ]
+            BY <2>fs, <2>f2qall DEF A1Qp
+      <3>3. msgs2' = [ rr \in ROUNDS |->
+              { D2(mm.src, rr, mm.v): mm \in { m \in A1Dp: m.r = rr } }
+                \union { Q2(mm.src, rr): mm \in { m \in A1Qp: m.r = rr } } ]
+            BY <2>f2, <2>f2dall, <2>f2qall, Msgs2AddSetsRep DEF A1Dp, A1Qp
+      <3> QED BY <3>1, <3>2, <3>3, Msgs2PrimeWitnessIntro
+    <2> QED BY <2>1, <2>2, <2>3, <2>4, <2>5, <2>6 DEF TypeOK
   <1> QED
         BY <1>1, <1>2, <1>3 DEF Next
 

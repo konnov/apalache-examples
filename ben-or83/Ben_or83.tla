@@ -164,15 +164,20 @@ Step3(id) ==
     /\ step' = [ step EXCEPT ![id] = S1 ]
     /\ UNCHANGED << msgs1, msgs2 >>
 
+FaultyD2Records(r) == [ src: FAULTY, r: { r }, v: VALUES ]
+FaultyQ2Records(r) == [ src: FAULTY, r: { r } ]
+
 FaultyStep ==
     \* the faulty replicas collectively inject messages for a single round
     Faulty::
     /\ \E r \in ROUNDS:
         /\ \E F1 \in SUBSET [ src: FAULTY, r: { r }, v: VALUES ]:
             msgs1' = [ msgs1 EXCEPT ![r] = @ \union F1 ]
-        /\ \E F2D \in SUBSET { D2(src, r, v): src \in FAULTY, v \in VALUES }:
-             \E F2Q \in SUBSET { Q2(src, r): src \in FAULTY }:
-                msgs2' = [ msgs2 EXCEPT ![r] = @ \union F2D \union F2Q ]
+        /\ \E F2D \in SUBSET FaultyD2Records(r):
+             \E F2Q \in SUBSET FaultyQ2Records(r):
+                msgs2' = [ msgs2 EXCEPT ![r] =
+                    @ \union { D2(mm.src, r, mm.v): mm \in F2D }
+                      \union { Q2(mm.src, r): mm \in F2Q } ]
     /\ UNCHANGED << value, decision, round, step >>
 
 CorrectStep ==
