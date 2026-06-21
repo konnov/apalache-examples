@@ -288,6 +288,11 @@ LEMMA Arith_PlusOneMinusOne ==
   PROVE  a + 1 - 1 = a
   BY ConstNat
 
+LEMMA Arith_MinusOnePlusOne ==
+  ASSUME NEW a \in Nat, a > 1
+  PROVE  (a - 1) + 1 = a
+  BY ConstNat
+
 LEMMA Arith_SumThirdMonoGe ==
   ASSUME NEW x \in Nat, NEW y \in Nat, NEW z \in Nat, NEW zp \in Nat,
          NEW c \in Nat, z <= zp, x + y + z >= c
@@ -1585,6 +1590,32 @@ THEOREM SupportedValuesPFrame ==
   ASSUME NEW r \in ROUNDS, msgs2' = msgs2
   PROVE  SupportedValuesP(r) = SupportedValues(r)
   BY DEF SupportedValues, SupportedValuesP, DvSet, DvPSet
+
+THEOREM SupportedPToOldWhenTotal ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS,
+         NEW v \in SupportedValuesP(r),
+         Cardinality(Senders2(msgs2[r])) >= N - T,
+         msgs2[r] \subseteq msgs2'[r]
+  PROVE  v \in SupportedValues(r)
+  <1>vVal. v \in VALUES BY DEF SupportedValuesP
+  <1>primeOther. Cardinality(Senders2({ m \in msgs2'[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+                    < N - 2 * T
+        BY DEF SupportedValuesP, DvPSet
+  <1>oldOtherLe. Cardinality(Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+                    <= Cardinality(Senders2({ m \in msgs2'[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+    <2>sub. { m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v }
+              \subseteq { m \in msgs2'[r] : IsQ2(m) \/ AsD2(m).v /= v }
+          OBVIOUS
+    <2> QED BY <2>sub, Senders2_Mono
+  <1>types. /\ Cardinality(Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v })) \in Nat
+             /\ Cardinality(Senders2({ m \in msgs2'[r] : IsQ2(m) \/ AsD2(m).v /= v })) \in Nat
+             /\ N - 2 * T \in Nat
+        BY Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>oldOther. Cardinality(Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+                  < N - 2 * T
+        BY <1>oldOtherLe, <1>primeOther, <1>types, Arith_LeLtTrans
+  <1> QED BY <1>vVal, <1>oldOther, SupportedFromTotalAndFewOthers
 
 THEOREM TplusOneHasCorrect ==
   ASSUME NEW S, S \subseteq ALL, Cardinality(S) >= T + 1
@@ -4191,6 +4222,38 @@ THEOREM Pres_Lemma12 ==
   <1> QED BY Pres_L12_ST, <1>o1, <1>o2, <1>o3, <1>o4 DEF Next, CorrectStep
 
 \* ===== L13: value lock -- a correct value at r matches Supported(r-1) =====
+THEOREM PredRoundHasTotal ==
+  ASSUME TypeOK, IndInv,
+         NEW id \in CORRECT,
+         round[id] > 1,
+         NEW r \in ROUNDS,
+         r = round[id] - 1
+  PROVE  Cardinality(Senders2(msgs2[r])) >= N - T
+  <1>l5. Lemma5_RoundNeedsSentMessages BY DEF IndInv
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
+  <1>dom. round \in [ CORRECT -> ROUNDS ] /\ step \in [ CORRECT -> {S1, S2, S3} ]
+        BY DEF TypeOK
+  <1>ridNat. round[id] \in Nat BY <1>dom, RoundsNat
+  <1>rplus. r + 1 = round[id]
+        BY <1>ridNat, Arith_MinusOnePlusOne
+  <1>rplusIn. r + 1 \in ROUNDS BY <1>rplus, <1>dom
+  <1>s1. CASE step[id] = S1
+    <2>next. \E oldId \in CORRECT : round[oldId] = r + 1 /\ step[oldId] = S1
+          BY <1>rplus, <1>s1
+    <2> QED BY <1>l12, <1>rplusIn, <2>next DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>notS1. CASE step[id] # S1
+    <2>m1. \E m \in msgs1[r + 1] : m.src = id
+          BY <1>l5, <1>rplus, <1>rplusIn, <1>notS1 DEF Lemma5_RoundNeedsSentMessages
+    <2>succ. r + 1 \in ROUNDS \ {1} BY <1>rplusIn, RoundsNat, ConstNat
+    <2>rw. r + 1 \in { rr \in ROUNDS \ {1}: \E m \in msgs1[rr]: m.src \in CORRECT }
+          BY <2>m1, <2>succ
+    <2>q. Cardinality(Senders2(msgs2[(r + 1) - 1])) >= N - T
+          BY <1>l10, <2>rw DEF Lemma10_M1RequiresQuorum
+    <2>prev. (r + 1) - 1 = r BY RoundsNat, Arith_PlusOneMinusOne
+    <2> QED BY <2>q, <2>prev
+  <1> QED BY <1>s1, <1>notS1
+
 THEOREM Pres_L13_S1 ==
   ASSUME TypeOK, IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma13_ValueLock'
