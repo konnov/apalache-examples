@@ -1677,6 +1677,54 @@ THEOREM SupportedSingletonNextQuorum ==
   <1>wv. w = u BY <1>m1, <1>pick
   <1> QED BY <1>uv, <1>wv
 
+THEOREM SupportedSingletonNextSupported ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, r + 1 \in ROUNDS,
+         NEW v \in SupportedValues(r),
+         \A u \in SupportedValues(r) : u = v,
+         NEW w \in SupportedValues(r + 1)
+  PROVE  w = v
+  <1> USE DEF IndInv
+  <1>wv. w \in VALUES BY DEF SupportedValues
+  <1>sw. Cardinality(Senders2(DvSet(r + 1, w))) >= T + 1
+        BY DEF SupportedValues, DvSet
+  <1>finw. IsFiniteSet(DvSet(r + 1, w)) BY <1>wv, D2SetFinite
+  <1>lew. Cardinality(Senders2(DvSet(r + 1, w))) <= Cardinality(DvSet(r + 1, w))
+        BY <1>finw, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(DvSet(r + 1, w))) \in Nat
+             /\ Cardinality(DvSet(r + 1, w)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finw, FS_CardinalityType, ConstNat, FleqT
+  <1>dw. Cardinality(DvSet(r + 1, w)) >= T + 1
+        BY <1>sw, <1>lew, <1>types, Arith_GeTrans
+  <1>d2. \E md \in msgs2[r + 1] :
+            IsD2(md) /\ AsD2(md).v = w /\ AsD2(md).src \in CORRECT
+        BY <1>wv, <1>dw, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r + 1] : m.v = w } IN
+            2 * Cardinality(Senders1(Sv)) > N + T
+        BY <1>wv, <1>d2 DEF Lemma7_D2RequiresQuorum
+  <1>maj2. 2 * Cardinality(Senders1({ m \in msgs1[r + 1] : m.v = w })) > N + T
+        BY <1>maj
+  <1>m1. \E id \in CORRECT : \E m \in msgs1[r + 1] : m.src = id /\ m.v = w
+    <2> DEFINE S == Senders1({ m \in msgs1[r + 1] : m.v = w })
+    <2>sub. S \subseteq ALL BY Senders1_Sub
+    <2>types. Cardinality(S) \in Nat BY Senders1_Sub, FS_CardinalityType
+    <2>ge. Cardinality(S) >= T + 1 BY <1>maj2, <2>types, Arith_DoubleGtNplusTImplTplusOne
+    <2>pick. PICK id \in S : id \in CORRECT BY <2>sub, <2>ge, TplusOneHasCorrect
+    <2> QED BY <2>pick DEF S, Senders1
+  <1>conn. LET Supported == SupportedValues(r) IN
+             \/ Supported = {}
+             \/ \E u \in Supported :
+                  \A m \in msgs1[r + 1] : m.src \in CORRECT => m.v = u
+        BY DEF Lemma9_RoundsConnection
+  <1>nonempty. SupportedValues(r) # {} OBVIOUS
+  <1>pick. PICK u \in SupportedValues(r) :
+              \A m \in msgs1[r + 1] : m.src \in CORRECT => m.v = u
+        BY <1>conn, <1>nonempty
+  <1>uv. u = v BY <1>pick
+  <1>wu. w = u BY <1>m1, <1>pick
+  <1> QED BY <1>uv, <1>wu
+
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
