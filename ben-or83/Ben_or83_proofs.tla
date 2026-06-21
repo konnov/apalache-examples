@@ -321,6 +321,11 @@ LEMMA Arith_NotLtTplusOneGe ==
   PROVE  a >= T + 1
   BY ConstNat, FleqT
 
+LEMMA Arith_GeLtContrad ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, a >= b, a < b
+  PROVE  FALSE
+  BY ConstNat
+
 LEMMA Arith_DoubleLtTplusOneLeNplusT ==
   ASSUME NEW a \in Nat, a < T + 1
   PROVE  2 * a <= N + T
@@ -1441,6 +1446,34 @@ THEOREM HighWeightReceivedL11Witness ==
     <2> QED BY <2>vIs0, <2>vIs1, <1>v0, <1>v1 DEF VALUES
   <1> QED BY <1>majority, <1>noMajority
 
+THEOREM ReceivedDQuorumDominatesSupported ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS,
+         NEW received \in SUBSET msgs2[r],
+         NEW v \in VALUES,
+         Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) >= T + 1,
+         NEW w \in SupportedValues(r)
+  PROVE  w = v
+  <1> DEFINE Rv == { m \in received: IsD2(m) /\ AsD2(m).v = v }
+  <1>wv. w \in VALUES BY DEF SupportedValues
+  <1>sub. Rv \subseteq DvSet(r, v) BY DEF Rv, DvSet
+  <1>finD. IsFiniteSet(DvSet(r, v)) BY D2SetFinite
+  <1>finR. IsFiniteSet(Rv) BY <1>sub, <1>finD, FS_Subset
+  <1>sendLe. Cardinality(Senders2(Rv)) <= Cardinality(Rv)
+        BY <1>finR, Senders2_CardLeSet
+  <1>rLeD. Cardinality(Rv) <= Cardinality(DvSet(r, v))
+        BY <1>sub, <1>finD, FS_Subset
+  <1>types. /\ Cardinality(Senders2(Rv)) \in Nat
+             /\ Cardinality(Rv) \in Nat
+             /\ Cardinality(DvSet(r, v)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finR, <1>finD, FS_CardinalityType, ConstNat, FleqT
+  <1>rge. Cardinality(Rv) >= T + 1
+        BY <1>sendLe, <1>types, Arith_GeTrans DEF Rv
+  <1>dge. Cardinality(DvSet(r, v)) >= T + 1
+        BY <1>rge, <1>rLeD, <1>types, Arith_GeTrans
+  <1> QED BY <1>wv, <1>dge, DQuorumDominatesSupported
+
 THEOREM SupportedInReceivedQuorum ==
   ASSUME NEW r \in ROUNDS, NEW v \in SupportedValues(r),
          NEW received \in SUBSET msgs2[r],
@@ -1471,6 +1504,29 @@ THEOREM SupportedInReceivedQuorum ==
     <2> QED BY <1>types, <1>rle, <1>ob, <2>suf, Arith_SupportedQuorumContrad DEF R
   <1>ge. Cardinality(D) >= T + 1 BY <1>types, <1>notlt, Arith_NotLtTplusOneGe
   <1> QED BY <1>ge DEF D
+
+THEOREM LowWeightsSupportedEmpty ==
+  ASSUME NEW r \in ROUNDS,
+         NEW received \in SUBSET msgs2[r],
+         Cardinality(Senders2(received)) = N - T,
+         \A v \in VALUES :
+           Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) < T + 1
+  PROVE  SupportedValues(r) = {}
+  <1>nonempty. CASE SupportedValues(r) # {}
+    <2> PICK w \in SupportedValues(r) : TRUE BY <1>nonempty
+    <2>wv. w \in VALUES BY DEF SupportedValues
+    <2>ge. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = w })) >= T + 1
+          BY SupportedInReceivedQuorum
+    <2>lt. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = w })) < T + 1
+          BY <2>wv
+    <2>types. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = w })) \in Nat
+               /\ T + 1 \in Nat
+          BY Senders2_Sub, FS_CardinalityType, ConstNat, FleqT
+    <2>false. FALSE BY <2>ge, <2>lt, <2>types, Arith_GeLtContrad
+    <2> QED BY <2>false
+  <1>empty. CASE SupportedValues(r) = {}
+    <2> QED BY <1>empty
+  <1> QED BY <1>nonempty, <1>empty
 
 SupportedValuesP(r) ==
   LET ExistsSupport(v) ==
@@ -3949,6 +4005,114 @@ THEOREM Pres_L13_S1 ==
   ASSUME TypeOK, IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma13_ValueLock'
   BY RoundsNat DEF TypeOK, IndInv, Lemma13_ValueLock, SupportedValues, Step1
+THEOREM Pres_L13_S3 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0)
+  PROVE  Lemma13_ValueLock'
+  <1>l13. Lemma13_ValueLock BY DEF IndInv
+  <1>dom. value \in [ CORRECT -> VALUES ] /\ round \in [ CORRECT -> ROUNDS ] BY DEF TypeOK
+  <1>r0. round[id0] \in ROUNDS /\ round[id0] \in Nat /\ round[id0] >= 1
+        BY <1>dom, RoundPos
+  <1>upd. /\ msgs2' = msgs2
+          /\ round' = [ round EXCEPT ![id0] = round[id0] + 1 ]
+          BY DEF Step3
+  <1>tokp. TypeOK' BY TypePres DEF Next, CorrectStep
+  <1>rd. \A x \in CORRECT :
+            round'[x] = (IF x = id0 THEN round[id0] + 1 ELSE round[x])
+        BY <1>upd, <1>dom
+  <1>spFrame. \A rr \in ROUNDS : SupportedValuesP(rr) = SupportedValues(rr)
+        BY <1>upd, SupportedValuesPFrame
+  <1> PICK received \in SUBSET msgs2[round[id0]] :
+        /\ Cardinality(Senders2(received)) = N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+           \/ /\ \A vv \in VALUES: Weights[vv] < T + 1
+              /\ \E next_v \in VALUES:
+                   /\ value' = [ value EXCEPT ![id0] = next_v ]
+                   /\ decision' = decision
+        BY DEF Step3
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+  <1> DEFINE supportedP == [ rr \in ROUNDS |-> SupportedValuesP(rr) ]
+  <1> SUFFICES
+        LET supported == supportedP IN
+        \A id \in CORRECT, dummy \in VALUES :
+          \/ round'[id] = 1
+          \/ /\ round'[id] > 1
+             /\ LET S == supported[round'[id] - 1] IN
+                \/ S = {}
+                \/ value'[id] \in S
+        BY <1>tokp, SupportedValuesPrimeIsP DEF TypeOK, Lemma13_ValueLock, supportedP
+  <1> SUFFICES ASSUME NEW id \in CORRECT, NEW dummy \in VALUES
+        PROVE \/ round'[id] = 1
+              \/ /\ round'[id] > 1
+                 /\ LET S == supportedP[round'[id] - 1] IN
+                    \/ S = {}
+                    \/ value'[id] \in S
+        BY DEF supportedP
+  <1>oldId. CASE id # id0
+    <2>rSame. round'[id] = round[id] BY <1>oldId, <1>rd
+    <2>vSame. value'[id] = value[id] BY <1>oldId, <1>dom DEF Step3
+    <2>val. value[id] \in VALUES BY <1>dom
+    <2>one. CASE round[id] = 1
+      <3> QED BY <2>one, <2>rSame
+    <2>gt. CASE round[id] > 1
+      <3>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <2>gt, RoundsNat
+      <3>predIn. round[id] - 1 \in ROUNDS BY <3>rin, RoundPredInRounds
+      <3>lock. LET S == SupportedValues(round[id] - 1) IN
+                  \/ S = {}
+                  \/ value[id] \in S
+            BY <1>l13, <2>val, <2>gt, <3>predIn DEF Lemma13_ValueLock
+      <3>sp. supportedP[round'[id] - 1] = SupportedValues(round[id] - 1)
+            BY <2>rSame, <3>predIn, <1>spFrame
+      <3> QED BY <2>rSame, <2>vSame, <2>gt, <3>lock, <3>sp
+    <2> QED BY <2>one, <2>gt, <1>dom, RoundsNat, ConstNat
+  <1>newId. CASE id = id0
+    <2>gt. round'[id] > 1 BY <1>newId, <1>rd, <1>r0, Arith_SuccGtOne
+    <2>pred. round'[id] - 1 = round[id0] BY <1>newId, <1>rd, <1>r0, Arith_PlusOneMinusOne
+    <2>high. CASE \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+      <3> PICK vv \in VALUES:
+            /\ Weights[vv] >= T + 1
+            /\ value' = [ value EXCEPT ![id0] = vv ]
+            /\ IF 2 * Weights[vv] > N + T
+               THEN decision' = [ decision EXCEPT ![id0] = vv ]
+               ELSE decision' = decision
+          BY <2>high
+      <3>valp. value'[id] = vv BY <1>newId, <1>dom
+      <3>empty. CASE SupportedValues(round[id0]) = {}
+        <4>sp. supportedP[round'[id] - 1] = {}
+              BY <2>pred, <1>r0, <1>spFrame, <3>empty
+        <4> QED BY <2>gt, <4>sp
+      <3>nonempty. CASE SupportedValues(round[id0]) # {}
+        <4>pick. PICK w \in SupportedValues(round[id0]) : TRUE BY <3>nonempty
+        <4>eq. w = vv BY <1>r0, <4>pick, ReceivedDQuorumDominatesSupported DEF Weights
+        <4>vin. vv \in SupportedValues(round[id0]) BY <4>pick, <4>eq
+        <4>sp. supportedP[round'[id] - 1] = SupportedValues(round[id0])
+              BY <2>pred, <1>r0, <1>spFrame
+        <4> QED BY <2>gt, <3>valp, <4>vin, <4>sp
+      <3> QED BY <3>empty, <3>nonempty
+    <2>low. CASE /\ \A vv \in VALUES: Weights[vv] < T + 1
+                 /\ \E next_v \in VALUES:
+                      /\ value' = [ value EXCEPT ![id0] = next_v ]
+                      /\ decision' = decision
+      <3>empty. SupportedValues(round[id0]) = {}
+            BY <1>r0, <2>low, LowWeightsSupportedEmpty DEF Weights
+      <3>sp. supportedP[round'[id] - 1] = {}
+            BY <2>pred, <1>r0, <1>spFrame, <3>empty
+      <3> QED BY <2>gt, <3>sp
+    <2> QED BY <2>high, <2>low
+  <1> QED BY <1>oldId, <1>newId
 THEOREM Pres_L13_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma13_ValueLock'
@@ -3958,8 +4122,10 @@ THEOREM Pres_Lemma13 ==
   PROVE  Lemma13_ValueLock'
   <1>o1. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma13_ValueLock'
         OMITTED \* TODO: substantive Step2 case for Lemma13_ValueLock
-  <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma13_ValueLock'
-        OMITTED \* TODO: substantive Step3 case for Lemma13_ValueLock
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step3(id) => Lemma13_ValueLock'
+    <2> SUFFICES ASSUME Step3(id) PROVE Lemma13_ValueLock'
+          OBVIOUS
+    <2> QED BY Pres_L13_S3
   <1>o3. ASSUME FaultyStep PROVE Lemma13_ValueLock'
         OMITTED \* TODO: substantive FaultyStep case for Lemma13_ValueLock
   <1> QED BY Pres_L13_S1, Pres_L13_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
