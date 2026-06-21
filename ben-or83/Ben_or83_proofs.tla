@@ -258,6 +258,11 @@ LEMMA Arith_DoubleGtMono ==
   PROVE  2 * b > c
   BY ConstNat
 
+LEMMA Arith_DoubleGtNplusTImplTplusOne ==
+  ASSUME NEW a \in Nat, 2 * a > N + T
+  PROVE  a >= T + 1
+  BY ConstNat, NgtT, FleqT
+
 LEMMA Arith_SuccCancel ==
   ASSUME NEW a \in Nat, NEW b \in Nat, a + 1 = b + 1
   PROVE  a = b
