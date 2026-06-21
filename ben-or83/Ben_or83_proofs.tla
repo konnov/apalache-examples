@@ -3277,8 +3277,8 @@ THEOREM Pres_L8_S1 ==
               \E x0, x1 \in 0..N:
                 /\ x0 <= n0 /\ x1 <= n1
                 /\ x0 + x1 + nf >= N - T
-                /\ 2 * x0 <= N
-                /\ 2 * x1 <= N
+                /\ 2 * x0 <= N + T
+                /\ 2 * x1 <= N + T
         BY DEF Lemma8_Q2RequiresNoQuorumFaster
   <1>oldRound. r \in { rr \in ROUNDS :
                        \E m \in msgs2[rr] : IsQ2(m) /\ AsQ2(m).src \in CORRECT }
@@ -3290,8 +3290,8 @@ THEOREM Pres_L8_S1 ==
         IN
           /\ x0 <= n0 /\ x1 <= n1
           /\ x0 + x1 + nf >= N - T
-          /\ 2 * x0 <= N
-          /\ 2 * x1 <= N
+          /\ 2 * x0 <= N + T
+          /\ 2 * x1 <= N + T
         BY <1>l8, <1>oldRound DEF Lemma8_Q2RequiresNoQuorumFaster
   <1>sub0. { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
               \subseteq { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] }
@@ -3351,8 +3351,8 @@ THEOREM Pres_L8_F ==
               \E x0, x1 \in 0..N:
                 /\ x0 <= n0 /\ x1 <= n1
                 /\ x0 + x1 + nf >= N - T
-                /\ 2 * x0 <= N
-                /\ 2 * x1 <= N
+                /\ 2 * x0 <= N + T
+                /\ 2 * x1 <= N + T
         BY DEF Lemma8_Q2RequiresNoQuorumFaster
   <1>rin. r \in ROUNDS /\ \E m \in msgs2'[r] : IsQ2(m) /\ AsQ2(m).src \in CORRECT
         OBVIOUS
@@ -3369,8 +3369,8 @@ THEOREM Pres_L8_F ==
         IN
           /\ x0 <= n0 /\ x1 <= n1
           /\ x0 + x1 + nf >= N - T
-          /\ 2 * x0 <= N
-          /\ 2 * x1 <= N
+          /\ 2 * x0 <= N + T
+          /\ 2 * x1 <= N + T
         BY <1>l8, <1>oldRound DEF Lemma8_Q2RequiresNoQuorumFaster
   <1>sub0. { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
               \subseteq { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] }

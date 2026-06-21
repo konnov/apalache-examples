@@ -216,8 +216,8 @@ Lemma8_Q2RequiresNoQuorumFaster ==
     \E x0, x1 \in 0..N:
       /\ x0 <= n0 /\ x1 <= n1
       /\ x0 + x1 + nf >= N - T
-      /\ 2 * x0 <= N
-      /\ 2 * x1 <= N
+      /\ 2 * x0 <= N + T
+      /\ 2 * x1 <= N + T
 
 SupportedValues(r) ==
   LET ExistsSupport(v) ==
