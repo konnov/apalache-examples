@@ -4366,6 +4366,123 @@ THEOREM Pres_L13_S3 ==
       <3> QED BY <2>gt, <3>sp
     <2> QED BY <2>high, <2>low
   <1> QED BY <1>oldId, <1>newId
+THEOREM Pres_L13_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma13_ValueLock'
+  <1>l13. Lemma13_ValueLock BY DEF IndInv
+  <1>tokp. TypeOK' BY TypePres DEF Next, CorrectStep
+  <1>dom. value \in [ CORRECT -> VALUES ] /\ round \in [ CORRECT -> ROUNDS ]
+        BY DEF TypeOK
+  <1>fr. value' = value /\ round' = round BY DEF Step2
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>nm. PICK nm :
+        msgs2' = [ msgs2 EXCEPT ![round[id0]] = msgs2[round[id0]] \union { nm } ]
+        BY VariantAx DEF Step2
+  <1>grow. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE msgs2[rr] \subseteq msgs2'[rr] OBVIOUS
+    <2> QED BY <1>nm, <1>r0, <1>dom2
+  <1> DEFINE supportedP == [ rr \in ROUNDS |-> SupportedValuesP(rr) ]
+  <1> SUFFICES
+        LET supported == supportedP IN
+        \A id \in CORRECT, dummy \in VALUES :
+          \/ round'[id] = 1
+          \/ /\ round'[id] > 1
+             /\ LET S == supported[round'[id] - 1] IN
+                \/ S = {}
+                \/ value'[id] \in S
+        BY <1>tokp, SupportedValuesPrimeIsP DEF TypeOK, Lemma13_ValueLock, supportedP
+  <1> SUFFICES ASSUME NEW id \in CORRECT, NEW dummy \in VALUES
+        PROVE \/ round'[id] = 1
+              \/ /\ round'[id] > 1
+                 /\ LET S == supportedP[round'[id] - 1] IN
+                    \/ S = {}
+                    \/ value'[id] \in S
+        BY DEF supportedP
+  <1>one. CASE round[id] = 1
+    <2> QED BY <1>one, <1>fr
+  <1>gt. CASE round[id] > 1
+    <2>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <1>gt, RoundsNat
+    <2>predIn. round[id] - 1 \in ROUNDS BY <2>rin, RoundPredInRounds
+    <2>val. value[id] \in VALUES BY <1>dom
+    <2>oldLock. LET S == SupportedValues(round[id] - 1) IN
+                  \/ S = {}
+                  \/ value[id] \in S
+          BY <1>l13, <1>gt, <2>val, <2>predIn DEF Lemma13_ValueLock
+    <2>newEmpty. CASE supportedP[round[id] - 1] = {}
+      <3> QED BY <1>gt, <1>fr, <2>newEmpty
+    <2>newNonempty. CASE supportedP[round[id] - 1] # {}
+      <3> PICK vp \in supportedP[round[id] - 1] : TRUE BY <2>newNonempty
+      <3>vpIn. vp \in supportedP[round[id] - 1] OBVIOUS
+      <3>vpSup. vp \in SupportedValuesP(round[id] - 1) BY <3>vpIn, <2>predIn DEF supportedP
+      <3>vpVal. vp \in VALUES BY <3>vpSup DEF SupportedValuesP
+      <3>total. Cardinality(Senders2(msgs2[round[id] - 1])) >= N - T
+            BY <1>gt, <2>predIn, PredRoundHasTotal
+      <3>oldSup. vp \in SupportedValues(round[id] - 1)
+            BY <2>predIn, <3>vpSup, <3>total, <1>grow, SupportedPToOldWhenTotal
+      <3>oldNonempty. SupportedValues(round[id] - 1) # {} BY <3>oldSup
+      <3>valOld. value[id] \in SupportedValues(round[id] - 1)
+            BY <2>oldLock, <3>oldNonempty
+      <3>eq0. vp = value[id] BY <2>predIn, <3>oldSup, <3>valOld, SupportedUnique
+      <3>eq. value[id] = vp BY <3>eq0
+      <3> QED BY <1>gt, <1>fr, <3>vpSup, <3>eq DEF supportedP
+    <2> QED BY <2>newEmpty, <2>newNonempty
+  <1> QED BY <1>one, <1>gt, <1>dom, RoundsNat, ConstNat
+THEOREM Pres_L13_F ==
+  ASSUME TypeOK, IndInv, FaultyStep
+  PROVE  Lemma13_ValueLock'
+  <1>l13. Lemma13_ValueLock BY DEF IndInv
+  <1>tokp. TypeOK' BY TypePres DEF Next
+  <1>dom. value \in [ CORRECT -> VALUES ] /\ round \in [ CORRECT -> ROUNDS ]
+        BY DEF TypeOK
+  <1>fr. value' = value /\ round' = round BY FaultyStepProps
+  <1>grow. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr] BY FaultyStepProps
+  <1> DEFINE supportedP == [ rr \in ROUNDS |-> SupportedValuesP(rr) ]
+  <1> SUFFICES
+        LET supported == supportedP IN
+        \A id \in CORRECT, dummy \in VALUES :
+          \/ round'[id] = 1
+          \/ /\ round'[id] > 1
+             /\ LET S == supported[round'[id] - 1] IN
+                \/ S = {}
+                \/ value'[id] \in S
+        BY <1>tokp, SupportedValuesPrimeIsP DEF TypeOK, Lemma13_ValueLock, supportedP
+  <1> SUFFICES ASSUME NEW id \in CORRECT, NEW dummy \in VALUES
+        PROVE \/ round'[id] = 1
+              \/ /\ round'[id] > 1
+                 /\ LET S == supportedP[round'[id] - 1] IN
+                    \/ S = {}
+                    \/ value'[id] \in S
+        BY DEF supportedP
+  <1>one. CASE round[id] = 1
+    <2> QED BY <1>one, <1>fr
+  <1>gt. CASE round[id] > 1
+    <2>rin. round[id] \in ROUNDS /\ round[id] # 1 BY <1>dom, <1>gt, RoundsNat
+    <2>predIn. round[id] - 1 \in ROUNDS BY <2>rin, RoundPredInRounds
+    <2>val. value[id] \in VALUES BY <1>dom
+    <2>oldLock. LET S == SupportedValues(round[id] - 1) IN
+                  \/ S = {}
+                  \/ value[id] \in S
+          BY <1>l13, <1>gt, <2>val, <2>predIn DEF Lemma13_ValueLock
+    <2>newEmpty. CASE supportedP[round[id] - 1] = {}
+      <3> QED BY <1>gt, <1>fr, <2>newEmpty
+    <2>newNonempty. CASE supportedP[round[id] - 1] # {}
+      <3> PICK vp \in supportedP[round[id] - 1] : TRUE BY <2>newNonempty
+      <3>vpIn. vp \in supportedP[round[id] - 1] OBVIOUS
+      <3>vpSup. vp \in SupportedValuesP(round[id] - 1) BY <3>vpIn, <2>predIn DEF supportedP
+      <3>vpVal. vp \in VALUES BY <3>vpSup DEF SupportedValuesP
+      <3>total. Cardinality(Senders2(msgs2[round[id] - 1])) >= N - T
+            BY <1>gt, <2>predIn, PredRoundHasTotal
+      <3>oldSup. vp \in SupportedValues(round[id] - 1)
+            BY <2>predIn, <3>vpSup, <3>total, <1>grow, SupportedPToOldWhenTotal
+      <3>oldNonempty. SupportedValues(round[id] - 1) # {} BY <3>oldSup
+      <3>valOld. value[id] \in SupportedValues(round[id] - 1)
+            BY <2>oldLock, <3>oldNonempty
+      <3>eq0. vp = value[id] BY <2>predIn, <3>oldSup, <3>valOld, SupportedUnique
+      <3>eq. value[id] = vp BY <3>eq0
+      <3> QED BY <1>gt, <1>fr, <3>vpSup, <3>eq DEF supportedP
+    <2> QED BY <2>newEmpty, <2>newNonempty
+  <1> QED BY <1>one, <1>gt, <1>dom, RoundsNat, ConstNat
 THEOREM Pres_L13_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma13_ValueLock'
@@ -4373,14 +4490,18 @@ THEOREM Pres_L13_ST ==
 THEOREM Pres_Lemma13 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma13_ValueLock'
-  <1>o1. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma13_ValueLock'
-        OMITTED \* TODO: substantive Step2 case for Lemma13_ValueLock
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma13_ValueLock'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma13_ValueLock'
+          OBVIOUS
+    <2> QED BY Pres_L13_S2
   <1>o2. ASSUME NEW id \in CORRECT PROVE Step3(id) => Lemma13_ValueLock'
     <2> SUFFICES ASSUME Step3(id) PROVE Lemma13_ValueLock'
           OBVIOUS
     <2> QED BY Pres_L13_S3
-  <1>o3. ASSUME FaultyStep PROVE Lemma13_ValueLock'
-        OMITTED \* TODO: substantive FaultyStep case for Lemma13_ValueLock
+  <1>o3. FaultyStep => Lemma13_ValueLock'
+    <2> SUFFICES ASSUME FaultyStep PROVE Lemma13_ValueLock'
+          OBVIOUS
+    <2> QED BY Pres_L13_F
   <1> QED BY Pres_L13_S1, Pres_L13_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L1: a decision is backed by a D2 quorum in the previous round =====
