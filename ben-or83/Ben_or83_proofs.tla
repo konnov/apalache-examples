@@ -273,6 +273,19 @@ LEMMA Arith_SumMinusLeSum ==
   PROVE  a + b - i <= a + b
   BY ConstNat
 
+LEMMA Arith_SupportedQuorumContrad ==
+  ASSUME NEW rcv \in Nat, NEW dv \in Nat, NEW oth \in Nat,
+         rcv = N - T, rcv <= dv + oth, dv < T + 1, oth < N - 2 * T
+  PROVE  FALSE
+  <1>dvle. dv <= T BY ConstNat, FleqT
+  <1>sumlt. dv + oth < N - T BY <1>dvle, ConstNat, NgtT, FleqT
+  <1> QED BY <1>sumlt, ConstNat
+
+LEMMA Arith_NotLtTplusOneGe ==
+  ASSUME NEW a \in Nat, ~(a < T + 1)
+  PROVE  a >= T + 1
+  BY ConstNat, FleqT
+
 THEOREM CardUnion3LeSum ==
   ASSUME NEW A, NEW B, NEW C,
          IsFiniteSet(A), IsFiniteSet(B), IsFiniteSet(C)
@@ -299,6 +312,19 @@ THEOREM CardUnion3LeSum ==
   <1>cabc. Cardinality((A \union B) \union C) <= Cardinality(A \union B) + Cardinality(C)
         BY <1>eqabc, <1>types, Arith_SumMinusLeSum
   <1> QED BY <1>cab, <1>cabc, <1>types, ConstNat
+
+THEOREM CardUnion2LeSum ==
+  ASSUME NEW A, NEW B, IsFiniteSet(A), IsFiniteSet(B)
+  PROVE  Cardinality(A \union B) <= Cardinality(A) + Cardinality(B)
+  <1>ab. IsFiniteSet(A \union B) BY FS_Union
+  <1>iab. IsFiniteSet(A \cap B) BY FS_Intersection
+  <1>eq. Cardinality(A \union B)
+            = Cardinality(A) + Cardinality(B) - Cardinality(A \cap B)
+        BY <1>ab, FS_Union
+  <1>types. /\ Cardinality(A) \in Nat /\ Cardinality(B) \in Nat
+             /\ Cardinality(A \union B) \in Nat /\ Cardinality(A \cap B) \in Nat
+        BY <1>ab, <1>iab, FS_CardinalityType
+  <1> QED BY <1>eq, <1>types, Arith_SumMinusLeSum
 
 \* CORE QUORUM INTERSECTION: two quorums of >= N - T senders intersect, and the
 \* intersection necessarily contains a correct replica (since N > 5*T).
@@ -1098,6 +1124,80 @@ THEOREM QuorumDominatesSupported ==
           BY <2>1, <2>2, MajorityIntersect
     <2> QED BY <2>3 DEF Senders1
   <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+THEOREM DQuorumDominatesSupported ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         Cardinality(DvSet(r, v)) >= T + 1,
+         NEW w \in SupportedValues(r)
+  PROVE  w = v
+  <1> USE DEF IndInv
+  <1>wv. w \in VALUES BY DEF SupportedValues
+  <1>sv. Cardinality(Senders2(DvSet(r, w))) >= T + 1
+        BY DEF SupportedValues, DvSet
+  <1>finw. IsFiniteSet(DvSet(r, w)) BY <1>wv, D2SetFinite
+  <1>lew. Cardinality(Senders2(DvSet(r, w))) <= Cardinality(DvSet(r, w))
+        BY <1>finw, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(DvSet(r, w))) \in Nat
+             /\ Cardinality(DvSet(r, w)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finw, FS_CardinalityType, ConstNat, FleqT
+  <1>dw. Cardinality(DvSet(r, w)) >= T + 1
+        BY <1>sv, <1>lew, <1>types, Arith_GeTrans
+  <1>ev. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY CorrectD2Exists
+  <1>ew. \E mw \in msgs2[r] : IsD2(mw) /\ AsD2(mw).v = w /\ AsD2(mw).src \in CORRECT
+        BY <1>wv, <1>dw, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r] : m.v = v }
+              Sw == { m \in msgs1[r] : m.v = w }
+          IN 2 * Cardinality(Senders1(Sv)) > N + T
+             /\ 2 * Cardinality(Senders1(Sw)) > N + T
+        BY <1>wv, <1>ev, <1>ew DEF Lemma7_D2RequiresQuorum
+  <1>meet. \E id \in CORRECT :
+            (\E m \in msgs1[r] : m.src = id /\ m.v = v)
+            /\ (\E m \in msgs1[r] : m.src = id /\ m.v = w)
+    <2>1. Senders1({ m \in msgs1[r] : m.v = v }) \subseteq ALL
+          /\ Senders1({ m \in msgs1[r] : m.v = w }) \subseteq ALL
+          BY DEF Senders1
+    <2>2. 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+          /\ 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = w })) > N + T
+          BY <1>maj
+    <2>3. \E id \in Senders1({ m \in msgs1[r] : m.v = v })
+                \cap Senders1({ m \in msgs1[r] : m.v = w }) : id \in CORRECT
+          BY <2>1, <2>2, MajorityIntersect
+    <2> QED BY <2>3 DEF Senders1
+  <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+THEOREM SupportedInReceivedQuorum ==
+  ASSUME NEW r \in ROUNDS, NEW v \in SupportedValues(r),
+         NEW received \in SUBSET msgs2[r],
+         Cardinality(Senders2(received)) = N - T
+  PROVE  Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) >= T + 1
+  <1> DEFINE D == Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })
+             O == Senders2({ m \in msgs2[r]: IsQ2(m) \/ AsD2(m).v /= v })
+             R == Senders2(received)
+  <1>vval. v \in VALUES BY DEF SupportedValues
+  <1>ob. Cardinality(O) < N - 2 * T BY DEF SupportedValues, O
+  <1>cover. R \subseteq D \union O BY DEF R, D, O, Senders2
+  <1>finD. IsFiniteSet(D) BY Senders2_Sub
+  <1>finO. IsFiniteSet(O) BY Senders2_Sub
+  <1>finU. IsFiniteSet(D \union O) BY <1>finD, <1>finO, FS_Union
+  <1>rleU. Cardinality(R) <= Cardinality(D \union O)
+        BY <1>cover, <1>finU, FS_Subset
+  <1>ule. Cardinality(D \union O) <= Cardinality(D) + Cardinality(O)
+        BY <1>finD, <1>finO, CardUnion2LeSum
+  <1>rle. Cardinality(R) <= Cardinality(D) + Cardinality(O)
+    <2>types. /\ Cardinality(R) \in Nat /\ Cardinality(D \union O) \in Nat
+               /\ Cardinality(D) \in Nat /\ Cardinality(O) \in Nat
+          BY Senders2_Sub, <1>finU, <1>finD, <1>finO, FS_CardinalityType
+    <2> QED BY <1>rleU, <1>ule, <2>types, ConstNat
+  <1>types. /\ Cardinality(R) \in Nat /\ Cardinality(D) \in Nat /\ Cardinality(O) \in Nat
+        BY Senders2_Sub, <1>finD, <1>finO, FS_CardinalityType
+  <1>notlt. ~(Cardinality(D) < T + 1)
+    <2>suf. SUFFICES ASSUME Cardinality(D) < T + 1 PROVE FALSE OBVIOUS
+    <2> QED BY <1>types, <1>rle, <1>ob, <2>suf, Arith_SupportedQuorumContrad DEF R
+  <1>ge. Cardinality(D) >= T + 1 BY <1>types, <1>notlt, Arith_NotLtTplusOneGe
+  <1> QED BY <1>ge DEF D
 
 SupportedValuesP(r) ==
   LET ExistsSupport(v) ==
@@ -3400,7 +3500,7 @@ THEOREM Pres_L12_S3 ==
         BY <1>upd, <1>doms
   <1>st. \A x \in CORRECT : step'[x] = (IF x = id0 THEN S1 ELSE step[x])
         BY <1>upd, <1>doms
-  <1> PICK received \in SUBSET msgs2[round[id0]] :
+  <1>pickRec. PICK received \in SUBSET msgs2[round[id0]] :
         Cardinality(Senders2(received)) = N - T
         BY DEF Step3
   <1>recSub. received \subseteq msgs2[round[id0]] OBVIOUS
@@ -3411,7 +3511,7 @@ THEOREM Pres_L12_S3 ==
                /\ N - T \in Nat
         BY Senders2_Sub, FS_CardinalityType, NgtT, ConstNat, FleqT
   <1>recQ. Cardinality(Senders2(msgs2[round[id0]])) >= N - T
-        BY <1>recMono, <1>recTypes, Arith_GeTrans
+        BY <1>pickRec, <1>recMono, <1>recTypes, Arith_GeTrans
   <1> SUFFICES ASSUME NEW r \in ROUNDS, r + 1 \in ROUNDS,
                       \E id \in CORRECT : round'[id] = r + 1 /\ step'[id] = S1
                PROVE  Cardinality(Senders2(msgs2'[r])) >= N - T
