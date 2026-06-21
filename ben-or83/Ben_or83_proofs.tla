@@ -243,6 +243,16 @@ LEMMA Arith_GeTrans ==
   PROVE  b >= c
   BY ConstNat
 
+LEMMA Arith_LeTrans ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat, a <= b, b <= c
+  PROVE  a <= c
+  BY ConstNat
+
+LEMMA Arith_LeLtTrans ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat, a <= b, b < c
+  PROVE  a < c
+  BY ConstNat
+
 LEMMA Arith_DoubleGtMono ==
   ASSUME NEW a \in Nat, NEW b \in Nat, NEW c \in Nat, 2 * a > c, a <= b
   PROVE  2 * b > c
@@ -285,6 +295,11 @@ LEMMA Arith_NotLtTplusOneGe ==
   ASSUME NEW a \in Nat, ~(a < T + 1)
   PROVE  a >= T + 1
   BY ConstNat, FleqT
+
+LEMMA Arith_DoubleLtTplusOneLeNplusT ==
+  ASSUME NEW a \in Nat, a < T + 1
+  PROVE  2 * a <= N + T
+  BY ConstNat, FleqT, NgtT
 
 THEOREM CardUnion3LeSum ==
   ASSUME NEW A, NEW B, NEW C,
@@ -989,6 +1004,76 @@ THEOREM Msgs2SenderPartitionBound ==
                    + Cardinality(Senders2(QPart(S)))
         BY <1>mono, <1>union, <1>types, Arith_GeTrans
   <1> QED BY <1>sumSend, <1>s0, <1>s1, <1>sq, <1>types, Arith_ThreeLeTrans
+
+THEOREM LowWeightsReceivedL11Witness ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS,
+         NEW received \in SUBSET msgs2[r],
+         Cardinality(Senders2(received)) = N - T,
+         \A v \in VALUES :
+           Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) < T + 1
+  PROVE  LET n0 == Cardinality(DvSet(r, 0))
+             n1 == Cardinality(DvSet(r, 1))
+             nq == Cardinality(QSet(r))
+         IN
+         \E x0, x1 \in 0..N:
+           /\ x0 <= n0 /\ x1 <= n1
+           /\ x0 + x1 + nq >= N - T
+           /\ 2 * x0 <= N + T
+           /\ 2 * x1 <= N + T
+  <1> DEFINE R0 == DPart(received, 0)
+             R1 == DPart(received, 1)
+             RQ == QPart(received)
+  <1>v0. 0 \in VALUES BY DEF VALUES
+  <1>v1. 1 \in VALUES BY DEF VALUES
+  <1>sub0. R0 \subseteq DvSet(r, 0) BY DEF R0, DPart, DvSet
+  <1>sub1. R1 \subseteq DvSet(r, 1) BY DEF R1, DPart, DvSet
+  <1>subq. RQ \subseteq QSet(r) BY DEF RQ, QPart, QSet
+  <1>finD0. IsFiniteSet(DvSet(r, 0)) BY <1>v0, D2SetFinite
+  <1>finD1. IsFiniteSet(DvSet(r, 1)) BY <1>v1, D2SetFinite
+  <1>finQ. IsFiniteSet(QSet(r)) BY Q2SetFinite
+  <1>finR0. IsFiniteSet(R0) BY <1>sub0, <1>finD0, FS_Subset
+  <1>finR1. IsFiniteSet(R1) BY <1>sub1, <1>finD1, FS_Subset
+  <1>finRQ. IsFiniteSet(RQ) BY <1>subq, <1>finQ, FS_Subset
+  <1>c0. Cardinality(R0) <= Cardinality(DvSet(r, 0)) BY <1>sub0, <1>finD0, FS_Subset
+  <1>c1. Cardinality(R1) <= Cardinality(DvSet(r, 1)) BY <1>sub1, <1>finD1, FS_Subset
+  <1>cq. Cardinality(RQ) <= Cardinality(QSet(r)) BY <1>subq, <1>finQ, FS_Subset
+  <1>part. Cardinality(Senders2(received))
+              <= Cardinality(R0) + Cardinality(R1) + Cardinality(RQ)
+        BY Msgs2SenderPartitionBound DEF R0, R1, RQ, DPart, QPart
+  <1>shape0. \A m \in R0 : IsD2(m) /\ AsD2(m).src \in ALL
+                             /\ AsD2(m).r = r /\ AsD2(m).v = 0
+        BY Msgs2Shape, Msgs2SrcInAll, Msgs2RShape DEF R0, DPart
+  <1>shape1. \A m \in R1 : IsD2(m) /\ AsD2(m).src \in ALL
+                             /\ AsD2(m).r = r /\ AsD2(m).v = 1
+        BY Msgs2Shape, Msgs2SrcInAll, Msgs2RShape DEF R1, DPart
+  <1>send0. Cardinality(R0) <= Cardinality(Senders2(R0))
+        BY <1>shape0, D2Fixed_CardLeSenders
+  <1>send1. Cardinality(R1) <= Cardinality(Senders2(R1))
+        BY <1>shape1, D2Fixed_CardLeSenders
+  <1>low0s. Cardinality(Senders2(R0)) < T + 1 BY <1>v0 DEF R0, DPart
+  <1>low1s. Cardinality(Senders2(R1)) < T + 1 BY <1>v1 DEF R1, DPart
+  <1>types. /\ Cardinality(R0) \in Nat /\ Cardinality(R1) \in Nat /\ Cardinality(RQ) \in Nat
+             /\ Cardinality(DvSet(r, 0)) \in Nat /\ Cardinality(DvSet(r, 1)) \in Nat
+             /\ Cardinality(QSet(r)) \in Nat
+             /\ Cardinality(Senders2(received)) \in Nat
+             /\ Cardinality(Senders2(R0)) \in Nat /\ Cardinality(Senders2(R1)) \in Nat
+             /\ N \in Nat /\ N - T \in Nat /\ T + 1 \in Nat
+        BY <1>finR0, <1>finR1, <1>finRQ, <1>finD0, <1>finD1, <1>finQ,
+           Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>low0. Cardinality(R0) < T + 1 BY <1>send0, <1>low0s, <1>types, Arith_LeLtTrans
+  <1>low1. Cardinality(R1) < T + 1 BY <1>send1, <1>low1s, <1>types, Arith_LeLtTrans
+  <1>bd0. Cardinality(DvSet(r, 0)) <= N BY <1>v0, D2SetFinite
+  <1>bd1. Cardinality(DvSet(r, 1)) <= N BY <1>v1, D2SetFinite
+  <1>r0leN. Cardinality(R0) <= N BY <1>c0, <1>bd0, <1>types, Arith_LeTrans
+  <1>r1leN. Cardinality(R1) <= N BY <1>c1, <1>bd1, <1>types, Arith_LeTrans
+  <1>x0N. Cardinality(R0) \in 0..N BY <1>types, <1>r0leN
+  <1>x1N. Cardinality(R1) \in 0..N BY <1>types, <1>r1leN
+  <1>sum. Cardinality(R0) + Cardinality(R1) + Cardinality(QSet(r)) >= N - T
+        BY <1>part, <1>cq, <1>types, Arith_SumThirdMonoGe
+  <1>d0. 2 * Cardinality(R0) <= N + T BY <1>types, <1>low0, Arith_DoubleLtTplusOneLeNplusT
+  <1>d1. 2 * Cardinality(R1) <= N + T BY <1>types, <1>low1, Arith_DoubleLtTplusOneLeNplusT
+  <1> QED BY <1>x0N, <1>x1N, <1>c0, <1>c1, <1>sum, <1>d0, <1>d1
 
 \* Abstract arithmetic: >= T+1 elements, <= F of them excluded, leaves >= 1.
 LEMMA Arith_DiffPos ==
