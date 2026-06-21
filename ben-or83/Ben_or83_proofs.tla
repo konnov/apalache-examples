@@ -1630,6 +1630,30 @@ THEOREM TplusOneHasCorrect ==
     <2>le. Cardinality(S) <= F BY <2>eq, <1>bd
     <2> QED BY <1>card, <1>, <2>le, Arith_TplusOneNotFaulty
 
+THEOREM MajorityM1HasCorrect ==
+  ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
+         2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+  PROVE  \E id \in CORRECT : \E m \in msgs1[r] : m.src = id /\ m.v = v
+  <1> DEFINE S == Senders1({ m \in msgs1[r] : m.v = v })
+  <1>sub. S \subseteq ALL BY Senders1_Sub
+  <1>types. Cardinality(S) \in Nat BY Senders1_Sub, FS_CardinalityType
+  <1>ge. Cardinality(S) >= T + 1 BY <1>types, Arith_DoubleGtNplusTImplTplusOne
+  <1>pick. PICK id \in S : id \in CORRECT BY <1>sub, <1>ge, TplusOneHasCorrect
+  <1> QED BY <1>pick DEF S, Senders1
+
+THEOREM QuorumHasCorrectM1 ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(r, v)
+  PROVE  \E id \in CORRECT : \E m \in msgs1[r] : m.src = id /\ m.v = v
+  <1> USE DEF IndInv
+  <1>dv. Cardinality(DvSet(r, v)) >= T + 1 BY DEF ExistsQuorum2LessRam, DvSet
+  <1>d2. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY <1>dv, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r] : m.v = v } IN
+            2 * Cardinality(Senders1(Sv)) > N + T
+        BY <1>d2 DEF Lemma7_D2RequiresQuorum
+  <1> QED BY <1>maj, MajorityM1HasCorrect
+
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
