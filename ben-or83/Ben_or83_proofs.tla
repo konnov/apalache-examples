@@ -263,9 +263,29 @@ LEMMA Arith_DoubleGtNplusTImplTplusOne ==
   PROVE  a >= T + 1
   BY ConstNat, NgtT, FleqT
 
+LEMMA Arith_DoubleNotGtLe ==
+  ASSUME NEW a \in Nat, ~(2 * a > N + T)
+  PROVE  2 * a <= N + T
+  BY ConstNat
+
+LEMMA Arith_DoubleLeFromNotGtMono ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, a <= b, ~(2 * b > N + T)
+  PROVE  2 * a <= N + T
+  BY ConstNat
+
 LEMMA Arith_SuccCancel ==
   ASSUME NEW a \in Nat, NEW b \in Nat, a + 1 = b + 1
   PROVE  a = b
+  BY ConstNat
+
+LEMMA Arith_SuccGtOne ==
+  ASSUME NEW a \in Nat, a >= 1
+  PROVE  a + 1 > 1
+  BY ConstNat
+
+LEMMA Arith_PlusOneMinusOne ==
+  ASSUME NEW a \in Nat
+  PROVE  a + 1 - 1 = a
   BY ConstNat
 
 LEMMA Arith_SumThirdMonoGe ==
@@ -1257,6 +1277,169 @@ THEOREM DQuorumDominatesSupported ==
           BY <2>1, <2>2, MajorityIntersect
     <2> QED BY <2>3 DEF Senders1
   <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+THEOREM DQuorumDominatesMajorityD ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         Cardinality(DvSet(r, v)) >= T + 1,
+         NEW w \in VALUES,
+         2 * Cardinality(Senders2(DvSet(r, w))) > N + T
+  PROVE  w = v
+  <1> USE DEF IndInv
+  <1>finw. IsFiniteSet(DvSet(r, w)) BY D2SetFinite
+  <1>lew. Cardinality(Senders2(DvSet(r, w))) <= Cardinality(DvSet(r, w))
+        BY <1>finw, Senders2_CardLeSet
+  <1>types. /\ Cardinality(Senders2(DvSet(r, w))) \in Nat
+             /\ Cardinality(DvSet(r, w)) \in Nat
+             /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finw, FS_CardinalityType, ConstNat, FleqT
+  <1>sw. Cardinality(Senders2(DvSet(r, w))) >= T + 1
+        BY <1>types, Arith_DoubleGtNplusTImplTplusOne
+  <1>dw. Cardinality(DvSet(r, w)) >= T + 1
+        BY <1>sw, <1>lew, <1>types, Arith_GeTrans
+  <1>ev. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY CorrectD2Exists
+  <1>ew. \E mw \in msgs2[r] : IsD2(mw) /\ AsD2(mw).v = w /\ AsD2(mw).src \in CORRECT
+        BY <1>dw, CorrectD2Exists
+  <1>maj. LET Sv == { m \in msgs1[r] : m.v = v }
+              Sw == { m \in msgs1[r] : m.v = w }
+          IN 2 * Cardinality(Senders1(Sv)) > N + T
+             /\ 2 * Cardinality(Senders1(Sw)) > N + T
+        BY <1>ev, <1>ew DEF Lemma7_D2RequiresQuorum
+  <1>meet. \E id \in CORRECT :
+            (\E m \in msgs1[r] : m.src = id /\ m.v = v)
+            /\ (\E m \in msgs1[r] : m.src = id /\ m.v = w)
+    <2>1. Senders1({ m \in msgs1[r] : m.v = v }) \subseteq ALL
+          /\ Senders1({ m \in msgs1[r] : m.v = w }) \subseteq ALL
+          BY DEF Senders1
+    <2>2. 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+          /\ 2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = w })) > N + T
+          BY <1>maj
+    <2>3. \E id \in Senders1({ m \in msgs1[r] : m.v = v })
+                \cap Senders1({ m \in msgs1[r] : m.v = w }) : id \in CORRECT
+          BY <2>1, <2>2, MajorityIntersect
+    <2> QED BY <2>3 DEF Senders1
+  <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+THEOREM HighWeightReceivedL11Witness ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS,
+         NEW received \in SUBSET msgs2[r],
+         Cardinality(Senders2(received)) = N - T,
+         NEW v \in VALUES,
+         Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = v })) >= T + 1
+  PROVE  \/ LET Qv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+             IN 2 * Cardinality(Qv) > N + T
+         \/ LET n0 == Cardinality(DvSet(r, 0))
+                n1 == Cardinality(DvSet(r, 1))
+                nq == Cardinality(QSet(r))
+            IN
+            \E x0, x1 \in 0..N:
+              /\ x0 <= n0 /\ x1 <= n1
+              /\ x0 + x1 + nq >= N - T
+              /\ 2 * x0 <= N + T
+              /\ 2 * x1 <= N + T
+  <1> DEFINE R0 == DPart(received, 0)
+             R1 == DPart(received, 1)
+             RQ == QPart(received)
+             Full0 == Senders2(DvSet(r, 0))
+             Full1 == Senders2(DvSet(r, 1))
+  <1>v0. 0 \in VALUES BY DEF VALUES
+  <1>v1. 1 \in VALUES BY DEF VALUES
+  <1>z01. 0 # 1 BY DEF VALUES
+  <1>sub0. R0 \subseteq DvSet(r, 0) BY DEF R0, DPart, DvSet
+  <1>sub1. R1 \subseteq DvSet(r, 1) BY DEF R1, DPart, DvSet
+  <1>subq. RQ \subseteq QSet(r) BY DEF RQ, QPart, QSet
+  <1>finD0. IsFiniteSet(DvSet(r, 0)) BY <1>v0, D2SetFinite
+  <1>finD1. IsFiniteSet(DvSet(r, 1)) BY <1>v1, D2SetFinite
+  <1>finQ. IsFiniteSet(QSet(r)) BY Q2SetFinite
+  <1>finR0. IsFiniteSet(R0) BY <1>sub0, <1>finD0, FS_Subset
+  <1>finR1. IsFiniteSet(R1) BY <1>sub1, <1>finD1, FS_Subset
+  <1>finRQ. IsFiniteSet(RQ) BY <1>subq, <1>finQ, FS_Subset
+  <1>c0. Cardinality(R0) <= Cardinality(DvSet(r, 0)) BY <1>sub0, <1>finD0, FS_Subset
+  <1>c1. Cardinality(R1) <= Cardinality(DvSet(r, 1)) BY <1>sub1, <1>finD1, FS_Subset
+  <1>cq. Cardinality(RQ) <= Cardinality(QSet(r)) BY <1>subq, <1>finQ, FS_Subset
+  <1>part. Cardinality(Senders2(received))
+              <= Cardinality(R0) + Cardinality(R1) + Cardinality(RQ)
+        BY Msgs2SenderPartitionBound DEF R0, R1, RQ, DPart, QPart
+  <1>shape0. \A m \in R0 : IsD2(m) /\ AsD2(m).src \in ALL
+                             /\ AsD2(m).r = r /\ AsD2(m).v = 0
+        BY Msgs2Shape, Msgs2SrcInAll, Msgs2RShape DEF R0, DPart
+  <1>shape1. \A m \in R1 : IsD2(m) /\ AsD2(m).src \in ALL
+                             /\ AsD2(m).r = r /\ AsD2(m).v = 1
+        BY Msgs2Shape, Msgs2SrcInAll, Msgs2RShape DEF R1, DPart
+  <1>send0. Cardinality(R0) <= Cardinality(Senders2(R0))
+        BY <1>shape0, D2Fixed_CardLeSenders
+  <1>send1. Cardinality(R1) <= Cardinality(Senders2(R1))
+        BY <1>shape1, D2Fixed_CardLeSenders
+  <1>s0sub. Cardinality(Senders2(R0)) <= Cardinality(Full0)
+        BY <1>sub0, Senders2_Mono DEF Full0
+  <1>s1sub. Cardinality(Senders2(R1)) <= Cardinality(Full1)
+        BY <1>sub1, Senders2_Mono DEF Full1
+  <1>bd0. Cardinality(DvSet(r, 0)) <= N BY <1>v0, D2SetFinite
+  <1>bd1. Cardinality(DvSet(r, 1)) <= N BY <1>v1, D2SetFinite
+  <1>types. /\ Cardinality(R0) \in Nat /\ Cardinality(R1) \in Nat /\ Cardinality(RQ) \in Nat
+             /\ Cardinality(DvSet(r, 0)) \in Nat /\ Cardinality(DvSet(r, 1)) \in Nat
+             /\ Cardinality(QSet(r)) \in Nat
+             /\ Cardinality(Senders2(received)) \in Nat
+             /\ Cardinality(Senders2(R0)) \in Nat /\ Cardinality(Senders2(R1)) \in Nat
+             /\ Cardinality(Full0) \in Nat /\ Cardinality(Full1) \in Nat
+             /\ N \in Nat /\ N - T \in Nat /\ N + T \in Nat /\ T + 1 \in Nat
+        BY <1>finR0, <1>finR1, <1>finRQ, <1>finD0, <1>finD1, <1>finQ,
+           Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>r0leFull. Cardinality(R0) <= Cardinality(Full0)
+        BY <1>send0, <1>s0sub, <1>types, Arith_LeTrans
+  <1>r1leFull. Cardinality(R1) <= Cardinality(Full1)
+        BY <1>send1, <1>s1sub, <1>types, Arith_LeTrans
+  <1>r0leN. Cardinality(R0) <= N BY <1>c0, <1>bd0, <1>types, Arith_LeTrans
+  <1>r1leN. Cardinality(R1) <= N BY <1>c1, <1>bd1, <1>types, Arith_LeTrans
+  <1>x0N. Cardinality(R0) \in 0..N BY <1>types, <1>r0leN
+  <1>x1N. Cardinality(R1) \in 0..N BY <1>types, <1>r1leN
+  <1>sum. Cardinality(R0) + Cardinality(R1) + Cardinality(QSet(r)) >= N - T
+        BY <1>part, <1>cq, <1>types, Arith_SumThirdMonoGe
+  <1>majority. CASE LET Qv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+                    IN 2 * Cardinality(Qv) > N + T
+    <2> QED BY <1>majority
+  <1>noMajority. CASE ~(LET Qv == Senders2({ m \in msgs2[r]: IsD2(m) /\ AsD2(m).v = v })
+                         IN 2 * Cardinality(Qv) > N + T)
+    <2>vIs0. CASE v = 0
+      <3>high0. Cardinality(Senders2(R0)) >= T + 1 BY <2>vIs0 DEF R0, DPart
+      <3>r0ge. Cardinality(R0) >= T + 1
+            BY <3>high0, <1>finR0, Senders2_CardLeSet, <1>types, Arith_GeTrans
+      <3>dv0ge. Cardinality(DvSet(r, 0)) >= T + 1
+            BY <3>r0ge, <1>c0, <1>types, Arith_GeTrans
+      <3>d0. 2 * Cardinality(R0) <= N + T
+            BY <1>noMajority, <2>vIs0, <1>r0leFull, <1>types, Arith_DoubleLeFromNotGtMono
+               DEF Full0, DvSet
+      <3>notMajR1. ~(2 * Cardinality(R1) > N + T)
+        <4> SUFFICES ASSUME 2 * Cardinality(R1) > N + T PROVE FALSE OBVIOUS
+        <4>full1gt. 2 * Cardinality(Full1) > N + T
+              BY <1>r1leFull, <1>types, Arith_DoubleGtMono
+        <4>eq. 1 = 0 BY <1>v0, <1>v1, <3>dv0ge, <4>full1gt, DQuorumDominatesMajorityD DEF Full1
+        <4> QED BY <4>eq, <1>z01
+      <3>d1. 2 * Cardinality(R1) <= N + T
+            BY <3>notMajR1, <1>types, Arith_DoubleNotGtLe
+      <3> QED BY <1>x0N, <1>x1N, <1>c0, <1>c1, <1>sum, <3>d0, <3>d1
+    <2>vIs1. CASE v = 1
+      <3>high1. Cardinality(Senders2(R1)) >= T + 1 BY <2>vIs1 DEF R1, DPart
+      <3>r1ge. Cardinality(R1) >= T + 1
+            BY <3>high1, <1>finR1, Senders2_CardLeSet, <1>types, Arith_GeTrans
+      <3>dv1ge. Cardinality(DvSet(r, 1)) >= T + 1
+            BY <3>r1ge, <1>c1, <1>types, Arith_GeTrans
+      <3>d1. 2 * Cardinality(R1) <= N + T
+            BY <1>noMajority, <2>vIs1, <1>r1leFull, <1>types, Arith_DoubleLeFromNotGtMono
+               DEF Full1, DvSet
+      <3>notMajR0. ~(2 * Cardinality(R0) > N + T)
+        <4> SUFFICES ASSUME 2 * Cardinality(R0) > N + T PROVE FALSE OBVIOUS
+        <4>full0gt. 2 * Cardinality(Full0) > N + T
+              BY <1>r0leFull, <1>types, Arith_DoubleGtMono
+        <4>eq. 0 = 1 BY <1>v0, <1>v1, <3>dv1ge, <4>full0gt, DQuorumDominatesMajorityD DEF Full0
+        <4> QED BY <4>eq, <1>z01
+      <3>d0. 2 * Cardinality(R0) <= N + T
+            BY <3>notMajR0, <1>types, Arith_DoubleNotGtLe
+      <3> QED BY <1>x0N, <1>x1N, <1>c0, <1>c1, <1>sum, <3>d0, <3>d1
+    <2> QED BY <2>vIs0, <2>vIs1, <1>v0, <1>v1 DEF VALUES
+  <1> QED BY <1>majority, <1>noMajority
 
 THEOREM SupportedInReceivedQuorum ==
   ASSUME NEW r \in ROUNDS, NEW v \in SupportedValues(r),
@@ -3479,6 +3662,110 @@ THEOREM Pres_L11_F ==
   <1>ngt. CASE ~(round'[id] > 1)
     <2> QED BY <1>ngt
   <1> QED BY <1>gt, <1>ngt
+THEOREM Pres_L11_S3 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0)
+  PROVE  Lemma11_ValueOnQuorumLessRam'
+  <1>l11. Lemma11_ValueOnQuorumLessRam BY DEF IndInv
+  <1>dom. value \in [ CORRECT -> VALUES ] /\ round \in [ CORRECT -> ROUNDS ] BY DEF TypeOK
+  <1>r0. round[id0] \in ROUNDS /\ round[id0] \in Nat /\ round[id0] >= 1
+        BY <1>dom, RoundPos
+  <1>upd. /\ msgs2' = msgs2
+          /\ round' = [ round EXCEPT ![id0] = round[id0] + 1 ]
+          BY DEF Step3
+  <1>rd. \A x \in CORRECT :
+            round'[x] = (IF x = id0 THEN round[id0] + 1 ELSE round[x])
+        BY <1>upd, <1>dom
+  <1> PICK received \in SUBSET msgs2[round[id0]] :
+        /\ Cardinality(Senders2(received)) = N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+           \/ /\ \A vv \in VALUES: Weights[vv] < T + 1
+              /\ \E next_v \in VALUES:
+                   /\ value' = [ value EXCEPT ![id0] = next_v ]
+                   /\ decision' = decision
+        BY DEF Step3
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+  <1> SUFFICES ASSUME NEW id \in CORRECT
+        PROVE LET r == round'[id] IN
+          r > 1 =>
+            \/ LET v == value'[id]
+                   Qv == Senders2({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = v })
+               IN
+               2 * Cardinality(Qv) > N + T
+            \/ LET n0 == Cardinality({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = 0 })
+                   n1 == Cardinality({ m \in msgs2'[r - 1]: IsD2(m) /\ AsD2(m).v = 1 })
+                   nq == Cardinality({ m \in msgs2'[r - 1]: IsQ2(m) })
+               IN
+               \E x0, x1 \in 0..N:
+                 /\ x0 <= n0 /\ x1 <= n1
+                 /\ x0 + x1 + nq >= N - T
+                 /\ 2 * x0 <= N + T
+                 /\ 2 * x1 <= N + T
+        BY DEF Lemma11_ValueOnQuorumLessRam
+  <1>oldId. CASE id # id0
+    <2>rSame. round'[id] = round[id] BY <1>oldId, <1>rd
+    <2>vSame. value'[id] = value[id] BY <1>oldId, <1>dom DEF Step3
+    <2> QED BY <1>l11, <2>rSame, <2>vSame, <1>upd DEF Lemma11_ValueOnQuorumLessRam
+  <1>newId. CASE id = id0
+    <2>gt. round'[id] > 1 BY <1>newId, <1>rd, <1>r0, Arith_SuccGtOne
+    <2>pred. round'[id] - 1 = round[id0] BY <1>newId, <1>rd, <1>r0, Arith_PlusOneMinusOne
+    <2>high. CASE \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+      <3> PICK vv \in VALUES:
+            /\ Weights[vv] >= T + 1
+            /\ value' = [ value EXCEPT ![id0] = vv ]
+            /\ IF 2 * Weights[vv] > N + T
+               THEN decision' = [ decision EXCEPT ![id0] = vv ]
+               ELSE decision' = decision
+          BY <2>high
+      <3>valp. value'[id] = vv BY <1>newId, <1>dom
+      <3>wit. \/ LET Qv == Senders2({ m \in msgs2[round[id0]]: IsD2(m) /\ AsD2(m).v = vv })
+                  IN 2 * Cardinality(Qv) > N + T
+               \/ LET n0 == Cardinality(DvSet(round[id0], 0))
+                      n1 == Cardinality(DvSet(round[id0], 1))
+                      nq == Cardinality(QSet(round[id0]))
+                  IN
+                  \E x0, x1 \in 0..N:
+                    /\ x0 <= n0 /\ x1 <= n1
+                    /\ x0 + x1 + nq >= N - T
+                    /\ 2 * x0 <= N + T
+                    /\ 2 * x1 <= N + T
+            BY <1>r0, HighWeightReceivedL11Witness DEF Weights
+      <3> QED BY <2>gt, <2>pred, <3>valp, <3>wit, <1>upd DEF DvSet, QSet
+    <2>low. CASE /\ \A vv \in VALUES: Weights[vv] < T + 1
+                 /\ \E next_v \in VALUES:
+                      /\ value' = [ value EXCEPT ![id0] = next_v ]
+                      /\ decision' = decision
+      <3> PICK next_v \in VALUES:
+            /\ value' = [ value EXCEPT ![id0] = next_v ]
+            /\ decision' = decision
+          BY <2>low
+      <3>valp. value'[id] = next_v BY <1>newId, <1>dom
+      <3>wit. LET n0 == Cardinality(DvSet(round[id0], 0))
+                  n1 == Cardinality(DvSet(round[id0], 1))
+                  nq == Cardinality(QSet(round[id0]))
+              IN
+              \E x0, x1 \in 0..N:
+                /\ x0 <= n0 /\ x1 <= n1
+                /\ x0 + x1 + nq >= N - T
+                /\ 2 * x0 <= N + T
+                /\ 2 * x1 <= N + T
+            BY <1>r0, <2>low, LowWeightsReceivedL11Witness DEF Weights
+      <3> QED BY <2>gt, <2>pred, <3>valp, <3>wit, <1>upd DEF DvSet, QSet
+    <2> QED BY <2>high, <2>low
+  <1> QED BY <1>oldId, <1>newId
 THEOREM Pres_L11_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma11_ValueOnQuorumLessRam'
@@ -3490,8 +3777,10 @@ THEOREM Pres_Lemma11 ==
     <2> SUFFICES ASSUME Step2(id) PROVE Lemma11_ValueOnQuorumLessRam'
           OBVIOUS
     <2> QED BY Pres_L11_S2
-  <1>o2. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma11_ValueOnQuorumLessRam'
-        OMITTED \* TODO: substantive Step3 case for Lemma11_ValueOnQuorumLessRam
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step3(id) => Lemma11_ValueOnQuorumLessRam'
+    <2> SUFFICES ASSUME Step3(id) PROVE Lemma11_ValueOnQuorumLessRam'
+          OBVIOUS
+    <2> QED BY Pres_L11_S3
   <1>o3. FaultyStep => Lemma11_ValueOnQuorumLessRam'
     <2> SUFFICES ASSUME FaultyStep PROVE Lemma11_ValueOnQuorumLessRam'
           OBVIOUS
