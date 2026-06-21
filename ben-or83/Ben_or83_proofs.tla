@@ -1654,6 +1654,29 @@ THEOREM QuorumHasCorrectM1 ==
         BY <1>d2 DEF Lemma7_D2RequiresQuorum
   <1> QED BY <1>maj, MajorityM1HasCorrect
 
+THEOREM SupportedSingletonNextQuorum ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, r + 1 \in ROUNDS,
+         NEW v \in SupportedValues(r),
+         \A u \in SupportedValues(r) : u = v,
+         NEW w \in VALUES, ExistsQuorum2LessRam(r + 1, w)
+  PROVE  w = v
+  <1> USE DEF IndInv
+  <1>m1. \E id \in CORRECT : \E m \in msgs1[r + 1] : m.src = id /\ m.v = w
+        BY QuorumHasCorrectM1
+  <1>conn. LET Supported == SupportedValues(r) IN
+             \/ Supported = {}
+             \/ \E u \in Supported :
+                  \A m \in msgs1[r + 1] : m.src \in CORRECT => m.v = u
+        BY DEF Lemma9_RoundsConnection
+  <1>nonempty. SupportedValues(r) # {} OBVIOUS
+  <1>pick. PICK u \in SupportedValues(r) :
+              \A m \in msgs1[r + 1] : m.src \in CORRECT => m.v = u
+        BY <1>conn, <1>nonempty
+  <1>uv. u = v BY <1>pick
+  <1>wv. w = u BY <1>m1, <1>pick
+  <1> QED BY <1>uv, <1>wv
+
 \* The state tuple (the spec defines no `vars`; we provide one for [Next]_vars).
 vars == << value, decision, round, step, msgs1, msgs2 >>
 
