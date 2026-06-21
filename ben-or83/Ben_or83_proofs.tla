@@ -1505,6 +1505,44 @@ THEOREM SupportedInReceivedQuorum ==
   <1>ge. Cardinality(D) >= T + 1 BY <1>types, <1>notlt, Arith_NotLtTplusOneGe
   <1> QED BY <1>ge DEF D
 
+LEMMA Arith_SupportedQuorumGeContrad ==
+  ASSUME NEW rcv \in Nat, NEW dv \in Nat, NEW oth \in Nat,
+         rcv >= N - T, rcv <= dv + oth, dv < T + 1, oth < N - 2 * T
+  PROVE  FALSE
+  <1>dvle. dv <= T BY ConstNat, FleqT
+  <1>sumlt. dv + oth < N - T BY <1>dvle, ConstNat, NgtT, FleqT
+  <1> QED BY <1>sumlt, ConstNat
+
+THEOREM SupportedFromTotalAndFewOthers ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         Cardinality(Senders2(msgs2[r])) >= N - T,
+         Cardinality(Senders2({ m \in msgs2[r]: IsQ2(m) \/ AsD2(m).v /= v })) < N - 2 * T
+  PROVE  v \in SupportedValues(r)
+  <1> DEFINE D == Senders2(DvSet(r, v))
+             O == Senders2({ m \in msgs2[r]: IsQ2(m) \/ AsD2(m).v /= v })
+             R == Senders2(msgs2[r])
+  <1>cover. R \subseteq D \union O BY DEF R, D, O, DvSet, Senders2
+  <1>finD. IsFiniteSet(D) BY Senders2_Sub
+  <1>finO. IsFiniteSet(O) BY Senders2_Sub
+  <1>finU. IsFiniteSet(D \union O) BY <1>finD, <1>finO, FS_Union
+  <1>rleU. Cardinality(R) <= Cardinality(D \union O)
+        BY <1>cover, <1>finU, FS_Subset
+  <1>ule. Cardinality(D \union O) <= Cardinality(D) + Cardinality(O)
+        BY <1>finD, <1>finO, CardUnion2LeSum
+  <1>rle. Cardinality(R) <= Cardinality(D) + Cardinality(O)
+    <2>types. /\ Cardinality(R) \in Nat /\ Cardinality(D \union O) \in Nat
+               /\ Cardinality(D) \in Nat /\ Cardinality(O) \in Nat
+          BY Senders2_Sub, <1>finU, <1>finD, <1>finO, FS_CardinalityType
+    <2> QED BY <1>rleU, <1>ule, <2>types, ConstNat
+  <1>types. /\ Cardinality(R) \in Nat /\ Cardinality(D) \in Nat /\ Cardinality(O) \in Nat
+        BY Senders2_Sub, <1>finD, <1>finO, FS_CardinalityType
+  <1>notlt. ~(Cardinality(D) < T + 1)
+    <2>suf. SUFFICES ASSUME Cardinality(D) < T + 1 PROVE FALSE OBVIOUS
+    <2> QED BY <1>types, <1>rle, <2>suf, Arith_SupportedQuorumGeContrad DEF R, O
+  <1>ge. Cardinality(D) >= T + 1 BY <1>types, <1>notlt, Arith_NotLtTplusOneGe
+  <1> QED BY <1>ge DEF SupportedValues, DvSet, D, O, R
+
 THEOREM LowWeightsSupportedEmpty ==
   ASSUME NEW r \in ROUNDS,
          NEW received \in SUBSET msgs2[r],
@@ -3327,6 +3365,81 @@ THEOREM Pres_L9_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma9_RoundsConnection'
   BY DEF IndInv, Lemma9_RoundsConnection, SupportedValues, Step3
+THEOREM Pres_L9_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma9_RoundsConnection'
+  <1>l9. Lemma9_RoundsConnection BY DEF IndInv
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>tokp. TypeOK' BY TypePres DEF Next, CorrectStep
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>m1same. msgs1' = msgs1 BY DEF Step2
+  <1>nm. PICK nm :
+        msgs2' = [ msgs2 EXCEPT ![round[id0]] = msgs2[round[id0]] \union { nm } ]
+        BY VariantAx DEF Step2
+  <1>grow. \A rr \in ROUNDS : msgs2[rr] \subseteq msgs2'[rr]
+    <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE msgs2[rr] \subseteq msgs2'[rr] OBVIOUS
+    <2> QED BY <1>nm, <1>r0, <1>dom2
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, r + 1 \in ROUNDS
+        PROVE LET Supported == SupportedValuesP(r) IN
+              \/ Supported = {}
+              \/ \E v \in Supported:
+                   \A m \in msgs1'[r + 1]:
+                     (m.src \in CORRECT => m.v = v)
+        BY <1>tokp, SupportedValuesPrimeIsP DEF Lemma9_RoundsConnection
+  <1>empty. CASE SupportedValuesP(r) = {}
+    <2> QED BY <1>empty
+  <1>nonempty. CASE SupportedValuesP(r) # {}
+    <2> PICK vp \in SupportedValuesP(r) : TRUE BY <1>nonempty
+    <2>vpSup. vp \in SupportedValuesP(r) OBVIOUS
+    <2>vpVal. vp \in VALUES BY DEF SupportedValuesP
+    <2>all. \A m \in msgs1'[r + 1] : (m.src \in CORRECT => m.v = vp)
+      <3> SUFFICES ASSUME NEW m \in msgs1'[r + 1], m.src \in CORRECT
+                  PROVE  m.v = vp
+            OBVIOUS
+      <3>min. m \in msgs1[r + 1] BY <1>m1same
+      <3>succNat. r + 1 \in Nat /\ r + 1 # 1 BY RoundsNat, ConstNat
+      <3>prev. (r + 1) - 1 = r BY RoundsNat, Arith_PlusOneMinusOne
+      <3>total. Cardinality(Senders2(msgs2[r])) >= N - T
+        <4>rw. r + 1 \in ROUNDS \ {1} /\ \E mm \in msgs1[r + 1] : mm.src \in CORRECT
+              BY <3>min, <3>succNat
+        <4>q. Cardinality(Senders2(msgs2[(r + 1) - 1])) >= N - T
+              BY <1>l10, <4>rw DEF Lemma10_M1RequiresQuorum
+        <4> QED BY <4>q, <3>prev
+      <3>oldOtherLe. Cardinality(Senders2({ mm \in msgs2[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }))
+                       <= Cardinality(Senders2({ mm \in msgs2'[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }))
+        <4>sub. { mm \in msgs2[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }
+                    \subseteq { mm \in msgs2'[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }
+              BY <1>grow
+        <4> QED BY <4>sub, Senders2_Mono
+      <3>primeOther. Cardinality(Senders2({ mm \in msgs2'[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }))
+                       < N - 2 * T
+            BY <2>vpSup DEF SupportedValuesP, DvPSet
+      <3>types. /\ Cardinality(Senders2({ mm \in msgs2[r] : IsQ2(mm) \/ AsD2(mm).v /= vp })) \in Nat
+                 /\ Cardinality(Senders2({ mm \in msgs2'[r] : IsQ2(mm) \/ AsD2(mm).v /= vp })) \in Nat
+                 /\ N - 2 * T \in Nat
+            BY Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+      <3>oldOther. Cardinality(Senders2({ mm \in msgs2[r] : IsQ2(mm) \/ AsD2(mm).v /= vp }))
+                     < N - 2 * T
+            BY <3>oldOtherLe, <3>primeOther, <3>types, Arith_LeLtTrans
+      <3>vpOld. vp \in SupportedValues(r)
+            BY <2>vpVal, <3>total, <3>oldOther, SupportedFromTotalAndFewOthers
+      <3>oldConn. LET Supported == SupportedValues(r) IN
+                    \/ Supported = {}
+                    \/ \E v \in Supported:
+                         \A mm \in msgs1[r + 1]:
+                           (mm.src \in CORRECT => mm.v = v)
+            BY <1>l9 DEF Lemma9_RoundsConnection
+      <3>nonOld. SupportedValues(r) # {} BY <3>vpOld
+      <3> PICK vo \in SupportedValues(r) :
+            \A mm \in msgs1[r + 1] : (mm.src \in CORRECT => mm.v = vo)
+            BY <3>oldConn, <3>nonOld
+      <3>voSup. vo \in SupportedValues(r) OBVIOUS
+      <3>allOld. \A mm \in msgs1[r + 1] : (mm.src \in CORRECT => mm.v = vo) OBVIOUS
+      <3>eq. vp = vo BY <2>vpVal, <3>vpOld, <3>voSup, SupportedUnique
+      <3> QED BY <3>min, <3>allOld, <3>eq
+    <2> QED BY <2>all
+  <1> QED BY <1>empty, <1>nonempty
 THEOREM Pres_L9_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma9_RoundsConnection'
@@ -3338,8 +3451,10 @@ THEOREM Pres_Lemma9 ==
     <2> SUFFICES ASSUME Step1(id) PROVE Lemma9_RoundsConnection'
           OBVIOUS
     <2> QED BY Pres_L9_S1
-  <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma9_RoundsConnection'
-        OMITTED \* TODO: substantive Step2 case for Lemma9_RoundsConnection
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma9_RoundsConnection'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma9_RoundsConnection'
+          OBVIOUS
+    <2> QED BY Pres_L9_S2
   <1>o3. ASSUME FaultyStep PROVE Lemma9_RoundsConnection'
         OMITTED \* TODO: substantive FaultyStep case for Lemma9_RoundsConnection
   <1> QED BY Pres_L9_S3, Pres_L9_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
