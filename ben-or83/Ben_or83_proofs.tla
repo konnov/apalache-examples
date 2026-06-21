@@ -5000,61 +5000,99 @@ THEOREM QuorumUnique ==
 \*     by Lemma10/Lemma12 the round r+1 was entered from r with N-T type-2 messages, and
 \*     by Lemma9/Lemma13 (value lock) every correct value entering round r+1 equals the
 \*     value supported at r, which is v (carried from the round-r quorum). Hence w = v.
+\* ===== The SupportedValues value-lock (spine of Ben-Or agreement) =====
+\* SupportedLockStep: the lock SupportedValues(r) \subseteq {v} propagates one round.
+\* The nonempty-singleton case is SupportedSingletonNextSupported (correct values at
+\* r+1 are pinned to v by Lemma9, so any value supported at r+1 is v). The EMPTY case
+\* -- SupportedValues(r) = {} -- is the central, still-open lock-survival obligation:
+\* with no support at r, Lemma9 gives no constraint on r+1 and Step3 branch (c) lets
+\* correct replicas pick arbitrary next values, so the lock can only be carried by a
+\* strengthened global invariant. This is the one isolated research-level admit.
+THEOREM SupportedLockStep ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, r + 1 \in ROUNDS, NEW v \in VALUES,
+         SupportedValues(r) \subseteq {v}
+  PROVE  SupportedValues(r + 1) \subseteq {v}
+  <1> USE DEF IndInv
+  <1> SUFFICES ASSUME NEW w \in SupportedValues(r + 1) PROVE w = v
+        OBVIOUS
+  <1>ne. CASE SupportedValues(r) # {}
+    <2> PICK u \in SupportedValues(r) : TRUE BY <1>ne
+    <2>uv. u = v OBVIOUS
+    <2>vin. v \in SupportedValues(r) BY <2>uv
+    <2>sing. \A z \in SupportedValues(r) : z = v OBVIOUS
+    <2> QED BY <2>vin, <2>sing, SupportedSingletonNextSupported
+  <1>empty. CASE SupportedValues(r) = {}
+    OMITTED \* RESEARCH GAP: value-lock survival across an empty-support round
+            \* (Step3 branch (c) reset). Needs a strengthened global IndInv conjunct.
+  <1> QED BY <1>ne, <1>empty
+
+\* SupportedLock: starting from a quorum for v at round a, the lock holds at every
+\* later round. Base via QuorumDominatesSupported; step via SupportedLockStep.
+THEOREM SupportedLock ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v)
+  PROVE  \A r \in ROUNDS : r >= a => SupportedValues(r) \subseteq {v}
+  <1> USE DEF IndInv
+  <1>aNat. a \in Nat /\ a >= 1 BY RoundsNat
+  <1>rin. \A k \in Nat : (a + k) \in ROUNDS BY <1>aNat, RoundsNat
+  <1> DEFINE P(k) == SupportedValues(a + k) \subseteq {v}
+  <1>base. P(0)
+        <2> SUFFICES ASSUME NEW w \in SupportedValues(a + 0) PROVE w = v
+              OBVIOUS
+        <2>1. a + 0 = a BY <1>aNat
+        <2> QED BY <2>1, QuorumDominatesSupported
+  <1>step. \A k \in Nat : P(k) => P(k + 1)
+        <2> SUFFICES ASSUME NEW k \in Nat, P(k) PROVE P(k + 1)
+              OBVIOUS
+        <2>r. (a + k) \in ROUNDS /\ (a + k + 1) \in ROUNDS BY <1>aNat, RoundsNat
+        <2>1. a + (k + 1) = (a + k) + 1 BY <1>aNat
+        <2>2. SupportedValues((a + k) + 1) \subseteq {v}
+              BY <2>r, SupportedLockStep
+        <2> QED BY <2>1, <2>2
+  <1>all. \A k \in Nat : P(k)
+    <2> HIDE DEF P
+    <2> QED BY <1>base, <1>step, NatInduction
+  <1> QED
+        <2> SUFFICES ASSUME NEW r \in ROUNDS, r >= a
+                     PROVE  SupportedValues(r) \subseteq {v}
+              OBVIOUS
+        <2>1. (r - a) \in Nat /\ a + (r - a) = r BY RoundsNat, <1>aNat
+        <2>2. P(r - a) BY <1>all, <2>1
+        <2> QED BY <2>1, <2>2
+
+\* LockLemma: a quorum at a for v locks every later round -- any quorum there is for v.
+\* From SupportedLock we have SupportedValues(r) \subseteq {v}; a quorum for w at r forces
+\* (DQuorumDominatesSupported) SupportedValues(r) \subseteq {w}. When support is nonempty
+\* these pin w = v. The leftover empty-support case is the same lock-survival gap isolated
+\* in SupportedLockStep (a quorum can occur in an immature round whose support is empty).
 THEOREM LockLemma ==
   ASSUME TypeOK, IndInv,
          NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v)
   PROVE  \A r \in ROUNDS :
             r >= a => (\A w \in VALUES : ExistsQuorum2LessRam(r, w) => w = v)
   <1> USE DEF IndInv
-  \* Induction on the round offset k = r - a using NaturalsInduction.
-  <1> a \in Nat
-        BY RoundsNat
-  <1> DEFINE P(k) == \A w \in VALUES :
-                       (a + k) \in ROUNDS /\ ExistsQuorum2LessRam(a + k, w) => w = v
-  <1>base. P(0)
-        <2> SUFFICES ASSUME NEW w \in VALUES,
-                            (a + 0) \in ROUNDS, ExistsQuorum2LessRam(a + 0, w)
-                     PROVE  w = v
-              OBVIOUS
-        <2>1. a + 0 = a
-              OBVIOUS
-        <2> QED BY <2>1, QuorumUnique
-  <1>step. \A k \in Nat : P(k) => P(k + 1)
-        \* This is the mathematical core of Ben-Or safety, and the LAST open obligation in
-        \* the IndInv => AgreementInv direction. The forward chain is:
-        \*   ExistsQuorum2LessRam(a+k+1, w)  -- a D2(w) quorum at round a+k+1
-        \*     => CorrectD2Exists: a CORRECT D2(w) sender at a+k+1
-        \*     => Lemma7: a type-1 majority for w at a+k+1
-        \*     => MajorityIntersect/Lemma9: a correct msgs1[a+k+1] message has value w,
-        \*        and (Lemma9 at a+k) that value lies in SupportedValues(a+k); so
-        \*        w \in SupportedValues(a+k).
-        \* The GAP: closing this needs `w \in SupportedValues(a+k) => w = v`, but the
-        \* induction hypothesis P(k) only says "a D2-QUORUM at a+k is v" -- which is too
-        \* weak (it is vacuously true when no quorum exists at a+k, and a quorum does not
-        \* persist across rounds since each round has its own msgs2). ExistsQuorum2LessRam
-        \* and SupportedValues are also not interchangeable (one counts messages with
-        \* 2*nv>N+T, the other counts senders with |Others|<N-2T). To close it, STRENGTHEN
-        \* the induction predicate to track the value lock directly, e.g.
-        \*   P'(k) == v \in SupportedValues(a+k) /\ SupportedValues(a+k) \subseteq {v}
-        \* and prove SupportedValues(a+k) \subseteq {v} => SupportedValues(a+k+1) \subseteq {v}
-        \* (correct values stay v, via Lemma9 + Lemma13 + Step2 reasoning), with base case
-        \* ExistsQuorum2LessRam(a,v) => SupportedValues(a) = {v}. That is a multi-lemma
-        \* redesign -- genuine research-level work, not a mechanical gap.
-        OMITTED \* TODO: strengthen induction predicate to SupportedValues lock (see above)
-  <1>all. \A k \in Nat : P(k)
-    <2> HIDE DEF P
-    <2> QED BY <1>base, <1>step, NatInduction
-  <1> QED
-        \* map every r \in ROUNDS with r >= a to k = r - a \in Nat
-        <2> SUFFICES ASSUME NEW r \in ROUNDS, r >= a, NEW w \in VALUES,
-                            ExistsQuorum2LessRam(r, w)
-                     PROVE  w = v
-              OBVIOUS
-        <2>1. (r - a) \in Nat /\ a + (r - a) = r
-              BY RoundsNat
-        <2>2. P(r - a)
-              BY <1>all, <2>1
-        <2> QED BY <2>1, <2>2
+  <1>lock. \A r \in ROUNDS : r >= a => SupportedValues(r) \subseteq {v}
+        BY SupportedLock
+  <1> SUFFICES ASSUME NEW r \in ROUNDS, r >= a, NEW w \in VALUES,
+                      ExistsQuorum2LessRam(r, w)
+               PROVE  w = v
+        OBVIOUS
+  <1>svr. SupportedValues(r) \subseteq {v} BY <1>lock
+  <1>dge. Cardinality(DvSet(r, w)) >= T + 1
+        BY DEF ExistsQuorum2LessRam, DvSet
+  <1>swr. \A u \in SupportedValues(r) : u = w
+        BY <1>dge, DQuorumDominatesSupported
+  <1>ne. CASE SupportedValues(r) # {}
+    <2> PICK u \in SupportedValues(r) : TRUE BY <1>ne
+    <2>uv. u = v BY <1>svr
+    <2>uw. u = w BY <1>swr
+    <2> QED BY <2>uv, <2>uw
+  <1>empty. CASE SupportedValues(r) = {}
+    OMITTED \* RESEARCH GAP (same lock-survival core as SupportedLockStep): a quorum in
+            \* an immature round whose support is empty. Vacuous for decision-backing
+            \* quorums (those rounds have >= N-T senders, hence nonempty support).
+  <1> QED BY <1>ne, <1>empty
 
 \* MAIN AGREEMENT THEOREM.
 \* We assume TypeOK alongside IndInv (i.e. the full inductive invariant IndInit), since
