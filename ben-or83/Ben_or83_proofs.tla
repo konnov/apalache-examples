@@ -1209,6 +1209,16 @@ SupportedValuesP(r) ==
   IN
   { v \in VALUES: ExistsSupport(v) }
 
+THEOREM SupportedValuesPrimeIsP ==
+  ASSUME NEW r \in ROUNDS
+  PROVE  SupportedValues(r)' = SupportedValuesP(r)
+  BY DEF SupportedValues, SupportedValuesP, DvSet, DvPSet
+
+THEOREM SupportedValuesPFrame ==
+  ASSUME NEW r \in ROUNDS, msgs2' = msgs2
+  PROVE  SupportedValuesP(r) = SupportedValues(r)
+  BY DEF SupportedValues, SupportedValuesP, DvSet, DvPSet
+
 THEOREM TplusOneHasCorrect ==
   ASSUME NEW S, S \subseteq ALL, Cardinality(S) >= T + 1
   PROVE  \E id \in S : id \in CORRECT
