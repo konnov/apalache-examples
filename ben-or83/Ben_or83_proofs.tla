@@ -3252,6 +3252,128 @@ THEOREM Pres_Lemma7 ==
   <1> QED BY Pres_L7_S3, Pres_L7_ST, <1>o1, <1>o2, <1>o3 DEF Next, CorrectStep
 
 \* ===== L8: a correct Q2 means no type-1 quorum existed =====
+\* TYPE-1 WITNESS for Lemma8a. From a received set (>= N-T senders) in which no value has
+\* a strict type-1 majority (2*Weights[v] <= N+T), build the abstract witnesses x0, x1:
+\* take the CORRECT senders of value 0 / 1 within received. The N+T bound is exactly what
+\* makes 2*x <= N+T close. No equivocation lemma is needed -- only the message shape and a
+\* sender partition (every received sender is a correct-0, correct-1, or faulty sender).
+THEOREM LowWeightsReceivedL8Witness ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS,
+         NEW received \in SUBSET msgs1[r],
+         Cardinality(Senders1(received)) >= N - T,
+         \A vv \in VALUES :
+           2 * Cardinality(Senders1({ m \in received : m.v = vv })) <= N + T
+  PROVE  LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] })
+             n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] })
+             nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[r] } })
+         IN
+         \E x0, x1 \in 0..N :
+           /\ x0 <= n0 /\ x1 <= n1
+           /\ x0 + x1 + nf >= N - T
+           /\ 2 * x0 <= N + T
+           /\ 2 * x1 <= N + T
+  <1> DEFINE C0 == { id \in CORRECT : [ src |-> id, r |-> r, v |-> 0 ] \in received }
+             C1 == { id \in CORRECT : [ src |-> id, r |-> r, v |-> 1 ] \in received }
+             FR == { id \in FAULTY : id \in Senders1(received) }
+             W0 == Senders1({ m \in received : m.v = 0 })
+             W1 == Senders1({ m \in received : m.v = 1 })
+             n0 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1[r] }
+             n1 == { id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1[r] }
+             nfS == { id \in FAULTY: id \in { m.src: m \in msgs1[r] } }
+  <1>v01. (0 \in VALUES) /\ (1 \in VALUES) BY DEF VALUES
+  <1>recsub. received \subseteq msgs1[r] OBVIOUS
+  <1>shape. \A m \in received : m \in [ src: ALL, r: ROUNDS, v: VALUES ] /\ m.r = r
+    <2> PICK A1 \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ] :
+          msgs1 = [ rr \in ROUNDS |-> { m \in A1 : m.r = rr } ]
+          BY DEF TypeOK
+    <2>1. msgs1[r] = { m \in A1 : m.r = r } OBVIOUS
+    <2> QED BY <2>1, <1>recsub
+  \* ---- the sender partition ----
+  <1>part. Senders1(received) \subseteq (C0 \union C1) \union FR
+    <2> SUFFICES ASSUME NEW id \in Senders1(received)
+                 PROVE  id \in (C0 \union C1) \union FR
+          OBVIOUS
+    <2>idall. id \in ALL BY DEF Senders1
+    <2> PICK m \in received : m.src = id BY DEF Senders1
+    <2>msh. m \in [ src: ALL, r: ROUNDS, v: VALUES ] /\ m.r = r BY <1>shape
+    <2>mrec. m = [ src |-> id, r |-> r, v |-> m.v ] BY <2>msh
+    <2>mv. m.v \in VALUES BY <2>msh
+    <2>corr. CASE id \in CORRECT
+      <3>cases. m.v = 0 \/ m.v = 1 BY <2>mv DEF VALUES
+      <3>c0. CASE m.v = 0
+        <4>eq. [ src |-> id, r |-> r, v |-> 0 ] = m BY <2>mrec, <3>c0
+        <4> QED BY <4>eq, <2>corr
+      <3>c1. CASE m.v = 1
+        <4>eq. [ src |-> id, r |-> r, v |-> 1 ] = m BY <2>mrec, <3>c1
+        <4> QED BY <4>eq, <2>corr
+      <3> QED BY <3>cases, <3>c0, <3>c1
+    <2>flt. CASE id \in FAULTY
+      <3> QED BY <2>flt
+    <2> QED BY <2>idall, <2>corr, <2>flt DEF ALL
+  \* ---- finiteness ----
+  <1>finC0. IsFiniteSet(C0) BY FiniteCF, FS_Subset
+  <1>finC1. IsFiniteSet(C1) BY FiniteCF, FS_Subset
+  <1>finFR. IsFiniteSet(FR) BY FiniteCF, FS_Subset
+  <1>finU. IsFiniteSet((C0 \union C1) \union FR) BY <1>finC0, <1>finC1, <1>finFR, FS_Union
+  \* ---- C0/C1 subset of n0/n1 (received subset of msgs1[r]) ----
+  <1>c0sub. C0 \subseteq n0 BY <1>recsub
+  <1>c1sub. C1 \subseteq n1 BY <1>recsub
+  <1>finN0. IsFiniteSet(n0) BY FiniteCF, FS_Subset
+  <1>finN1. IsFiniteSet(n1) BY FiniteCF, FS_Subset
+  <1>c0len0. Cardinality(C0) <= Cardinality(n0) BY <1>c0sub, <1>finN0, FS_Subset
+  <1>c1len1. Cardinality(C1) <= Cardinality(n1) BY <1>c1sub, <1>finN1, FS_Subset
+  \* ---- C0/C1 subset of W0/W1 (correct senders of v are senders of v) ----
+  <1>c0w0. C0 \subseteq W0
+    <2> SUFFICES ASSUME NEW id \in C0 PROVE id \in W0 OBVIOUS
+    <2>1. [ src |-> id, r |-> r, v |-> 0 ] \in received /\ id \in ALL BY DEF ALL
+    <2> QED BY <2>1 DEF Senders1
+  <1>c1w1. C1 \subseteq W1
+    <2> SUFFICES ASSUME NEW id \in C1 PROVE id \in W1 OBVIOUS
+    <2>1. [ src |-> id, r |-> r, v |-> 1 ] \in received /\ id \in ALL BY DEF ALL
+    <2> QED BY <2>1 DEF Senders1
+  <1>finW0. IsFiniteSet(W0) BY Senders1_Sub
+  <1>finW1. IsFiniteSet(W1) BY Senders1_Sub
+  <1>c0lew0. Cardinality(C0) <= Cardinality(W0) BY <1>c0w0, <1>finW0, FS_Subset
+  <1>c1lew1. Cardinality(C1) <= Cardinality(W1) BY <1>c1w1, <1>finW1, FS_Subset
+  \* ---- FR subset of nfS ----
+  <1>frsub. FR \subseteq nfS
+    <2> SUFFICES ASSUME NEW id \in FR PROVE id \in nfS OBVIOUS
+    <2>1. id \in FAULTY /\ id \in Senders1(received) OBVIOUS
+    <2>2. \E m \in received : m.src = id BY <2>1 DEF Senders1
+    <2> QED BY <2>1, <2>2, <1>recsub
+  <1>finNF. IsFiniteSet(nfS) BY FiniteCF, FS_Subset
+  <1>frlenf. Cardinality(FR) <= Cardinality(nfS) BY <1>frsub, <1>finNF, FS_Subset
+  \* ---- partition cardinality bound ----
+  <1>sfin. IsFiniteSet(Senders1(received)) BY Senders1_Sub
+  <1>smono. Cardinality(Senders1(received)) <= Cardinality((C0 \union C1) \union FR)
+        BY <1>part, <1>finU, FS_Subset
+  <1>uadd. Cardinality((C0 \union C1) \union FR)
+              <= Cardinality(C0) + Cardinality(C1) + Cardinality(FR)
+        BY <1>finC0, <1>finC1, <1>finFR, CardUnion3LeSum
+  \* ---- types & bounds ----
+  <1>w0bound. 2 * Cardinality(W0) <= N + T BY <1>v01
+  <1>w1bound. 2 * Cardinality(W1) <= N + T BY <1>v01
+  <1>types. /\ Cardinality(C0) \in Nat /\ Cardinality(C1) \in Nat /\ Cardinality(FR) \in Nat
+             /\ Cardinality(W0) \in Nat /\ Cardinality(W1) \in Nat
+             /\ Cardinality(n0) \in Nat /\ Cardinality(n1) \in Nat /\ Cardinality(nfS) \in Nat
+             /\ Cardinality(Senders1(received)) \in Nat
+             /\ Cardinality((C0 \union C1) \union FR) \in Nat
+             /\ N \in Nat /\ N - T \in Nat /\ N + T \in Nat
+        BY <1>finC0, <1>finC1, <1>finFR, <1>finW0, <1>finW1, <1>finN0, <1>finN1, <1>finNF,
+           <1>sfin, <1>finU, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>c0leN. Cardinality(C0) <= N
+        BY <1>c0lew0, Senders1_Sub, <1>types, Arith_LeTrans
+  <1>c1leN. Cardinality(C1) <= N
+        BY <1>c1lew1, Senders1_Sub, <1>types, Arith_LeTrans
+  <1>x0mem. Cardinality(C0) \in 0..N BY <1>types, <1>c0leN
+  <1>x1mem. Cardinality(C1) \in 0..N BY <1>types, <1>c1leN
+  <1>sum. Cardinality(C0) + Cardinality(C1) + Cardinality(nfS) >= N - T
+        BY <1>smono, <1>uadd, <1>frlenf, <1>types, Arith_GeTrans
+  <1>d0. 2 * Cardinality(C0) <= N + T BY <1>c0lew0, <1>w0bound, <1>types
+  <1>d1. 2 * Cardinality(C1) <= N + T BY <1>c1lew1, <1>w1bound, <1>types
+  <1> QED BY <1>x0mem, <1>x1mem, <1>c0len0, <1>c1len1, <1>sum, <1>d0, <1>d1
+
 THEOREM Pres_L8_S3 ==
   ASSUME IndInv, NEW id \in CORRECT, Step3(id)
   PROVE  Lemma8_Q2RequiresNoQuorumFaster'
@@ -3333,6 +3455,82 @@ THEOREM Pres_L8_S1 ==
   <1>csum. x0 + x1 + Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } }) >= N - T
         BY <1>monof, <1>types, Arith_SumThirdMonoGe
   <1> QED BY <1>c0, <1>c1, <1>csum
+\* Step2: msgs1 is unchanged, so n0/n1/nf are frame-invariant. Rounds already carrying a
+\* correct Q2 reuse the old witness; the round where id0 emits its Q2 is the only new one,
+\* and its witness comes from LowWeightsReceivedL8Witness applied to id0's received set.
+THEOREM Pres_L8_S2 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step2(id0)
+  PROVE  Lemma8_Q2RequiresNoQuorumFaster'
+  <1>l8. Lemma8_Q2RequiresNoQuorumFaster BY DEF IndInv
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>dom2. DOMAIN msgs2 = ROUNDS BY Msgs2DomR
+  <1>m1same. msgs1' = msgs1 BY DEF Step2
+  <1> PICK received \in SUBSET msgs1[round[id0]] :
+        /\ Cardinality(Senders1(received)) >= N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders1({ m \in received : m.v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ 2 * Weights[vv] > N + T
+                /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                    msgs2[round[id0]] \union { D2(id0, round[id0], vv) } ]
+           \/ /\ \A vv \in VALUES: 2 * Weights[vv] <= N + T
+              /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                    msgs2[round[id0]] \union { Q2(id0, round[id0]) } ]
+        BY DEF Step2
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders1({ m \in received : m.v = vv })) ]
+  <1> SUFFICES ASSUME NEW r \in { rr \in ROUNDS :
+                                  \E m \in msgs2'[rr] : IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+        PROVE LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 0 ] \in msgs1'[r] })
+                  n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> r, v |-> 1 ] \in msgs1'[r] })
+                  nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1'[r] } })
+              IN
+              \E x0, x1 \in 0..N:
+                /\ x0 <= n0 /\ x1 <= n1
+                /\ x0 + x1 + nf >= N - T
+                /\ 2 * x0 <= N + T
+                /\ 2 * x1 <= N + T
+        BY DEF Lemma8_Q2RequiresNoQuorumFaster
+  <1>rdom. r \in ROUNDS OBVIOUS
+  <1> PICK mq \in msgs2'[r] : IsQ2(mq) /\ AsQ2(mq).src \in CORRECT OBVIOUS
+  <1>oldMsg. CASE mq \in msgs2[r]
+    <2>oldRound. r \in { rr \in ROUNDS : \E m \in msgs2[rr] : IsQ2(m) /\ AsQ2(m).src \in CORRECT }
+          BY <1>oldMsg, <1>rdom
+    <2> QED BY <1>l8, <2>oldRound, <1>m1same DEF Lemma8_Q2RequiresNoQuorumFaster
+  <1>newMsg. CASE mq \notin msgs2[r]
+    \* The only new message is id0's; mq is a Q2, ruling out the D2 branch, so r = round[id0].
+    <2>q. /\ \A vv \in VALUES: 2 * Weights[vv] <= N + T
+          /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                msgs2[round[id0]] \union { Q2(id0, round[id0]) } ]
+      <3>notD. ~ (\E vv \in VALUES:
+                /\ 2 * Weights[vv] > N + T
+                /\ msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                      msgs2[round[id0]] \union { D2(id0, round[id0], vv) } ])
+        <4> SUFFICES ASSUME NEW vv \in VALUES,
+                            2 * Weights[vv] > N + T,
+                            msgs2' = [ msgs2 EXCEPT ![round[id0]] =
+                                msgs2[round[id0]] \union { D2(id0, round[id0], vv) } ]
+                     PROVE  FALSE
+              OBVIOUS
+        <4>mqd. mq = D2(id0, round[id0], vv) /\ r = round[id0]
+              BY <1>newMsg, <1>dom2, <1>r0, <1>rdom
+        <4> QED BY <4>mqd, VariantAx
+      <3> QED BY <3>notD
+    <2>req. r = round[id0]
+          BY <2>q, <1>newMsg, <1>dom2, <1>r0, <1>rdom
+    <2>wit. LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> round[id0], v |-> 0 ] \in msgs1[round[id0]] })
+                n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> round[id0], v |-> 1 ] \in msgs1[round[id0]] })
+                nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[round[id0]] } })
+            IN
+            \E x0, x1 \in 0..N:
+              /\ x0 <= n0 /\ x1 <= n1
+              /\ x0 + x1 + nf >= N - T
+              /\ 2 * x0 <= N + T
+              /\ 2 * x1 <= N + T
+          BY <1>r0, <2>q, LowWeightsReceivedL8Witness DEF Weights
+    <2> QED BY <2>wit, <2>req, <1>m1same
+  <1> QED BY <1>oldMsg, <1>newMsg
 THEOREM Pres_L8_F ==
   ASSUME TypeOK, IndInv, FaultyStep
   PROVE  Lemma8_Q2RequiresNoQuorumFaster'
@@ -3423,8 +3621,10 @@ THEOREM Pres_Lemma8 ==
     <2> SUFFICES ASSUME Step1(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
           OBVIOUS
     <2> QED BY Pres_L8_S1
-  <1>o2. ASSUME NEW id \in CORRECT, Step2(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
-        OMITTED \* TODO: substantive Step2 case for Lemma8_Q2RequiresNoQuorumFaster
+  <1>o2. ASSUME NEW id \in CORRECT PROVE Step2(id) => Lemma8_Q2RequiresNoQuorumFaster'
+    <2> SUFFICES ASSUME Step2(id) PROVE Lemma8_Q2RequiresNoQuorumFaster'
+          OBVIOUS
+    <2> QED BY Pres_L8_S2
   <1>o3. FaultyStep => Lemma8_Q2RequiresNoQuorumFaster'
     <2> SUFFICES ASSUME FaultyStep PROVE Lemma8_Q2RequiresNoQuorumFaster'
           OBVIOUS
