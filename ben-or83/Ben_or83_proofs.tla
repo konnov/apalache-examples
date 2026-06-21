@@ -1654,6 +1654,17 @@ THEOREM QuorumHasCorrectM1 ==
         BY <1>d2 DEF Lemma7_D2RequiresQuorum
   <1> QED BY <1>maj, MajorityM1HasCorrect
 
+THEOREM QuorumHasM1Majority ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(r, v)
+  PROVE  LET Sv == { m \in msgs1[r] : m.v = v } IN
+           2 * Cardinality(Senders1(Sv)) > N + T
+  <1> USE DEF IndInv
+  <1>dv. Cardinality(DvSet(r, v)) >= T + 1 BY DEF ExistsQuorum2LessRam, DvSet
+  <1>d2. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
+        BY <1>dv, CorrectD2Exists
+  <1> QED BY <1>d2 DEF Lemma7_D2RequiresQuorum
+
 THEOREM SupportedSingletonNextQuorum ==
   ASSUME TypeOK, IndInv,
          NEW r \in ROUNDS, r + 1 \in ROUNDS,
