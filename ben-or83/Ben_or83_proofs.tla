@@ -333,7 +333,8 @@ LEMMA Arith_SupportedQuorumContrad ==
   PROVE  FALSE
   <1>dvle. dv <= T BY ConstNat, FleqT
   <1>sumlt. dv + oth < N - T BY <1>dvle, ConstNat, NgtT, FleqT
-  <1> QED BY <1>sumlt, ConstNat
+  <1>ge. dv + oth >= N - T BY ConstNat
+  <1> QED BY <1>sumlt, <1>ge, ConstNat
 
 LEMMA Arith_NotLtTplusOneGe ==
   ASSUME NEW a \in Nat, ~(a < T + 1)
@@ -2076,7 +2077,8 @@ LEMMA Arith_SupportedQuorumGeContrad ==
   PROVE  FALSE
   <1>dvle. dv <= T BY ConstNat, FleqT
   <1>sumlt. dv + oth < N - T BY <1>dvle, ConstNat, NgtT, FleqT
-  <1> QED BY <1>sumlt, ConstNat
+  <1>ge. dv + oth >= N - T BY ConstNat
+  <1> QED BY <1>sumlt, <1>ge, ConstNat
 
 THEOREM SupportedFromTotalAndFewOthers ==
   ASSUME TypeOK,
@@ -6169,19 +6171,19 @@ THEOREM LockLemma ==
               (\A w \in VALUES :
                  /\ ExistsQuorum2LessRam(r, w)
                  /\ Cardinality(Senders2(msgs2[r])) >= N - T
-                   => w = v)
+                 => w = v)
   <1> SUFFICES ASSUME NEW r \in ROUNDS
                PROVE  r >= a =>
                         (\A w \in VALUES :
                            /\ ExistsQuorum2LessRam(r, w)
                            /\ Cardinality(Senders2(msgs2[r])) >= N - T
-                             => w = v)
+                           => w = v)
         OBVIOUS
   <1>rGe. CASE r >= a
     <2>allW. \A w \in VALUES :
                 /\ ExistsQuorum2LessRam(r, w)
                 /\ Cardinality(Senders2(msgs2[r])) >= N - T
-                  => w = v
+                => w = v
       <3> TAKE w \in VALUES
       <3>hasQ. CASE /\ ExistsQuorum2LessRam(r, w)
                     /\ Cardinality(Senders2(msgs2[r])) >= N - T
@@ -6225,7 +6227,7 @@ THEOREM Agreement == TypeOK /\ IndInv => AgreementInv
                 (\A w \in VALUES :
                    /\ ExistsQuorum2LessRam(r, w)
                    /\ Cardinality(Senders2(msgs2[r])) >= N - T
-                     => w = decision[id1])
+                   => w = decision[id1])
               BY <1>1, <1>3, <2>total1, LockLemma
         <2>total2. Cardinality(Senders2(msgs2[a2])) >= N - T
               BY <1>2, <1>3, ReplicaPredRoundHasTotal
@@ -6237,7 +6239,7 @@ THEOREM Agreement == TypeOK /\ IndInv => AgreementInv
                 (\A w \in VALUES :
                    /\ ExistsQuorum2LessRam(r, w)
                    /\ Cardinality(Senders2(msgs2[r])) >= N - T
-                     => w = decision[id2])
+                   => w = decision[id2])
               BY <1>2, <1>3, <2>total2, LockLemma
         <2>total1. Cardinality(Senders2(msgs2[a1])) >= N - T
               BY <1>1, <1>3, ReplicaPredRoundHasTotal
