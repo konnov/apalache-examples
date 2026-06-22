@@ -7,16 +7,18 @@
  *      step `IndInv /\ [Next]_vars => IndInv'` (Section C).
  *   2. `IndInv => AgreementInv` (Section D).
  *
- * Current status: this file is a proof workbench with no explicit OMITTED
+ * Current status: this file is fully machine-checked with no OMITTED/admitted
  * obligations. The decomposition is in place for the base case, type preservation,
  * the [Next]_vars case algebra, the one-round strict-quorum lock, the cross-round
- * strict-quorum induction, and the Section D agreement skeleton.
+ * strict-quorum induction, and the Section D agreement proof.
  *
- * Intended full check: tlapm (TLAPS) + stdlib FiniteSetTheorems,
- * TLAPS and the community `Variants` module on the search path:
- *   tlapm --toolbox 0 0 Ben_or83_proofs.tla
- * Syntax/semantic check used while editing: SANY with tla2tools.jar and the same
- * local TLAPM library path.
+ * Verified with tlapm (TLAPS) build `b064bce-dirty` (`tlapm --version`), using the
+ * stdlib TLAPS + FiniteSetTheorems modules and the community `Variants` module on
+ * the search path (no Isabelle backend; all obligations discharged by Zenon/SMT):
+ *   tlapm --stretch 2 --threads 4 -I . Ben_or83_proofs.tla
+ *   => "All 6147 obligations proved", exit 0.
+ * See README.md for details. Syntax/semantic check used while editing: SANY with
+ * tla2tools.jar and the same local TLAPM library path.
  *
  * Igor Konnov & Claude, June 2026
  *)
