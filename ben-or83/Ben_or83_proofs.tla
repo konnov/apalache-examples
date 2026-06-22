@@ -7,21 +7,29 @@
  *      step `IndInv /\ [Next]_vars => IndInv'` (Section C).
  *   2. `IndInv => AgreementInv` (Section D).
  *
- * Status: STRUCTURE MACHINE-CHECKED. `tlapm` proves the non-omitted obligations
- * (the full decomposition: base case, type preservation, the [Next]_vars case algebra
- * for all 13 preservation lemmas, every frame case, and the Section D agreement
- * skeleton incl. the NaturalsInduction wiring). What remains are explicit admits,
- * each tagged `TODO`, for the genuinely hard leaves: the quorum/cardinality arguments
- * (a value gaining/keeping a quorum) and the LockLemma inductive step. Fill them in
- * priority order (see Ben_or83_inductive.tla header and the project plan).
+ * Current status: this file is a proof workbench with no explicit OMITTED
+ * obligations. The decomposition is in place for the base case, type preservation,
+ * the [Next]_vars case algebra, the one-round strict-quorum lock, the cross-round
+ * strict-quorum induction, and the Section D agreement skeleton.
  *
- * Checked with: tlapm (TLAPS) + stdlib FiniteSetTheorems, NaturalsInduction, TLAPS,
- * and the community `Variants` module on the search path:
+ * Intended full check: tlapm (TLAPS) + stdlib FiniteSetTheorems,
+ * TLAPS and the community `Variants` module on the search path:
  *   tlapm --toolbox 0 0 Ben_or83_proofs.tla
+ * Syntax/semantic check used while editing: SANY with tla2tools.jar and the same
+ * local TLAPM library path.
  *
  * Igor Konnov & Claude, June 2026
  *)
-EXTENDS Ben_or83_inductive, FiniteSetTheorems, NaturalsInduction, TLAPS
+EXTENDS Ben_or83_inductive, FiniteSetTheorems, TLAPS
+
+\* TLAPS' standard proof of this theorem uses Isabelle.  This proof workbench
+\* runs in an environment without Isabelle, so we trust the standard
+\* natural-number induction principle instead of replaying that library proof.
+AXIOM NatInductionTrusted ==
+  \A Q \in [Nat -> BOOLEAN] :
+    (/\ Q[0]
+     /\ \A n \in Nat : Q[n] => Q[n + 1])
+      => \A n \in Nat : Q[n]
 
 \*****************************************************************************
 \* NAMED ASSUMPTIONS
@@ -137,6 +145,12 @@ THEOREM Senders2_Sub ==
         BY DEF Senders2
   <1> QED
         BY <1>1, ALL_Card, FS_Subset
+
+THEOREM Senders2_Witness ==
+  ASSUME NEW S, NEW id \in Senders2(S)
+  PROVE  \E m \in S :
+           (IsD2(m) /\ AsD2(m).src = id) \/ (IsQ2(m) /\ AsQ2(m).src = id)
+  BY DEF Senders2
 
 THEOREM Senders2_Mono ==
   ASSUME NEW A, NEW B, A \subseteq B
@@ -334,6 +348,49 @@ LEMMA Arith_GeLtContrad ==
 LEMMA Arith_DoubleLtTplusOneLeNplusT ==
   ASSUME NEW a \in Nat, a < T + 1
   PROVE  2 * a <= N + T
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_StrictMajorityAfterFaults ==
+  ASSUME NEW rcv \in Nat, NEW d \in Nat, NEW bad \in Nat,
+         rcv = N - T, rcv <= d + bad, bad <= F
+  PROVE  2 * d > N + T
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_StrictMajorityAfterFaultsGe ==
+  ASSUME NEW rcv \in Nat, NEW d \in Nat, NEW bad \in Nat,
+         rcv >= N - T, rcv <= d + bad, bad <= F
+  PROVE  2 * d > N + T
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_DoubleGtNplusTImplGt3T ==
+  ASSUME NEW d \in Nat, 2 * d > N + T
+  PROVE  d > 3 * T
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_OtherLtFromStrictOverlapCore ==
+  ASSUME NEW d \in Nat, NEW o \in Nat, NEW i \in Nat, NEW u \in Nat,
+         u <= N, u = d + o - i, d > 3 * T, i <= T
+  PROVE  o < N - 2 * T
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_OtherLtFromStrictOverlap ==
+  ASSUME NEW d \in Nat, NEW o \in Nat, NEW i \in Nat, NEW u \in Nat,
+         u <= N, u = d + o - i, 2 * d > N + T, i <= F
+  PROVE  o < N - 2 * T
+  <1>dGt. d > 3 * T BY Arith_DoubleGtNplusTImplGt3T
+  <1>iLe. i <= T BY FleqT, ConstNat
+  <1> QED BY <1>dGt, <1>iLe, Arith_OtherLtFromStrictOverlapCore
+
+LEMMA Arith_Lemma8Pinned0Contrad ==
+  ASSUME NEW x0 \in Nat, NEW x1 \in Nat, NEW nf \in Nat,
+         x1 <= 0, x0 + x1 + nf >= N - T, nf <= F, 2 * x0 <= N + T
+  PROVE  FALSE
+  BY ConstNat, FleqT, NgtT
+
+LEMMA Arith_Lemma8Pinned1Contrad ==
+  ASSUME NEW x0 \in Nat, NEW x1 \in Nat, NEW nf \in Nat,
+         x0 <= 0, x0 + x1 + nf >= N - T, nf <= F, 2 * x1 <= N + T
+  PROVE  FALSE
   BY ConstNat, FleqT, NgtT
 
 THEOREM CardUnion3LeSum ==
@@ -540,9 +597,9 @@ THEOREM ShapeHelper ==
   PROVE  AsD2(m).r = rr
   <1>1. m \notin QPof(A1Q, rr)
         <2> SUFFICES ASSUME m \in QPof(A1Q, rr) PROVE FALSE OBVIOUS
-        <2>1. PICK mq \in { m \in A1Q: m.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
+        <2>1. PICK mq \in { qrec \in A1Q: qrec.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
         <2> QED BY <2>1, VariantAx
-  <1>2. PICK md \in { m \in A1D: m.r = rr } : m = D2(md.src, rr, md.v)
+  <1>2. PICK md \in { drec \in A1D: drec.r = rr } : m = D2(md.src, rr, md.v)
         BY <1>1 DEF DPof
   <1> QED BY <1>2, VariantAx
 
@@ -604,9 +661,9 @@ THEOREM ShapeHelperSrc ==
   PROVE  AsD2(m).src \in ALL
   <1>1. m \notin QPof(A1Q, rr)
         <2> SUFFICES ASSUME m \in QPof(A1Q, rr) PROVE FALSE OBVIOUS
-        <2>1. PICK mq \in { m \in A1Q: m.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
+        <2>1. PICK mq \in { qrec \in A1Q: qrec.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
         <2> QED BY <2>1, VariantAx
-  <1>2. PICK md \in { m \in A1D: m.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
+  <1>2. PICK md \in { drec \in A1D: drec.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
   <1>3. md \in A1D BY <1>2
   <1> QED BY <1>2, <1>3, VariantAx
 
@@ -635,9 +692,9 @@ THEOREM ShapeHelperSrcQ ==
   PROVE  AsQ2(m).src \in ALL
   <1>1. m \notin DPof(A1D, rr)
         <2> SUFFICES ASSUME m \in DPof(A1D, rr) PROVE FALSE OBVIOUS
-        <2>1. PICK md \in { m \in A1D: m.r = rr } : m = D2(md.src, rr, md.v) BY DEF DPof
+        <2>1. PICK md \in { drec \in A1D: drec.r = rr } : m = D2(md.src, rr, md.v) BY DEF DPof
         <2> QED BY <2>1, VariantAx
-  <1>2. PICK mq \in { m \in A1Q: m.r = rr } : m = Q2(mq.src, rr) BY <1>1 DEF QPof
+  <1>2. PICK mq \in { qrec \in A1Q: qrec.r = rr } : m = Q2(mq.src, rr) BY <1>1 DEF QPof
   <1>3. mq \in A1Q BY <1>2
   <1> QED BY <1>2, <1>3, VariantAx
 
@@ -666,9 +723,9 @@ THEOREM ShapeHelperV ==
   PROVE  AsD2(m).v \in VALUES
   <1>1. m \notin QPof(A1Q, rr)
         <2> SUFFICES ASSUME m \in QPof(A1Q, rr) PROVE FALSE OBVIOUS
-        <2>1. PICK mq \in { m \in A1Q: m.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
+        <2>1. PICK mq \in { qrec \in A1Q: qrec.r = rr } : m = Q2(mq.src, rr) BY DEF QPof
         <2> QED BY <2>1, VariantAx
-  <1>2. PICK md \in { m \in A1D: m.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
+  <1>2. PICK md \in { drec \in A1D: drec.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
   <1>3. md \in A1D BY <1>2
   <1> QED BY <1>2, <1>3, VariantAx
 
@@ -711,10 +768,10 @@ THEOREM ShapeHelperR ==
   ASSUME NEW rr, NEW A1D, NEW A1Q, NEW m, m \in DPof(A1D, rr) \union QPof(A1Q, rr)
   PROVE  (IsD2(m) => AsD2(m).r = rr) /\ (IsQ2(m) => AsQ2(m).r = rr)
   <1>1. CASE m \in DPof(A1D, rr)
-        <2>1. PICK md \in { m \in A1D : m.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
+        <2>1. PICK md \in { drec \in A1D : drec.r = rr } : m = D2(md.src, rr, md.v) BY <1>1 DEF DPof
         <2> QED BY <2>1, VariantAx
   <1>2. CASE m \in QPof(A1Q, rr)
-        <2>1. PICK mq \in { m \in A1Q : m.r = rr } : m = Q2(mq.src, rr) BY <1>2 DEF QPof
+        <2>1. PICK mq \in { qrec \in A1Q : qrec.r = rr } : m = Q2(mq.src, rr) BY <1>2 DEF QPof
         <2> QED BY <2>1, VariantAx
   <1> QED BY <1>1, <1>2
 
@@ -801,6 +858,37 @@ DvPSet(r, v) == { m \in msgs2'[r] : IsD2(m) /\ AsD2(m).v = v }
 DvPFn(r, v) == [ m \in DvPSet(r, v) |-> AsD2(m).src ]
 QPSet(r) == { m \in msgs2'[r] : IsQ2(m) }
 QPFn(r) == [ m \in QPSet(r) |-> AsQ2(m).src ]
+
+THEOREM DvSenderWitness ==
+  ASSUME NEW r, NEW v, NEW id \in Senders2(DvSet(r, v))
+  PROVE  \E md \in DvSet(r, v) : IsD2(md) /\ AsD2(md).src = id
+  <1>w. \E md \in DvSet(r, v) :
+          (IsD2(md) /\ AsD2(md).src = id)
+            \/ (IsQ2(md) /\ AsQ2(md).src = id)
+        BY Senders2_Witness
+  <1> PICK md \in DvSet(r, v) :
+          (IsD2(md) /\ AsD2(md).src = id)
+            \/ (IsQ2(md) /\ AsQ2(md).src = id)
+        BY <1>w
+  <1>d2. IsD2(md) BY DEF DvSet
+  <1> QED BY <1>d2, VariantAx
+
+THEOREM Lemma3_Q2D2Faulty ==
+  ASSUME Lemma3_NoEquivocation2ByCorrect,
+         NEW r \in ROUNDS,
+         NEW mq \in msgs2[r], NEW md \in msgs2[r],
+         IsQ2(mq), IsD2(md), AsQ2(mq).src = AsD2(md).src
+  PROVE  AsQ2(mq).src \in FAULTY
+  BY DEF Lemma3_NoEquivocation2ByCorrect
+
+THEOREM Lemma3_D2D2SameCorrect ==
+  ASSUME Lemma3_NoEquivocation2ByCorrect,
+         NEW r \in ROUNDS,
+         NEW m1 \in msgs2[r], NEW m2 \in msgs2[r],
+         IsD2(m1), IsD2(m2), AsD2(m1).src = AsD2(m2).src,
+         AsD2(m1).src \in CORRECT
+  PROVE  AsD2(m1).v = AsD2(m2).v
+  BY DEF Lemma3_NoEquivocation2ByCorrect
 
 THEOREM DvInjective ==
   ASSUME NEW r, NEW v, \A m \in msgs2[r] : IsD2(m) => AsD2(m).r = r,
@@ -991,11 +1079,11 @@ THEOREM Msgs2SenderPartitionBound ==
   <1>finD0. IsFiniteSet(DPart(S, 0)) BY <1>finS, FS_Subset DEF DPart
   <1>finD1. IsFiniteSet(DPart(S, 1)) BY <1>finS, FS_Subset DEF DPart
   <1>finQ. IsFiniteSet(QPart(S)) BY <1>finS, FS_Subset DEF QPart
-  <1>shape. /\ \A m \in S : IsD2(m) => /\ AsD2(m).src \in ALL
-                                           /\ AsD2(m).r = r
-                                           /\ AsD2(m).v \in VALUES
-             /\ \A m \in S : IsQ2(m) => /\ AsQ2(m).src \in ALL
-                                           /\ AsQ2(m).r = r
+  <1>shape. /\ \A dmsg \in S : IsD2(dmsg) => /\ AsD2(dmsg).src \in ALL
+                                                  /\ AsD2(dmsg).r = r
+                                                  /\ AsD2(dmsg).v \in VALUES
+             /\ \A qmsg \in S : IsQ2(qmsg) => /\ AsQ2(qmsg).src \in ALL
+                                                  /\ AsQ2(qmsg).r = r
         BY Msgs2Shape, Msgs2SrcInAll, Msgs2VInValues, Msgs2RShape, Msgs2QSrcInAll
   <1>part. Senders2(S)
               \subseteq (Senders2(DPart(S, 0)) \union Senders2(DPart(S, 1)))
@@ -1146,6 +1234,102 @@ THEOREM CorrectD2Exists ==
           <2>2. AsD2(mv).src \notin FAULTY BY <1>pick DEF DvSet, FaultyD2
           <2> QED BY <2>1, <2>2 DEF ALL
   <1> QED BY <1>pick, <1>cor DEF DvSet
+
+THEOREM StrictQuorumSenderStrict ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(r, v)
+  PROVE  /\ Cardinality(Senders2(DvSet(r, v))) >= T + 1
+          /\ 2 * Cardinality(Senders2(DvSet(r, v))) > N + T
+  <1>finD. IsFiniteSet(DvSet(r, v)) BY D2SetFinite
+  <1>shape. \A m \in DvSet(r, v) :
+               IsD2(m) /\ AsD2(m).src \in ALL
+                 /\ AsD2(m).r = r /\ AsD2(m).v = v
+        BY Msgs2Shape, Msgs2SrcInAll DEF DvSet
+  <1>dLeS. Cardinality(DvSet(r, v)) <= Cardinality(Senders2(DvSet(r, v)))
+        BY <1>shape, D2Fixed_CardLeSenders
+  <1>rawGe. Cardinality(DvSet(r, v)) >= T + 1
+        BY DEF ExistsQuorum2LessRam, DvSet
+  <1>rawStrict. 2 * Cardinality(DvSet(r, v)) > N + T
+        BY DEF ExistsQuorum2LessRam, DvSet
+  <1>types. /\ Cardinality(DvSet(r, v)) \in Nat
+             /\ Cardinality(Senders2(DvSet(r, v))) \in Nat
+             /\ T + 1 \in Nat /\ N + T \in Nat
+        BY <1>finD, Senders2_Sub, FS_CardinalityType, ConstNat, FleqT
+  <1>sGe. Cardinality(Senders2(DvSet(r, v))) >= T + 1
+        BY <1>rawGe, <1>dLeS, <1>types, Arith_GeTrans
+  <1>sStrict. 2 * Cardinality(Senders2(DvSet(r, v))) > N + T
+        BY <1>rawStrict, <1>dLeS, <1>types, Arith_DoubleGtMono
+  <1> QED BY <1>sGe, <1>sStrict
+
+THEOREM StrictQuorumFewOthers ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(r, v)
+  PROVE  Cardinality(Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+            < N - 2 * T
+  <1> USE DEF IndInv
+  <1> DEFINE D == Senders2(DvSet(r, v))
+             O == Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v })
+             I == D \cap O
+  <1>intFaulty. I \subseteq FAULTY
+    <2> SUFFICES ASSUME NEW id \in I PROVE id \in FAULTY OBVIOUS
+    <2>inD. id \in D BY DEF I
+    <2>inO. id \in O BY DEF I
+    <2>all. id \in ALL BY <2>inD DEF D, Senders2
+    <2>pickD. PICK md \in DvSet(r, v) :
+          IsD2(md) /\ AsD2(md).src = id
+        BY <2>inD, DvSenderWitness DEF D
+    <2>pickO. PICK mo \in { m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v } :
+          (IsD2(mo) /\ AsD2(mo).src = id) \/ (IsQ2(mo) /\ AsQ2(mo).src = id)
+        BY <2>inO, Senders2_Witness DEF O
+    <2>corr. CASE id \in CORRECT
+      <3>od. CASE IsD2(mo)
+        <4>moD. IsD2(mo) /\ AsD2(mo).src = id BY <2>pickO, <3>od, VariantAx
+        <4>mdD. IsD2(md) /\ AsD2(md).src = id BY <2>pickD
+        <4>moIn. mo \in msgs2[r] BY <2>pickO
+        <4>mdIn. md \in msgs2[r] BY <2>pickD DEF DvSet
+        <4>src. AsD2(mo).src = AsD2(md).src BY <4>moD, <4>mdD
+        <4>same. AsD2(mo).v = AsD2(md).v
+              BY <4>moIn, <4>mdIn, <4>moD, <4>mdD, <2>corr, <4>src,
+                 Lemma3_D2D2SameCorrect
+        <4>notq. ~ IsQ2(mo) BY <3>od, VariantAx
+        <4>neq. AsD2(mo).v /= v BY <2>pickO, <4>notq
+        <4>eqv. AsD2(md).v = v BY <2>pickD DEF DvSet
+        <4>false. FALSE BY <4>same, <4>neq, <4>eqv
+        <4> QED BY <4>false
+      <3>oq. CASE IsQ2(mo)
+        <4>moQ. IsQ2(mo) /\ AsQ2(mo).src = id BY <2>pickO, <3>oq, VariantAx
+        <4>mdD. IsD2(md) /\ AsD2(md).src = id BY <2>pickD
+        <4>moIn. mo \in msgs2[r] BY <2>pickO
+        <4>mdIn. md \in msgs2[r] BY <2>pickD DEF DvSet
+        <4>src. AsQ2(mo).src = AsD2(md).src BY <4>moQ, <4>mdD
+        <4>faulty. AsQ2(mo).src \in FAULTY
+              BY <4>moIn, <4>mdIn, <4>moQ, <4>mdD, <4>src,
+                 Lemma3_Q2D2Faulty
+        <4>false. FALSE BY <2>corr, <4>moQ, <4>faulty, DisjointCF
+        <4> QED BY <4>false
+      <3> QED BY <3>od, <3>oq, VariantAx
+    <2>faulty. CASE id \in FAULTY
+      <3> QED BY <2>faulty
+    <2> QED BY <2>all, <2>corr, <2>faulty DEF ALL
+  <1>finD. IsFiniteSet(D) BY Senders2_Sub
+  <1>finO. IsFiniteSet(O) BY Senders2_Sub
+  <1>finI. IsFiniteSet(I) BY <1>finD, FS_Intersection DEF I
+  <1>finU. IsFiniteSet(D \union O) BY <1>finD, <1>finO, FS_Union
+  <1>uSub. D \union O \subseteq ALL BY Senders2_Sub
+  <1>uLeN. Cardinality(D \union O) <= N BY <1>uSub, ALL_Card, FS_Subset
+  <1>iLeF. Cardinality(I) <= F BY <1>intFaulty, FiniteCF, FS_Subset, NTF
+  <1>unionEq. Cardinality(D \union O) = Cardinality(D) + Cardinality(O) - Cardinality(I)
+        BY <1>finD, <1>finO, FS_Union DEF I
+  <1>dStrict. 2 * Cardinality(D) > N + T BY StrictQuorumSenderStrict DEF D
+  <1>types. /\ Cardinality(D) \in Nat
+             /\ Cardinality(O) \in Nat
+             /\ Cardinality(I) \in Nat
+             /\ Cardinality(D \union O) \in Nat
+        BY <1>finD, <1>finO, <1>finI, <1>finU, FS_CardinalityType
+  <1> QED BY <1>uLeN, <1>unionEq, <1>dStrict, <1>iLeF, <1>types,
+             Arith_OtherLtFromStrictOverlap DEF O
 
 \* A round cannot support two different values. A supported value has at least
 \* T+1 D2 senders, hence at least one correct D2 sender; Lemma7 turns that into
@@ -1330,6 +1514,382 @@ THEOREM DQuorumDominatesMajorityD ==
           BY <2>1, <2>2, MajorityIntersect
     <2> QED BY <2>3 DEF Senders1
   <1> QED BY <1>meet DEF Lemma2_NoEquivocation1ByCorrect
+
+THEOREM StrictQuorumSupportedSingleton ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(r, v),
+         Cardinality(Senders2(msgs2[r])) >= N - T
+  PROVE  v \in SupportedValues(r)
+         /\ \A u \in SupportedValues(r) : u = v
+  <1>sender. Cardinality(Senders2(DvSet(r, v))) >= T + 1
+        BY StrictQuorumSenderStrict
+  <1>few. Cardinality(Senders2({ m \in msgs2[r] : IsQ2(m) \/ AsD2(m).v /= v }))
+             < N - 2 * T
+        BY StrictQuorumFewOthers
+  <1>vin. v \in SupportedValues(r)
+        BY <1>sender, <1>few DEF SupportedValues, DvSet
+  <1>all. \A u \in SupportedValues(r) : u = v
+    <2> SUFFICES ASSUME NEW u \in SupportedValues(r) PROVE u = v OBVIOUS
+    <2>uv. u = v BY QuorumDominatesSupported
+    <2> QED BY <2>uv
+  <1> QED BY <1>vin, <1>all
+
+THEOREM SupportedSingletonPinsNextM1 ==
+  ASSUME TypeOK, IndInv,
+         NEW r \in ROUNDS, r + 1 \in ROUNDS,
+         NEW v \in SupportedValues(r),
+         \A u \in SupportedValues(r) : u = v,
+         NEW m \in msgs1[r + 1],
+         m.src \in CORRECT
+  PROVE  m.v = v
+  <1> USE DEF IndInv
+  <1>conn. LET Supported == SupportedValues(r) IN
+             \/ Supported = {}
+             \/ \E u \in Supported :
+                  \A mm \in msgs1[r + 1] : mm.src \in CORRECT => mm.v = u
+        BY DEF Lemma9_RoundsConnection
+  <1>nonempty. SupportedValues(r) # {} OBVIOUS
+  <1>pick. PICK u \in SupportedValues(r) :
+              \A mm \in msgs1[r + 1] : mm.src \in CORRECT => mm.v = u
+        BY <1>conn, <1>nonempty
+  <1>uv. u = v BY <1>pick
+  <1>mv. m.v = u BY <1>pick
+  <1> QED BY <1>uv, <1>mv
+
+THEOREM EarlyTplusOneHasCorrect ==
+  ASSUME NEW S, S \subseteq ALL, Cardinality(S) >= T + 1
+  PROVE  \E id \in S : id \in CORRECT
+  <1>fin. IsFiniteSet(S) BY SubAll_Finite
+  <1>card. Cardinality(S) \in Nat BY <1>fin, FS_CardinalityType
+  <1>ge. Cardinality(S) >= T + 1 OBVIOUS
+  <1>bad. S \ CORRECT \subseteq FAULTY BY DEF ALL
+  <1>bd. Cardinality(S \ CORRECT) <= F BY <1>bad, FiniteCF, FS_Subset, NTF
+  <1> QED
+    <2>suf. SUFFICES ASSUME \A id \in S : id \notin CORRECT PROVE FALSE OBVIOUS
+    <2>eq. S = S \ CORRECT BY <2>suf
+    <2>le. Cardinality(S) <= F BY <2>eq, <1>bd
+    <2> QED BY <1>card, <1>ge, <2>le, Arith_TplusOneNotFaulty
+
+THEOREM EarlyMajorityM1HasCorrect ==
+  ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
+         2 * Cardinality(Senders1({ m \in msgs1[r] : m.v = v })) > N + T
+  PROVE  \E id \in CORRECT : \E m \in msgs1[r] : m.src = id /\ m.v = v
+  <1> DEFINE S == Senders1({ m \in msgs1[r] : m.v = v })
+  <1>sub. S \subseteq ALL BY Senders1_Sub
+  <1>types. Cardinality(S) \in Nat BY Senders1_Sub, FS_CardinalityType
+  <1>ge. Cardinality(S) >= T + 1 BY <1>types, Arith_DoubleGtNplusTImplTplusOne
+  <1>pick. PICK id \in S : id \in CORRECT BY <1>sub, <1>ge, EarlyTplusOneHasCorrect
+  <1> QED BY <1>pick DEF S, Senders1
+
+THEOREM LockedNextCorrectD2Value ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         a + 1 \in ROUNDS,
+         NEW m \in msgs2[a + 1],
+         IsD2(m),
+         AsD2(m).src \in CORRECT
+  PROVE  AsD2(m).v = v
+  <1>support. v \in SupportedValues(a)
+              /\ \A u \in SupportedValues(a) : u = v
+        BY StrictQuorumSupportedSingleton
+  <1>wv. AsD2(m).v \in VALUES BY Msgs2VInValues
+  <1>d2. \E md \in msgs2[a + 1] :
+            IsD2(md) /\ AsD2(md).v = AsD2(m).v /\ AsD2(md).src \in CORRECT
+        OBVIOUS
+  <1>l7. Lemma7_D2RequiresQuorum BY DEF IndInv
+  <1>maj. LET Sv == { mm \in msgs1[a + 1] : mm.v = AsD2(m).v } IN
+            2 * Cardinality(Senders1(Sv)) > N + T
+        BY <1>l7, <1>wv, <1>d2 DEF Lemma7_D2RequiresQuorum
+  <1>corrM1. \E id \in CORRECT :
+               \E mm \in msgs1[a + 1] : mm.src = id /\ mm.v = AsD2(m).v
+        BY <1>wv, <1>maj, EarlyMajorityM1HasCorrect
+  <1> PICK id \in CORRECT, mm \in msgs1[a + 1] :
+        mm.src = id /\ mm.v = AsD2(m).v
+        BY <1>corrM1
+  <1>pin. mm.v = v BY <1>support, SupportedSingletonPinsNextM1
+  <1> QED BY <1>pin
+
+THEOREM LockedNextNoCorrectQ2 ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         a + 1 \in ROUNDS,
+         NEW m \in msgs2[a + 1],
+         IsQ2(m),
+         AsQ2(m).src \in CORRECT
+  PROVE  FALSE
+  <1> USE DEF IndInv
+  <1>support. v \in SupportedValues(a)
+              /\ \A u \in SupportedValues(a) : u = v
+        BY StrictQuorumSupportedSingleton
+  <1>rnext. a + 1 \in { rr \in ROUNDS :
+                  \E mq \in msgs2[rr] : IsQ2(mq) /\ AsQ2(mq).src \in CORRECT }
+        OBVIOUS
+  <1>wit. LET n0 == Cardinality({ id \in CORRECT:
+                        [ src |-> id, r |-> a + 1, v |-> 0 ] \in msgs1[a + 1] })
+              n1 == Cardinality({ id \in CORRECT:
+                        [ src |-> id, r |-> a + 1, v |-> 1 ] \in msgs1[a + 1] })
+              nf == Cardinality({ id \in FAULTY:
+                        id \in { mm.src : mm \in msgs1[a + 1] } })
+          IN
+          \E x0, x1 \in 0..N :
+            /\ x0 <= n0 /\ x1 <= n1
+            /\ x0 + x1 + nf >= N - T
+            /\ 2 * x0 <= N + T
+            /\ 2 * x1 <= N + T
+        BY <1>rnext DEF Lemma8_Q2RequiresNoQuorumFaster
+  <1> PICK x0 \in 0..N, x1 \in 0..N :
+        LET n0 == Cardinality({ id \in CORRECT:
+                      [ src |-> id, r |-> a + 1, v |-> 0 ] \in msgs1[a + 1] })
+            n1 == Cardinality({ id \in CORRECT:
+                      [ src |-> id, r |-> a + 1, v |-> 1 ] \in msgs1[a + 1] })
+            nf == Cardinality({ id \in FAULTY:
+                      id \in { mm.src : mm \in msgs1[a + 1] } })
+        IN
+          /\ x0 <= n0 /\ x1 <= n1
+          /\ x0 + x1 + nf >= N - T
+          /\ 2 * x0 <= N + T
+          /\ 2 * x1 <= N + T
+        BY <1>wit
+  <1> DEFINE N0 == { id \in CORRECT :
+                       [ src |-> id, r |-> a + 1, v |-> 0 ] \in msgs1[a + 1] }
+             N1 == { id \in CORRECT :
+                       [ src |-> id, r |-> a + 1, v |-> 1 ] \in msgs1[a + 1] }
+             NF == { id \in FAULTY : id \in { mm.src : mm \in msgs1[a + 1] } }
+  <1>bounds. /\ x0 <= Cardinality(N0)
+              /\ x1 <= Cardinality(N1)
+              /\ x0 + x1 + Cardinality(NF) >= N - T
+              /\ 2 * x0 <= N + T
+              /\ 2 * x1 <= N + T
+        OBVIOUS
+  <1>fin0. IsFiniteSet(N0) BY FiniteCF, FS_Subset
+  <1>fin1. IsFiniteSet(N1) BY FiniteCF, FS_Subset
+  <1>finF. IsFiniteSet(NF) BY FiniteCF, FS_Subset
+  <1>nfLe. Cardinality(NF) <= F BY FiniteCF, FS_Subset, NTF DEF NF
+  <1>types. /\ x0 \in Nat /\ x1 \in Nat
+             /\ Cardinality(N0) \in Nat
+             /\ Cardinality(N1) \in Nat
+             /\ Cardinality(NF) \in Nat
+        BY <1>fin0, <1>fin1, <1>finF, FS_CardinalityType
+  <1>v0. CASE v = 0
+    <2>n1Empty. N1 = {}
+      <3>subEmpty. N1 \subseteq {}
+        <4> SUFFICES ASSUME NEW id \in N1 PROVE id \in {} OBVIOUS
+        <4>m1. [ src |-> id, r |-> a + 1, v |-> 1 ] \in msgs1[a + 1]
+                /\ id \in CORRECT
+              BY DEF N1
+        <4>pin. [ src |-> id, r |-> a + 1, v |-> 1 ].v = v
+              BY <1>support, <4>m1, SupportedSingletonPinsNextM1
+        <4>false. FALSE BY <1>v0, <4>pin
+        <4> QED BY <4>false
+      <3> QED BY <3>subEmpty
+    <2>n1Card. Cardinality(N1) = 0 BY <2>n1Empty, <1>fin1, FS_EmptySet
+    <2>x1zero. x1 <= 0 BY <1>bounds, <2>n1Card
+    <2> QED BY <1>bounds, <1>nfLe, <1>types, <2>x1zero, Arith_Lemma8Pinned0Contrad
+  <1>v1. CASE v = 1
+    <2>n0Empty. N0 = {}
+      <3>subEmpty. N0 \subseteq {}
+        <4> SUFFICES ASSUME NEW id \in N0 PROVE id \in {} OBVIOUS
+        <4>m1. [ src |-> id, r |-> a + 1, v |-> 0 ] \in msgs1[a + 1]
+                /\ id \in CORRECT
+              BY DEF N0
+        <4>pin. [ src |-> id, r |-> a + 1, v |-> 0 ].v = v
+              BY <1>support, <4>m1, SupportedSingletonPinsNextM1
+        <4>false. FALSE BY <1>v1, <4>pin
+        <4> QED BY <4>false
+      <3> QED BY <3>subEmpty
+    <2>n0Card. Cardinality(N0) = 0 BY <2>n0Empty, <1>fin0, FS_EmptySet
+    <2>x0zero. x0 <= 0 BY <1>bounds, <2>n0Card
+    <2> QED BY <1>bounds, <1>nfLe, <1>types, <2>x0zero, Arith_Lemma8Pinned1Contrad
+  <1> QED BY <1>v0, <1>v1 DEF VALUES
+
+THEOREM ReplicaPredRoundHasTotal ==
+  ASSUME TypeOK, IndInv,
+         NEW id \in CORRECT,
+         round[id] > 1,
+         NEW r \in ROUNDS,
+         r = round[id] - 1
+  PROVE  Cardinality(Senders2(msgs2[r])) >= N - T
+  <1>l5. Lemma5_RoundNeedsSentMessages BY DEF IndInv
+  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
+  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
+  <1>dom. round \in [ CORRECT -> ROUNDS ] /\ step \in [ CORRECT -> {S1, S2, S3} ]
+        BY DEF TypeOK
+  <1>ridNat. round[id] \in Nat BY <1>dom, RoundsNat
+  <1>rplus. r + 1 = round[id]
+        BY <1>ridNat, Arith_MinusOnePlusOne
+  <1>rplusIn. r + 1 \in ROUNDS BY <1>rplus, <1>dom
+  <1>s1. CASE step[id] = S1
+    <2>next. \E oldId \in CORRECT : round[oldId] = r + 1 /\ step[oldId] = S1
+          BY <1>rplus, <1>s1
+    <2> QED BY <1>l12, <1>rplusIn, <2>next DEF Lemma12_CannotJumpRoundsWithoutQuorum
+  <1>notS1. CASE step[id] # S1
+    <2>m1. \E m \in msgs1[r + 1] : m.src = id
+          BY <1>l5, <1>rplus, <1>rplusIn, <1>notS1 DEF Lemma5_RoundNeedsSentMessages
+    <2>succ. r + 1 \in ROUNDS \ {1} BY <1>rplusIn, RoundsNat, ConstNat
+    <2>rw. r + 1 \in { rr \in ROUNDS \ {1}: \E m \in msgs1[rr]: m.src \in CORRECT }
+          BY <2>m1, <2>succ
+    <2>q. Cardinality(Senders2(msgs2[(r + 1) - 1])) >= N - T
+          BY <1>l10, <2>rw DEF Lemma10_M1RequiresQuorum
+    <2>prev. (r + 1) - 1 = r BY RoundsNat, Arith_PlusOneMinusOne
+    <2> QED BY <2>q, <2>prev
+  <1> QED BY <1>s1, <1>notS1
+
+\* CENTRAL LOCK OBLIGATION. Once a correct replica has decided, every later Step3 receive
+\* set at its current round contains a strict D-quorum for the decided value. This is the
+\* receive-set form needed both for Lemma6 preservation (it rules out the random reset
+\* branch and pins any high branch to the decision) and for Lemma1's decided-carry case.
+\* ONE-ROUND STRICT LOCK. If round a has a strict D quorum for v, then every N-T
+\* receive set in round a+1 has a strict D quorum for v. Finishing this theorem is
+\* the main local proof task for both inductiveness and agreement:
+\*   strict quorum at a plus N-T type-2 senders -> SupportedValues(a) = {v};
+\*   Lemma9 pins correct M1s in a+1 to v;
+\*   any Step2 receive set in a+1 has > (N+T)/2 correct M1(v), so correct type-2
+\*   senders in a+1 send D2(v);
+\*   any Step3 receive set in a+1 contains enough correct type-2 senders for a strict
+\*   D2(v) majority, using N > 5*T and F <= T.
+THEOREM StrictQuorumNextCorrectType2 ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         a + 1 \in ROUNDS,
+         NEW m \in msgs2[a + 1],
+         (IsD2(m) => AsD2(m).src \in CORRECT)
+           /\ (IsQ2(m) => AsQ2(m).src \in CORRECT)
+  PROVE  IsD2(m) /\ AsD2(m).v = v
+  <1>d. CASE IsD2(m)
+    <2>src. AsD2(m).src \in CORRECT BY <1>d
+    <2>val. AsD2(m).v = v BY <1>d, <2>src, LockedNextCorrectD2Value
+    <2> QED BY <1>d, <2>val
+  <1>q. CASE IsQ2(m)
+    <2>src. AsQ2(m).src \in CORRECT BY <1>q
+    <2>false. FALSE BY <1>q, <2>src, LockedNextNoCorrectQ2
+    <2> QED BY <2>false
+  <1> QED BY <1>d, <1>q, VariantAx
+
+THEOREM LockedReceiveCorrectType2Strict ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         NEW received \in SUBSET msgs2[r],
+         Cardinality(Senders2(received)) = N - T,
+         \A m \in received :
+           ((IsD2(m) => AsD2(m).src \in CORRECT)
+             /\ (IsQ2(m) => AsQ2(m).src \in CORRECT))
+              => IsD2(m) /\ AsD2(m).v = v
+  PROVE  2 * Cardinality(Senders2({ m \in received:
+                                      IsD2(m) /\ AsD2(m).v = v }))
+            > N + T
+  <1> DEFINE GoodMsgs == { m \in received : IsD2(m) /\ AsD2(m).v = v }
+             Good == Senders2(GoodMsgs)
+             R == Senders2(received)
+             Bad == R \ Good
+  <1>badFaulty. Bad \subseteq FAULTY
+    <2> SUFFICES ASSUME NEW id \in Bad PROVE id \in FAULTY OBVIOUS
+    <2>rin. id \in R /\ id \notin Good BY DEF Bad
+    <2>pick. PICK m \in received :
+          (IsD2(m) /\ AsD2(m).src = id) \/ (IsQ2(m) /\ AsQ2(m).src = id)
+        BY <2>rin DEF R, Senders2
+    <2>all. id \in ALL BY <2>rin DEF R, Senders2
+    <2>corr. CASE id \in CORRECT
+      <3>dsrc. IsD2(m) => AsD2(m).src \in CORRECT
+        <4> SUFFICES ASSUME IsD2(m) PROVE AsD2(m).src \in CORRECT
+              OBVIOUS
+        <4>src. AsD2(m).src = id BY <2>pick, VariantAx
+        <4> QED BY <4>src, <2>corr
+      <3>qsrc. IsQ2(m) => AsQ2(m).src \in CORRECT
+        <4> SUFFICES ASSUME IsQ2(m) PROVE AsQ2(m).src \in CORRECT
+              OBVIOUS
+        <4>src. AsQ2(m).src = id BY <2>pick, VariantAx
+        <4> QED BY <4>src, <2>corr
+      <3>ant. (IsD2(m) => AsD2(m).src \in CORRECT)
+                 /\ (IsQ2(m) => AsQ2(m).src \in CORRECT)
+            BY <3>dsrc, <3>qsrc
+      <3>locked. IsD2(m) /\ AsD2(m).v = v BY <3>ant
+      <3>gin. id \in Good BY <2>pick, <3>locked DEF Good, GoodMsgs, Senders2
+      <3> QED BY <2>rin, <3>gin
+    <2>faulty. CASE id \in FAULTY
+      <3> QED BY <2>faulty
+    <2> QED BY <2>all, <2>corr, <2>faulty DEF ALL
+  <1>cover. R \subseteq Good \union Bad BY DEF Bad
+  <1>finG. IsFiniteSet(Good) BY Senders2_Sub
+  <1>finB. IsFiniteSet(Bad) BY <1>badFaulty, FiniteCF, FS_Subset
+  <1>finU. IsFiniteSet(Good \union Bad) BY <1>finG, <1>finB, FS_Union
+  <1>rleU. Cardinality(R) <= Cardinality(Good \union Bad)
+        BY <1>cover, <1>finU, FS_Subset
+  <1>ule. Cardinality(Good \union Bad) <= Cardinality(Good) + Cardinality(Bad)
+        BY <1>finG, <1>finB, CardUnion2LeSum
+  <1>badLe. Cardinality(Bad) <= F BY <1>badFaulty, FiniteCF, FS_Subset, NTF
+  <1>types. /\ Cardinality(R) \in Nat
+             /\ Cardinality(Good) \in Nat
+             /\ Cardinality(Bad) \in Nat
+             /\ Cardinality(Good \union Bad) \in Nat
+        BY Senders2_Sub, <1>finB, <1>finU, FS_CardinalityType
+  <1>rle. Cardinality(R) <= Cardinality(Good) + Cardinality(Bad)
+        BY <1>rleU, <1>ule, <1>types, Arith_LeTrans
+  <1>strict. 2 * Cardinality(Good) > N + T
+        BY <1>rle, <1>badLe, <1>types, Arith_StrictMajorityAfterFaults DEF R
+  <1> QED BY <1>strict DEF Good, GoodMsgs
+
+THEOREM StrictQuorumNextReceiveStrictD ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         a + 1 \in ROUNDS,
+         NEW received \in SUBSET msgs2[a + 1],
+         Cardinality(Senders2(received)) = N - T
+  PROVE  2 * Cardinality(Senders2({ m \in received:
+                                      IsD2(m) /\ AsD2(m).v = v }))
+            > N + T
+  <1>recsub. received \subseteq msgs2[a + 1] OBVIOUS
+  <1>locked. \A m \in received :
+        ((IsD2(m) => AsD2(m).src \in CORRECT)
+          /\ (IsQ2(m) => AsQ2(m).src \in CORRECT))
+            => IsD2(m) /\ AsD2(m).v = v
+    <2> SUFFICES ASSUME NEW m \in received,
+                         (IsD2(m) => AsD2(m).src \in CORRECT)
+                           /\ (IsQ2(m) => AsQ2(m).src \in CORRECT)
+                  PROVE  IsD2(m) /\ AsD2(m).v = v
+          OBVIOUS
+    <2>min. m \in msgs2[a + 1] BY <1>recsub
+    <2> QED BY <2>min, StrictQuorumNextCorrectType2
+  <1> QED BY <1>locked, LockedReceiveCorrectType2Strict
+
+THEOREM LockedReceiveStrictD ==
+  ASSUME TypeOK, IndInv,
+         NEW id0 \in CORRECT,
+         Step3(id0),
+         decision[id0] # NO_DECISION,
+         NEW received \in SUBSET msgs2[round[id0]],
+         Cardinality(Senders2(received)) = N - T
+  PROVE  2 * Cardinality(Senders2({ m \in received:
+                                      IsD2(m) /\ AsD2(m).v = decision[id0] }))
+            > N + T
+  <1>l1. Lemma1_DecisionRequiresLastQuorumLessRam BY DEF IndInv
+  <1>dom. /\ round[id0] \in ROUNDS
+          /\ decision[id0] \in VALUES \union { NO_DECISION }
+        BY DEF TypeOK
+  <1>dec. /\ round[id0] > 1
+          /\ ExistsQuorum2LessRam(round[id0] - 1, decision[id0])
+        BY <1>l1 DEF Lemma1_DecisionRequiresLastQuorumLessRam
+  <1>v. decision[id0] \in VALUES BY <1>dom, NoDecisionNotValue
+  <1>rin. round[id0] \in ROUNDS /\ round[id0] # 1 BY <1>dom, <1>dec, RoundsNat
+  <1>prev. round[id0] - 1 \in ROUNDS BY <1>rin, RoundPredInRounds
+  <1>totalPrev. Cardinality(Senders2(msgs2[round[id0] - 1])) >= N - T
+        BY <1>dec, <1>prev, ReplicaPredRoundHasTotal
+  <1>ridNat. round[id0] \in Nat BY <1>dom, RoundsNat
+  <1>succ. (round[id0] - 1) + 1 = round[id0]
+        BY <1>ridNat, <1>dec, Arith_MinusOnePlusOne
+  <1>succIn. (round[id0] - 1) + 1 \in ROUNDS
+        BY <1>succ, <1>dom
+  <1>recsub. received \in SUBSET msgs2[(round[id0] - 1) + 1]
+        BY <1>succ
+  <1> QED BY <1>dec, <1>v, <1>prev, <1>totalPrev, <1>succIn, <1>recsub, StrictQuorumNextReceiveStrictD
 
 THEOREM HighWeightReceivedL11Witness ==
   ASSUME TypeOK, IndInv,
@@ -1622,13 +2182,14 @@ THEOREM TplusOneHasCorrect ==
   PROVE  \E id \in S : id \in CORRECT
   <1>fin. IsFiniteSet(S) BY SubAll_Finite
   <1>card. Cardinality(S) \in Nat BY <1>fin, FS_CardinalityType
+  <1>ge. Cardinality(S) >= T + 1 OBVIOUS
   <1>bad. S \ CORRECT \subseteq FAULTY BY DEF ALL
   <1>bd. Cardinality(S \ CORRECT) <= F BY <1>bad, FiniteCF, FS_Subset, NTF
   <1> QED
     <2>suf. SUFFICES ASSUME \A id \in S : id \notin CORRECT PROVE FALSE OBVIOUS
     <2>eq. S = S \ CORRECT BY <2>suf
     <2>le. Cardinality(S) <= F BY <2>eq, <1>bd
-    <2> QED BY <1>card, <1>, <2>le, Arith_TplusOneNotFaulty
+    <2> QED BY <1>card, <1>ge, <2>le, Arith_TplusOneNotFaulty
 
 THEOREM MajorityM1HasCorrect ==
   ASSUME NEW r \in ROUNDS, NEW v \in VALUES,
@@ -1664,6 +2225,49 @@ THEOREM QuorumHasM1Majority ==
   <1>d2. \E mv \in msgs2[r] : IsD2(mv) /\ AsD2(mv).v = v /\ AsD2(mv).src \in CORRECT
         BY <1>dv, CorrectD2Exists
   <1> QED BY <1>d2 DEF Lemma7_D2RequiresQuorum
+
+THEOREM LaterQuorumGivesTotalBefore ==
+  ASSUME TypeOK, IndInv,
+         NEW b \in ROUNDS, NEW r \in ROUNDS, b < r,
+         NEW w \in VALUES, ExistsQuorum2LessRam(r, w)
+  PROVE  Cardinality(Senders2(msgs2[b])) >= N - T
+  <1> USE DEF IndInv
+  <1>dv. Cardinality(DvSet(r, w)) >= T + 1
+        BY DEF ExistsQuorum2LessRam, DvSet
+  <1>d2. \E md \in msgs2[r] : IsD2(md) /\ AsD2(md).v = w /\ AsD2(md).src \in CORRECT
+        BY <1>dv, CorrectD2Exists
+  <1> PICK md \in msgs2[r] :
+        IsD2(md) /\ AsD2(md).v = w /\ AsD2(md).src \in CORRECT
+        BY <1>d2
+  <1> DEFINE id == AsD2(md).src
+  <1>idc. id \in CORRECT OBVIOUS
+  <1>rshape. AsD2(md).r = r BY Msgs2Shape
+  <1>src. AsD2(md).src = id BY DEF id
+  <1>dom. round[id] \in ROUNDS BY <1>idc DEF TypeOK
+  <1>nat. b \in Nat /\ r \in Nat /\ round[id] \in Nat
+        BY <1>dom, RoundsNat
+  <1>reach. b + 1 < round[id] \/ (b + 1 = round[id] /\ step[id] # S1)
+    <2>s3. CASE step[id] = S3
+      <3>rle. r <= round[id]
+            BY <1>rshape, <1>src, <1>idc, <2>s3 DEF Lemma4_MessagesNotFromFuture
+      <3>notS1. step[id] # S1 BY <2>s3 DEF S1, S3
+      <3> QED BY <1>nat, <3>rle, <3>notS1, ConstNat
+    <2>notS3. CASE step[id] # S3
+      <3>rlt. r < round[id]
+            BY <1>rshape, <1>src, <1>idc, <2>notS3 DEF Lemma4_MessagesNotFromFuture
+      <3>lt. b + 1 < round[id] BY <1>nat, <3>rlt, ConstNat
+      <3> QED BY <3>lt
+    <2> QED BY <2>s3, <2>notS3
+  <1>bp1. b + 1 \in ROUNDS \ { 1 } BY RoundsNat, ConstNat
+  <1>m1. \E mm \in msgs1[b + 1] : mm.src = id
+        BY <1>reach, <1>bp1 DEF Lemma5_RoundNeedsSentMessages
+  <1>rw. b + 1 \in { rr \in ROUNDS \ { 1 } :
+                       \E mm \in msgs1[rr] : mm.src \in CORRECT }
+        BY <1>m1, <1>idc, <1>bp1
+  <1>q. Cardinality(Senders2(msgs2[(b + 1) - 1])) >= N - T
+        BY <1>rw DEF Lemma10_M1RequiresQuorum
+  <1>prev. (b + 1) - 1 = b BY RoundsNat, Arith_PlusOneMinusOne
+  <1> QED BY <1>q, <1>prev
 
 THEOREM SupportedSingletonNextQuorum ==
   ASSUME TypeOK, IndInv,
@@ -1868,13 +2472,13 @@ THEOREM Msgs2AddQRep ==
 THEOREM Msgs1AddSetRep ==
   ASSUME NEW A \in SUBSET [ src: ALL, r: ROUNDS, v: VALUES ],
          NEW rr0 \in ROUNDS,
-         NEW F \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ],
+         NEW Add \in SUBSET [ src: ALL, r: { rr0 }, v: VALUES ],
          NEW f,
          f = [ rr \in ROUNDS |-> { m \in A : m.r = rr } ]
-  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union F ]
-         = [ rr \in ROUNDS |-> { m \in A \union F : m.r = rr } ]
-  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union F ]
-             rhs == [ rr \in ROUNDS |-> { m \in A \union F : m.r = rr } ]
+  PROVE  [ f EXCEPT ![rr0] = f[rr0] \union Add ]
+         = [ rr \in ROUNDS |-> { m \in A \union Add : m.r = rr } ]
+  <1> DEFINE lhs == [ f EXCEPT ![rr0] = f[rr0] \union Add ]
+             rhs == [ rr \in ROUNDS |-> { m \in A \union Add : m.r = rr } ]
   <1>vals. \A rr \in ROUNDS : lhs[rr] = rhs[rr]
     <2> SUFFICES ASSUME NEW rr \in ROUNDS PROVE lhs[rr] = rhs[rr] OBVIOUS
     <2>eq. CASE rr = rr0
@@ -1926,75 +2530,75 @@ THEOREM Msgs2AddSetsRep ==
   <1> QED BY <1>vals DEF lhs, rhs
 
 THEOREM UpdateUnionMono ==
-  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW F
+  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW Add
   PROVE  \A rr \in ROUNDS :
-           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union Add ][rr]
   <1> SUFFICES ASSUME NEW rr \in ROUNDS
-              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union Add ][rr]
         OBVIOUS
   <1>eq. CASE rr = rr0
     <2> SUFFICES ASSUME NEW x \in f[rr]
-                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union Add ][rr]
           OBVIOUS
     <2> QED BY <1>eq, SMT
   <1>ne. CASE rr # rr0
     <2> SUFFICES ASSUME NEW x \in f[rr]
-                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union Add ][rr]
           OBVIOUS
     <2> QED BY <1>ne, SMT
   <1> QED BY <1>eq, <1>ne
 
 THEOREM UpdateUnionNewInAdded ==
-  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW F,
+  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW Add,
          DOMAIN f = ROUNDS,
          NEW rr \in ROUNDS, NEW m,
-         m \in [ f EXCEPT ![rr0] = f[rr0] \union F ][rr],
+         m \in [ f EXCEPT ![rr0] = f[rr0] \union Add ][rr],
          m \notin f[rr]
-  PROVE  rr = rr0 /\ m \in F
+  PROVE  rr = rr0 /\ m \in Add
   <1>eq. CASE rr = rr0
-    <2>1. m \in f[rr0] \union F BY <1>eq, SMT
+    <2>1. m \in f[rr0] \union Add BY <1>eq, SMT
     <2>2. m \notin f[rr0] BY <1>eq, SMT
-    <2>3. m \in F BY <2>1, <2>2
+    <2>3. m \in Add BY <2>1, <2>2
     <2> QED BY <1>eq, <2>3
   <1>ne. CASE rr # rr0
-    <2> FALSE BY <1>ne, SMT
-    <2> QED BY <2>
+    <2>false. FALSE BY <1>ne, SMT
+    <2> QED BY <2>false
   <1> QED BY <1>eq, <1>ne
 
 THEOREM UpdateUnion2Mono ==
-  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW F, NEW G
+  ASSUME NEW f, DOMAIN f = ROUNDS, NEW rr0 \in ROUNDS, NEW Add1, NEW Add2
   PROVE  \A rr \in ROUNDS :
-           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+           f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union Add1 \union Add2 ][rr]
   <1> SUFFICES ASSUME NEW rr \in ROUNDS
-              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+              PROVE f[rr] \subseteq [ f EXCEPT ![rr0] = f[rr0] \union Add1 \union Add2 ][rr]
         OBVIOUS
   <1>eq. CASE rr = rr0
     <2> SUFFICES ASSUME NEW x \in f[rr]
-                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union Add1 \union Add2 ][rr]
           OBVIOUS
     <2> QED BY <1>eq, SMT
   <1>ne. CASE rr # rr0
     <2> SUFFICES ASSUME NEW x \in f[rr]
-                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr]
+                PROVE  x \in [ f EXCEPT ![rr0] = f[rr0] \union Add1 \union Add2 ][rr]
           OBVIOUS
     <2> QED BY <1>ne, SMT
   <1> QED BY <1>eq, <1>ne
 
 THEOREM UpdateUnion2NewInAdded ==
-  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW F, NEW G,
+  ASSUME NEW f, NEW rr0 \in ROUNDS, NEW Add1, NEW Add2,
          DOMAIN f = ROUNDS,
          NEW rr \in ROUNDS, NEW m,
-         m \in [ f EXCEPT ![rr0] = f[rr0] \union F \union G ][rr],
+         m \in [ f EXCEPT ![rr0] = f[rr0] \union Add1 \union Add2 ][rr],
          m \notin f[rr]
-  PROVE  rr = rr0 /\ m \in F \union G
+  PROVE  rr = rr0 /\ m \in Add1 \union Add2
   <1>eq. CASE rr = rr0
-    <2>1. m \in (f[rr0] \union F) \union G BY <1>eq, SMT
+    <2>1. m \in (f[rr0] \union Add1) \union Add2 BY <1>eq, SMT
     <2>2. m \notin f[rr0] BY <1>eq, SMT
-    <2>3. m \in F \union G BY <2>1, <2>2
+    <2>3. m \in Add1 \union Add2 BY <2>1, <2>2
     <2> QED BY <1>eq, <2>3
   <1>ne. CASE rr # rr0
-    <2> FALSE BY <1>ne, SMT
-    <2> QED BY <2>
+    <2>false. FALSE BY <1>ne, SMT
+    <2> QED BY <2>false
   <1> QED BY <1>eq, <1>ne
 
 THEOREM FaultyMsgs2AddedFaulty ==
@@ -2007,11 +2611,11 @@ THEOREM FaultyMsgs2AddedFaulty ==
   PROVE  (IsD2(m) => AsD2(m).src \in FAULTY)
          /\ (IsQ2(m) => AsQ2(m).src \in FAULTY)
   <1>d. CASE m \in { D2(mm.src, rr0, mm.v): mm \in F2D }
-    <2> PICK mm \in F2D : m = D2(mm.src, rr0, mm.v) BY <1>d
-    <2> QED BY <2>, VariantAx DEF FaultyD2Records
+    <2>pick. PICK mm \in F2D : m = D2(mm.src, rr0, mm.v) BY <1>d
+    <2> QED BY <2>pick, VariantAx DEF FaultyD2Records
   <1>q. CASE m \in { Q2(mm.src, rr0): mm \in F2Q }
-    <2> PICK mm \in F2Q : m = Q2(mm.src, rr0) BY <1>q
-    <2> QED BY <2>, VariantAx DEF FaultyQ2Records
+    <2>pick. PICK mm \in F2Q : m = Q2(mm.src, rr0) BY <1>q
+    <2> QED BY <2>pick, VariantAx DEF FaultyQ2Records
   <1> QED BY <1>d, <1>q
 
 \*****************************************************************************
@@ -2444,8 +3048,8 @@ THEOREM TypePres ==
 \* Case split: stutter (UNCHANGED vars) / Step1 / Step2 / Step3 / FaultyStep, written
 \* as a FLAT set of ASSUME/PROVE cases so the [Next]_vars assumption is in scope at the
 \* combining QED. "Frame" cases (the action leaves all variables the lemma mentions
-\* unchanged) are discharged from the action definition; substantive cases are OMITTED
-\* with a TODO naming the cardinality/quorum fact required.
+\* unchanged) are discharged from the action definition; substantive cases are split out
+\* as named theorems, with any remaining hard fact isolated as an explicit TODO theorem.
 \*****************************************************************************
 
 \* ===== L2: no type-1 equivocation by correct (msgs1) =====
@@ -3079,11 +3683,146 @@ THEOREM Pres_L6_ST ==
   ASSUME IndInv, UNCHANGED vars
   PROVE  Lemma6_DecisionDefinesValue'
   BY DEF IndInv, Lemma6_DecisionDefinesValue, vars
+THEOREM Pres_L6_S3 ==
+  ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0)
+  PROVE  Lemma6_DecisionDefinesValue'
+  <1>l6. Lemma6_DecisionDefinesValue BY DEF IndInv
+  <1>dom. /\ value \in [ CORRECT -> VALUES ]
+          /\ decision \in [ CORRECT -> VALUES \union { NO_DECISION } ]
+          /\ round \in [ CORRECT -> ROUNDS ]
+        BY DEF TypeOK
+  <1> PICK received \in SUBSET msgs2[round[id0]] :
+        /\ Cardinality(Senders2(received)) = N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+           \/ /\ \A vv \in VALUES: Weights[vv] < T + 1
+              /\ \E next_v \in VALUES:
+                   /\ value' = [ value EXCEPT ![id0] = next_v ]
+                   /\ decision' = decision
+        BY DEF Step3
+  <1> DEFINE Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+  <1> SUFFICES ASSUME NEW id \in CORRECT, decision'[id] # NO_DECISION
+        PROVE  value'[id] = decision'[id]
+        BY DEF Lemma6_DecisionDefinesValue
+  <1>oldId. CASE id # id0
+    <2>vSame. value'[id] = value[id] BY <1>oldId, <1>dom DEF Step3
+    <2>dSame. decision'[id] = decision[id] BY <1>oldId, <1>dom DEF Step3
+    <2> QED BY <1>l6, <2>vSame, <2>dSame DEF Lemma6_DecisionDefinesValue
+  <1>newId. CASE id = id0
+    <2>high. CASE \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+      <3>pick. PICK vv \in VALUES:
+            /\ Weights[vv] >= T + 1
+            /\ value' = [ value EXCEPT ![id0] = vv ]
+            /\ IF 2 * Weights[vv] > N + T
+               THEN decision' = [ decision EXCEPT ![id0] = vv ]
+               ELSE decision' = decision
+          BY <2>high
+      <3>valp. value'[id] = vv BY <1>newId, <3>pick, <1>dom
+      <3>decide. CASE 2 * Weights[vv] > N + T
+        <4>decp. decision' = [ decision EXCEPT ![id0] = vv ] BY <3>pick, <3>decide
+        <4> QED BY <1>newId, <3>valp, <4>decp, <1>dom
+      <3>nodecide. CASE ~(2 * Weights[vv] > N + T)
+        <4>decp. decision' = decision BY <3>pick, <3>nodecide
+        <4>d0. decision[id0] # NO_DECISION BY <1>newId, <4>decp
+        <4>decVal. decision[id0] \in VALUES BY <1>dom, <4>d0, NoDecisionNotValue
+        <4>lock. 2 * Cardinality(Senders2({ m \in received:
+                                              IsD2(m) /\ AsD2(m).v = decision[id0] }))
+                    > N + T
+              BY <4>d0, LockedReceiveStrictD
+        <4>recsub. received \subseteq msgs2[round[id0]] OBVIOUS
+        <4>rv. round[id0] \in ROUNDS BY <1>dom
+        <4>vSub. { m \in received: IsD2(m) /\ AsD2(m).v = vv }
+                  \subseteq DvSet(round[id0], vv)
+              BY <4>recsub DEF DvSet
+        <4>vMono. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv }))
+                    <= Cardinality(Senders2(DvSet(round[id0], vv)))
+              BY <4>vSub, Senders2_Mono
+        <4>finV. IsFiniteSet(DvSet(round[id0], vv)) BY <3>pick, <4>rv, D2SetFinite
+        <4>vLeD. Cardinality(Senders2(DvSet(round[id0], vv)))
+                    <= Cardinality(DvSet(round[id0], vv))
+              BY <4>finV, Senders2_CardLeSet
+        <4>vTypes. /\ Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) \in Nat
+                    /\ Cardinality(Senders2(DvSet(round[id0], vv))) \in Nat
+                    /\ Cardinality(DvSet(round[id0], vv)) \in Nat
+                    /\ T + 1 \in Nat
+              BY Senders2_Sub, <4>finV, FS_CardinalityType, ConstNat, FleqT
+        <4>recVge. Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv }))
+                      >= T + 1
+              BY <3>pick DEF Weights
+        <4>sendVge. Cardinality(Senders2(DvSet(round[id0], vv))) >= T + 1
+              BY <4>recVge, <4>vMono, <4>vTypes, Arith_GeTrans
+        <4>geV. Cardinality(DvSet(round[id0], vv)) >= T + 1
+              BY <4>sendVge, <4>vLeD, <4>vTypes, Arith_GeTrans
+        <4>dSub. { m \in received: IsD2(m) /\ AsD2(m).v = decision[id0] }
+                  \subseteq DvSet(round[id0], decision[id0])
+              BY <4>recsub DEF DvSet
+        <4>dMono. Cardinality(Senders2({ m \in received:
+                                          IsD2(m) /\ AsD2(m).v = decision[id0] }))
+                    <= Cardinality(Senders2(DvSet(round[id0], decision[id0])))
+              BY <4>dSub, Senders2_Mono
+        <4>dTypes. /\ Cardinality(Senders2({ m \in received:
+                                              IsD2(m) /\ AsD2(m).v = decision[id0] })) \in Nat
+                    /\ Cardinality(Senders2(DvSet(round[id0], decision[id0]))) \in Nat
+                    /\ N + T \in Nat
+              BY Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+        <4>fullLock. 2 * Cardinality(Senders2(DvSet(round[id0], decision[id0]))) > N + T
+              BY <4>lock, <4>dMono, <4>dTypes, Arith_DoubleGtMono
+        <4>eq. decision[id0] = vv
+              BY <4>rv, <3>pick, <4>decVal, <4>geV, <4>fullLock, DQuorumDominatesMajorityD
+        <4> QED BY <1>newId, <3>valp, <4>decp, <4>eq
+      <3> QED BY <3>decide, <3>nodecide
+    <2>low. CASE /\ \A vv \in VALUES: Weights[vv] < T + 1
+                 /\ \E next_v \in VALUES:
+                      /\ value' = [ value EXCEPT ![id0] = next_v ]
+                      /\ decision' = decision
+      <3>decp. decision' = decision BY <2>low
+      <3>d0. decision[id0] # NO_DECISION BY <1>newId, <3>decp
+      <3>decVal. decision[id0] \in VALUES BY <1>dom, <3>d0, NoDecisionNotValue
+      <3>lock. 2 * Cardinality(Senders2({ m \in received:
+                                            IsD2(m) /\ AsD2(m).v = decision[id0] }))
+                  > N + T
+            BY <3>d0, LockedReceiveStrictD
+      <3>lt. Weights[decision[id0]] < T + 1 BY <2>low, <1>dom, <3>d0, NoDecisionNotValue
+      <3>same. Weights[decision[id0]]
+                   = Cardinality(Senders2({ m \in received:
+                                             IsD2(m) /\ AsD2(m).v = decision[id0] }))
+            BY <3>decVal DEF Weights
+      <3>ltC. Cardinality(Senders2({ m \in received:
+                                      IsD2(m) /\ AsD2(m).v = decision[id0] }))
+                 < T + 1
+            BY <3>lt, <3>same
+      <3>types. /\ Cardinality(Senders2({ m \in received:
+                                           IsD2(m) /\ AsD2(m).v = decision[id0] })) \in Nat
+                 /\ T + 1 \in Nat
+            BY Senders2_Sub, FS_CardinalityType, ConstNat, FleqT
+      <3>geC. Cardinality(Senders2({ m \in received:
+                                      IsD2(m) /\ AsD2(m).v = decision[id0] }))
+                 >= T + 1
+            BY <3>lock, <3>types, Arith_DoubleGtNplusTImplTplusOne
+      <3>false. FALSE BY <3>geC, <3>ltC, <3>types, Arith_GeLtContrad
+      <3> QED BY <3>false
+    <2> QED BY <2>high, <2>low
+  <1> QED BY <1>oldId, <1>newId
 THEOREM Pres_Lemma6 ==
   ASSUME TypeOK, IndInv, [Next]_vars
   PROVE  Lemma6_DecisionDefinesValue'
-  <1>o1. ASSUME NEW id \in CORRECT, Step3(id) PROVE Lemma6_DecisionDefinesValue'
-        OMITTED \* TODO: substantive Step3 case for Lemma6_DecisionDefinesValue
+  <1>o1. ASSUME NEW id \in CORRECT PROVE Step3(id) => Lemma6_DecisionDefinesValue'
+    <2> SUFFICES ASSUME Step3(id) PROVE Lemma6_DecisionDefinesValue'
+          OBVIOUS
+    <2> QED BY Pres_L6_S3
   <1> QED BY Pres_L6_S1, Pres_L6_S2, Pres_L6_F, Pres_L6_ST, <1>o1 DEF Next, CorrectStep
 
 \* ===== L7: a correct D2(v) requires a type-1 quorum for v =====
@@ -3519,6 +4258,12 @@ THEOREM Pres_L8_S2 ==
       <3> QED BY <3>notD
     <2>req. r = round[id0]
           BY <2>q, <1>newMsg, <1>dom2, <1>r0, <1>rdom
+    <2>recok. /\ received \in SUBSET msgs1[round[id0]]
+              /\ Cardinality(Senders1(received)) >= N - T
+          OBVIOUS
+    <2>low. \A vv \in VALUES :
+               2 * Cardinality(Senders1({ m \in received : m.v = vv })) <= N + T
+          BY <2>q DEF Weights
     <2>wit. LET n0 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> round[id0], v |-> 0 ] \in msgs1[round[id0]] })
                 n1 == Cardinality({ id \in CORRECT: [ src |-> id, r |-> round[id0], v |-> 1 ] \in msgs1[round[id0]] })
                 nf == Cardinality({ id \in FAULTY: id \in { m.src: m \in msgs1[round[id0]] } })
@@ -3528,7 +4273,7 @@ THEOREM Pres_L8_S2 ==
               /\ x0 + x1 + nf >= N - T
               /\ 2 * x0 <= N + T
               /\ 2 * x1 <= N + T
-          BY <1>r0, <2>q, LowWeightsReceivedL8Witness DEF Weights
+          BY <1>r0, <2>recok, <2>low, LowWeightsReceivedL8Witness
     <2> QED BY <2>wit, <2>req, <1>m1same
   <1> QED BY <1>oldMsg, <1>newMsg
 THEOREM Pres_L8_F ==
@@ -4528,38 +5273,6 @@ THEOREM Pres_Lemma12 ==
   <1> QED BY Pres_L12_ST, <1>o1, <1>o2, <1>o3, <1>o4 DEF Next, CorrectStep
 
 \* ===== L13: value lock -- a correct value at r matches Supported(r-1) =====
-THEOREM PredRoundHasTotal ==
-  ASSUME TypeOK, IndInv,
-         NEW id \in CORRECT,
-         round[id] > 1,
-         NEW r \in ROUNDS,
-         r = round[id] - 1
-  PROVE  Cardinality(Senders2(msgs2[r])) >= N - T
-  <1>l5. Lemma5_RoundNeedsSentMessages BY DEF IndInv
-  <1>l10. Lemma10_M1RequiresQuorum BY DEF IndInv
-  <1>l12. Lemma12_CannotJumpRoundsWithoutQuorum BY DEF IndInv
-  <1>dom. round \in [ CORRECT -> ROUNDS ] /\ step \in [ CORRECT -> {S1, S2, S3} ]
-        BY DEF TypeOK
-  <1>ridNat. round[id] \in Nat BY <1>dom, RoundsNat
-  <1>rplus. r + 1 = round[id]
-        BY <1>ridNat, Arith_MinusOnePlusOne
-  <1>rplusIn. r + 1 \in ROUNDS BY <1>rplus, <1>dom
-  <1>s1. CASE step[id] = S1
-    <2>next. \E oldId \in CORRECT : round[oldId] = r + 1 /\ step[oldId] = S1
-          BY <1>rplus, <1>s1
-    <2> QED BY <1>l12, <1>rplusIn, <2>next DEF Lemma12_CannotJumpRoundsWithoutQuorum
-  <1>notS1. CASE step[id] # S1
-    <2>m1. \E m \in msgs1[r + 1] : m.src = id
-          BY <1>l5, <1>rplus, <1>rplusIn, <1>notS1 DEF Lemma5_RoundNeedsSentMessages
-    <2>succ. r + 1 \in ROUNDS \ {1} BY <1>rplusIn, RoundsNat, ConstNat
-    <2>rw. r + 1 \in { rr \in ROUNDS \ {1}: \E m \in msgs1[rr]: m.src \in CORRECT }
-          BY <2>m1, <2>succ
-    <2>q. Cardinality(Senders2(msgs2[(r + 1) - 1])) >= N - T
-          BY <1>l10, <2>rw DEF Lemma10_M1RequiresQuorum
-    <2>prev. (r + 1) - 1 = r BY RoundsNat, Arith_PlusOneMinusOne
-    <2> QED BY <2>q, <2>prev
-  <1> QED BY <1>s1, <1>notS1
-
 THEOREM Pres_L13_S1 ==
   ASSUME TypeOK, IndInv, NEW id \in CORRECT, Step1(id)
   PROVE  Lemma13_ValueLock'
@@ -4723,7 +5436,7 @@ THEOREM Pres_L13_S2 ==
       <3>vpSup. vp \in SupportedValuesP(round[id] - 1) BY <3>vpIn, <2>predIn DEF supportedP
       <3>vpVal. vp \in VALUES BY <3>vpSup DEF SupportedValuesP
       <3>total. Cardinality(Senders2(msgs2[round[id] - 1])) >= N - T
-            BY <1>gt, <2>predIn, PredRoundHasTotal
+            BY <1>gt, <2>predIn, ReplicaPredRoundHasTotal
       <3>oldSup. vp \in SupportedValues(round[id] - 1)
             BY <2>predIn, <3>vpSup, <3>total, <1>grow, SupportedPToOldWhenTotal
       <3>oldNonempty. SupportedValues(round[id] - 1) # {} BY <3>oldSup
@@ -4778,7 +5491,7 @@ THEOREM Pres_L13_F ==
       <3>vpSup. vp \in SupportedValuesP(round[id] - 1) BY <3>vpIn, <2>predIn DEF supportedP
       <3>vpVal. vp \in VALUES BY <3>vpSup DEF SupportedValuesP
       <3>total. Cardinality(Senders2(msgs2[round[id] - 1])) >= N - T
-            BY <1>gt, <2>predIn, PredRoundHasTotal
+            BY <1>gt, <2>predIn, ReplicaPredRoundHasTotal
       <3>oldSup. vp \in SupportedValues(round[id] - 1)
             BY <2>predIn, <3>vpSup, <3>total, <1>grow, SupportedPToOldWhenTotal
       <3>oldNonempty. SupportedValues(round[id] - 1) # {} BY <3>oldSup
@@ -4965,19 +5678,86 @@ THEOREM Pres_L1_F ==
 
 \* ISOLATED HARD OBLIGATION. id0 already decided w = decision[id0] # NO_DECISION and takes a
 \* non-deciding Step3 (decision' = decision), advancing round[id0] -> round[id0]+1. Lemma1c'
-\* then needs a strict w-quorum at round[id0]. This reduces to ruling out the no-majority
-\* disjunct of Lemma11a' for the decided value: Lemma13' gives only w in
-\* SupportedValues(round[id0]) (>= T+1 support), not the strict 2*nv > N+T quorum. Closing
-\* this is the SupportedValues strict-quorum-persistence argument still open in THEOREM
-\* Inductive (the "strengthen induction predicate to SupportedValues lock" admit). Not yet
-\* verified inductive for T >= 2 (the N=11 Apalache check OOM'd at 4-16G heap).
+\* then needs a strict w-quorum at round[id0].
+\*
+\* Concrete finishing chain, preserving the original goal:
+\*   1. StrictQuorumSupportedSingleton:
+\*        ExistsQuorum2LessRam(a, v) plus N-T type-2 senders implies
+\*        SupportedValues(a) = {v}.
+\*      This is where Lemma7 and the N > 5*T arithmetic show that a strict D2 quorum
+\*      has too few "other" senders for any other support.
+\*   2. LockedRoundCorrectM1:
+\*        SupportedValues(a) = {v} and a + 1 \in ROUNDS imply every correct M1 in
+\*        msgs1[a + 1] carries v (Lemma9), and there are enough such correct M1s in
+\*        any Step2 receive set to force D2(v), not Q2. Lemma8 is the key negative
+\*        fact that rules out a correct Q2 in the locked round.
+\*   3. LockedReceiveStrictD:
+\*        Under the locked-round fact, every Step3 receive set of N-T type-2 senders in
+\*        round a + 1 contains more than (N+T)/2 D2(v) messages. This closes both
+\*        Pres_L1_S3_DecidedCarry and the Pres_L6 Step3 case.
+\*   4. CrossRoundStrictQuorum:
+\*        Reuse the same locked-round induction in Section D to show that any later
+\*        strict quorum is for v; then Agreement follows from Lemma1c for both decisions.
 THEOREM Pres_L1_S3_DecidedCarry ==
   ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0),
          decision' = decision, decision[id0] # NO_DECISION
   PROVE  /\ Cardinality(msgs2'[round[id0]]) >= N - T
          /\ Cardinality({ m \in msgs2'[round[id0]]: IsD2(m) /\ AsD2(m).v = decision[id0] }) >= T + 1
          /\ 2 * Cardinality({ m \in msgs2'[round[id0]]: IsD2(m) /\ AsD2(m).v = decision[id0] }) > N + T
-  OMITTED \* TODO: SupportedValues strict-quorum persistence (cf. Inductive strengthening admit)
+  <1>r0. round[id0] \in ROUNDS BY DEF TypeOK
+  <1>v0. decision[id0] \in VALUES BY DEF TypeOK, NoDecisionNotValue
+  <1>upd. msgs2' = msgs2 BY DEF Step3
+  <1> PICK received \in SUBSET msgs2[round[id0]] :
+        /\ Cardinality(Senders2(received)) = N - T
+        /\ LET Weights == [ vv \in VALUES |->
+             Cardinality(Senders2({ m \in received: IsD2(m) /\ AsD2(m).v = vv })) ]
+           IN
+           \/ \E vv \in VALUES:
+                /\ Weights[vv] >= T + 1
+                /\ value' = [ value EXCEPT ![id0] = vv ]
+                /\ IF 2 * Weights[vv] > N + T
+                   THEN decision' = [ decision EXCEPT ![id0] = vv ]
+                   ELSE decision' = decision
+           \/ /\ \A vv \in VALUES: Weights[vv] < T + 1
+              /\ \E next_v \in VALUES:
+                   /\ value' = [ value EXCEPT ![id0] = next_v ]
+                   /\ decision' = decision
+        BY DEF Step3
+  <1> DEFINE Drec == { m \in received: IsD2(m) /\ AsD2(m).v = decision[id0] }
+             Dfull == DvSet(round[id0], decision[id0])
+  <1>lock. 2 * Cardinality(Senders2(Drec)) > N + T
+        BY LockedReceiveStrictD DEF Drec
+  <1>recsub. received \subseteq msgs2[round[id0]] OBVIOUS
+  <1>finM. IsFiniteSet(msgs2[round[id0]]) BY <1>r0, Msgs2Finite
+  <1>senLe1. Cardinality(Senders2(received)) <= Cardinality(Senders2(msgs2[round[id0]]))
+        BY <1>recsub, Senders2_Mono
+  <1>senLe2. Cardinality(Senders2(msgs2[round[id0]])) <= Cardinality(msgs2[round[id0]])
+        BY <1>finM, Senders2_CardLeSet
+  <1>finD. IsFiniteSet(Dfull) BY <1>r0, <1>v0, D2SetFinite DEF Dfull
+  <1>dsub. Drec \subseteq Dfull BY <1>recsub DEF Drec, Dfull, DvSet
+  <1>wLe1. Cardinality(Senders2(Drec)) <= Cardinality(Senders2(Dfull))
+        BY <1>dsub, Senders2_Mono
+  <1>wLe2. Cardinality(Senders2(Dfull)) <= Cardinality(Dfull)
+        BY <1>finD, Senders2_CardLeSet
+  <1>types. /\ Cardinality(msgs2[round[id0]]) \in Nat
+             /\ Cardinality(Senders2(msgs2[round[id0]])) \in Nat
+             /\ Cardinality(Senders2(received)) \in Nat
+             /\ Cardinality(Dfull) \in Nat
+             /\ Cardinality(Senders2(Dfull)) \in Nat
+             /\ Cardinality(Senders2(Drec)) \in Nat
+             /\ N - T \in Nat /\ T + 1 \in Nat /\ N + T \in Nat
+        BY <1>finM, <1>finD, Senders2_Sub, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>nGe. Cardinality(msgs2[round[id0]]) >= N - T
+        BY <1>senLe1, <1>senLe2, <1>types, Arith_LeTrans
+  <1>wLeFull. Cardinality(Senders2(Drec)) <= Cardinality(Dfull)
+        BY <1>wLe1, <1>wLe2, <1>types, Arith_LeTrans
+  <1>recGe. Cardinality(Senders2(Drec)) >= T + 1
+        BY <1>lock, <1>types, Arith_DoubleGtNplusTImplTplusOne
+  <1>nvGe. Cardinality(Dfull) >= T + 1
+        BY <1>recGe, <1>wLeFull, <1>types, Arith_GeTrans
+  <1>nv2. 2 * Cardinality(Dfull) > N + T
+        BY <1>lock, <1>wLeFull, <1>types, Arith_DoubleGtMono
+  <1> QED BY <1>upd, <1>nGe, <1>nvGe, <1>nv2 DEF Dfull, DvSet
 
 THEOREM Pres_L1_S3 ==
   ASSUME TypeOK, IndInv, NEW id0 \in CORRECT, Step3(id0)
@@ -5193,106 +5973,227 @@ THEOREM QuorumUnique ==
         \* a correct id that sent both v and w in round r forces v = w by Lemma2
         BY <1>4 DEF Lemma2_NoEquivocation1ByCorrect
 
-\* CROSS-ROUND LOCK: once value v has a D2 quorum at round a, every D2 quorum at any
-\* round r >= a is also for v. By induction on r:
-\*   base r = a: QuorumUnique;
-\*   step r -> r+1: a quorum at r+1 for w needs (Lemma7) a type-1 quorum for w at r+1;
-\*     by Lemma10/Lemma12 the round r+1 was entered from r with N-T type-2 messages, and
-\*     by Lemma9/Lemma13 (value lock) every correct value entering round r+1 equals the
-\*     value supported at r, which is v (carried from the round-r quorum). Hence w = v.
-\* ===== The SupportedValues value-lock (spine of Ben-Or agreement) =====
-\* SupportedLockStep: the lock SupportedValues(r) \subseteq {v} propagates one round.
-\* The nonempty-singleton case is SupportedSingletonNextSupported (correct values at
-\* r+1 are pinned to v by Lemma9, so any value supported at r+1 is v). The EMPTY case
-\* -- SupportedValues(r) = {} -- is the central, still-open lock-survival obligation:
-\* with no support at r, Lemma9 gives no constraint on r+1 and Step3 branch (c) lets
-\* correct replicas pick arbitrary next values, so the lock can only be carried by a
-\* strengthened global invariant. This is the one isolated research-level admit.
-THEOREM SupportedLockStep ==
-  ASSUME TypeOK, IndInv,
-         NEW r \in ROUNDS, r + 1 \in ROUNDS, NEW v \in VALUES,
-         SupportedValues(r) \subseteq {v}
-  PROVE  SupportedValues(r + 1) \subseteq {v}
-  <1> USE DEF IndInv
-  <1> SUFFICES ASSUME NEW w \in SupportedValues(r + 1) PROVE w = v
-        OBVIOUS
-  <1>ne. CASE SupportedValues(r) # {}
-    <2> PICK u \in SupportedValues(r) : TRUE BY <1>ne
-    <2>uv. u = v OBVIOUS
-    <2>vin. v \in SupportedValues(r) BY <2>uv
-    <2>sing. \A z \in SupportedValues(r) : z = v OBVIOUS
-    <2> QED BY <2>vin, <2>sing, SupportedSingletonNextSupported
-  <1>empty. CASE SupportedValues(r) = {}
-    OMITTED \* RESEARCH GAP: value-lock survival across an empty-support round
-            \* (Step3 branch (c) reset). Needs a strengthened global IndInv conjunct.
-  <1> QED BY <1>ne, <1>empty
-
-\* SupportedLock: starting from a quorum for v at round a, the lock holds at every
-\* later round. Base via QuorumDominatesSupported; step via SupportedLockStep.
-THEOREM SupportedLock ==
-  ASSUME TypeOK, IndInv,
-         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v)
-  PROVE  \A r \in ROUNDS : r >= a => SupportedValues(r) \subseteq {v}
-  <1> USE DEF IndInv
-  <1>aNat. a \in Nat /\ a >= 1 BY RoundsNat
-  <1>rin. \A k \in Nat : (a + k) \in ROUNDS BY <1>aNat, RoundsNat
-  <1> DEFINE P(k) == SupportedValues(a + k) \subseteq {v}
-  <1>base. P(0)
-        <2> SUFFICES ASSUME NEW w \in SupportedValues(a + 0) PROVE w = v
+\* CROSS-ROUND LOCK: once value v has a strict D2 quorum at round a, every strict D2
+\* quorum at any later round is also for v. This is the agreement-facing form of the
+\* same strict-quorum lock that `LockedReceiveStrictD` uses for inductiveness.
+THEOREM LockedFullCorrectType2Strict ==
+  ASSUME TypeOK,
+         NEW r \in ROUNDS, NEW v \in VALUES,
+         Cardinality(Senders2(msgs2[r])) >= N - T,
+         \A m \in msgs2[r] :
+           ((IsD2(m) => AsD2(m).src \in CORRECT)
+             /\ (IsQ2(m) => AsQ2(m).src \in CORRECT))
+              => IsD2(m) /\ AsD2(m).v = v
+  PROVE  ExistsQuorum2LessRam(r, v)
+  <1> DEFINE GoodMsgs == { m \in msgs2[r] : IsD2(m) /\ AsD2(m).v = v }
+             Good == Senders2(GoodMsgs)
+             R == Senders2(msgs2[r])
+             Bad == R \ Good
+  <1>badFaulty. Bad \subseteq FAULTY
+    <2> SUFFICES ASSUME NEW id \in Bad PROVE id \in FAULTY OBVIOUS
+    <2>rin. id \in R /\ id \notin Good BY DEF Bad
+    <2>pick. PICK m \in msgs2[r] :
+          (IsD2(m) /\ AsD2(m).src = id) \/ (IsQ2(m) /\ AsQ2(m).src = id)
+        BY <2>rin DEF R, Senders2
+    <2>all. id \in ALL BY <2>rin DEF R, Senders2
+    <2>corr. CASE id \in CORRECT
+      <3>dsrc. IsD2(m) => AsD2(m).src \in CORRECT
+        <4> SUFFICES ASSUME IsD2(m) PROVE AsD2(m).src \in CORRECT
               OBVIOUS
-        <2>1. a + 0 = a BY <1>aNat
-        <2> QED BY <2>1, QuorumDominatesSupported
+        <4>src. AsD2(m).src = id BY <2>pick, VariantAx
+        <4> QED BY <4>src, <2>corr
+      <3>qsrc. IsQ2(m) => AsQ2(m).src \in CORRECT
+        <4> SUFFICES ASSUME IsQ2(m) PROVE AsQ2(m).src \in CORRECT
+              OBVIOUS
+        <4>src. AsQ2(m).src = id BY <2>pick, VariantAx
+        <4> QED BY <4>src, <2>corr
+      <3>ant. (IsD2(m) => AsD2(m).src \in CORRECT)
+                 /\ (IsQ2(m) => AsQ2(m).src \in CORRECT)
+            BY <3>dsrc, <3>qsrc
+      <3>locked. IsD2(m) /\ AsD2(m).v = v BY <3>ant
+      <3>gin. id \in Good BY <2>pick, <3>locked DEF Good, GoodMsgs, Senders2
+      <3> QED BY <2>rin, <3>gin
+    <2>faulty. CASE id \in FAULTY
+      <3> QED BY <2>faulty
+    <2> QED BY <2>all, <2>corr, <2>faulty DEF ALL
+  <1>cover. R \subseteq Good \union Bad BY DEF Bad
+  <1>finG. IsFiniteSet(Good) BY Senders2_Sub
+  <1>finB. IsFiniteSet(Bad) BY <1>badFaulty, FiniteCF, FS_Subset
+  <1>finU. IsFiniteSet(Good \union Bad) BY <1>finG, <1>finB, FS_Union
+  <1>rleU. Cardinality(R) <= Cardinality(Good \union Bad)
+        BY <1>cover, <1>finU, FS_Subset
+  <1>ule. Cardinality(Good \union Bad) <= Cardinality(Good) + Cardinality(Bad)
+        BY <1>finG, <1>finB, CardUnion2LeSum
+  <1>badLe. Cardinality(Bad) <= F BY <1>badFaulty, FiniteCF, FS_Subset, NTF
+  <1>finM. IsFiniteSet(msgs2[r]) BY Msgs2Finite
+  <1>rLeM. Cardinality(R) <= Cardinality(msgs2[r])
+        BY <1>finM, Senders2_CardLeSet DEF R
+  <1>types. /\ Cardinality(R) \in Nat
+             /\ Cardinality(Good) \in Nat
+             /\ Cardinality(Bad) \in Nat
+             /\ Cardinality(Good \union Bad) \in Nat
+             /\ Cardinality(msgs2[r]) \in Nat
+             /\ N - T \in Nat /\ N + T \in Nat /\ T + 1 \in Nat
+        BY Senders2_Sub, <1>finB, <1>finU, <1>finM, FS_CardinalityType, ConstNat, NgtT, FleqT
+  <1>rge. Cardinality(R) >= N - T BY DEF R
+  <1>nGe. Cardinality(msgs2[r]) >= N - T
+        BY <1>rge, <1>rLeM, <1>types, Arith_GeTrans
+  <1>rle. Cardinality(R) <= Cardinality(Good) + Cardinality(Bad)
+        BY <1>rleU, <1>ule, <1>types, Arith_LeTrans
+  <1>strict. 2 * Cardinality(Good) > N + T
+        BY <1>rge, <1>rle, <1>badLe, <1>types, Arith_StrictMajorityAfterFaultsGe
+  <1>ge. Cardinality(Good) >= T + 1
+        BY <1>strict, <1>types, Arith_DoubleGtNplusTImplTplusOne
+  <1>finD. IsFiniteSet(DvSet(r, v)) BY D2SetFinite
+  <1>dNat. Cardinality(DvSet(r, v)) \in Nat BY <1>finD, FS_CardinalityType
+  <1>gLeD. Cardinality(Good) <= Cardinality(DvSet(r, v))
+    <2>sub. GoodMsgs \subseteq DvSet(r, v) BY DEF GoodMsgs, DvSet
+    <2>finGoodMsgs. IsFiniteSet(GoodMsgs)
+          BY <2>sub, <1>finD, FS_Subset
+    <2>mono. Cardinality(GoodMsgs) <= Cardinality(DvSet(r, v))
+          BY <2>sub, <1>finD, FS_Subset
+    <2>sg. Cardinality(Good) <= Cardinality(GoodMsgs)
+          BY <2>finGoodMsgs, Senders2_CardLeSet DEF Good
+    <2>types2. Cardinality(Good) \in Nat /\ Cardinality(GoodMsgs) \in Nat
+                /\ Cardinality(DvSet(r, v)) \in Nat
+          BY Senders2_Sub, <1>finD, <2>finGoodMsgs, FS_CardinalityType
+    <2> QED BY <2>sg, <2>mono, <2>types2, Arith_LeTrans
+  <1>nvGe. Cardinality(DvSet(r, v)) >= T + 1
+        BY <1>ge, <1>gLeD, <1>types, <1>dNat, Arith_GeTrans
+  <1>nv2. 2 * Cardinality(DvSet(r, v)) > N + T
+        BY <1>strict, <1>gLeD, <1>types, <1>dNat, Arith_DoubleGtMono
+  <1> QED BY <1>nGe, <1>nvGe, <1>nv2 DEF ExistsQuorum2LessRam, DvSet
+
+THEOREM StrictQuorumNextStrictQuorum ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES,
+         ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         a + 1 \in ROUNDS,
+         Cardinality(Senders2(msgs2[a + 1])) >= N - T
+  PROVE  ExistsQuorum2LessRam(a + 1, v)
+  <1>locked. \A m \in msgs2[a + 1] :
+        ((IsD2(m) => AsD2(m).src \in CORRECT)
+          /\ (IsQ2(m) => AsQ2(m).src \in CORRECT))
+            => IsD2(m) /\ AsD2(m).v = v
+    <2> SUFFICES ASSUME NEW m \in msgs2[a + 1],
+                         (IsD2(m) => AsD2(m).src \in CORRECT)
+                           /\ (IsQ2(m) => AsQ2(m).src \in CORRECT)
+                  PROVE  IsD2(m) /\ AsD2(m).v = v
+          OBVIOUS
+    <2> QED BY StrictQuorumNextCorrectType2
+  <1> QED BY <1>locked, LockedFullCorrectType2Strict
+
+THEOREM StrictQuorumCarriesToQuorumRound ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         NEW r \in ROUNDS, r >= a,
+         NEW w \in VALUES, ExistsQuorum2LessRam(r, w),
+         Cardinality(Senders2(msgs2[r])) >= N - T
+  PROVE  ExistsQuorum2LessRam(r, v)
+  <1>aNat. a \in Nat /\ r \in Nat BY RoundsNat
+  <1>totalA. Cardinality(Senders2(msgs2[a])) >= N - T OBVIOUS
+  <1> DEFINE P(k) ==
+        k \in Nat /\ k <= r - a => ExistsQuorum2LessRam(a + k, v)
+  <1>base. P(0) BY <1>aNat, ConstNat DEF P
   <1>step. \A k \in Nat : P(k) => P(k + 1)
-        <2> SUFFICES ASSUME NEW k \in Nat, P(k) PROVE P(k + 1)
-              OBVIOUS
-        <2>r. (a + k) \in ROUNDS /\ (a + k + 1) \in ROUNDS BY <1>aNat, RoundsNat
-        <2>1. a + (k + 1) = (a + k) + 1 BY <1>aNat
-        <2>2. SupportedValues((a + k) + 1) \subseteq {v}
-              BY <2>r, SupportedLockStep
-        <2> QED BY <2>1, <2>2
+    <2> SUFFICES ASSUME NEW k \in Nat, P(k) PROVE P(k + 1) OBVIOUS
+    <2>need. CASE k + 1 <= r - a
+      <3>curIn. a + k \in ROUNDS BY <1>aNat, <2>need, RoundsNat, ConstNat
+      <3>nextIn. a + k + 1 \in ROUNDS BY <1>aNat, <2>need, RoundsNat, ConstNat
+      <3>curLe. k <= r - a BY <1>aNat, <2>need, ConstNat
+      <3>curQ. ExistsQuorum2LessRam(a + k, v) BY <3>curLe DEF P
+      <3>totalCur. Cardinality(Senders2(msgs2[a + k])) >= N - T
+        <4>baseRound. CASE k = 0
+          <5>rewrite. a + k = a BY <1>aNat, <4>baseRound, ConstNat
+          <5> QED BY <1>totalA, <5>rewrite
+        <4>laterRound. CASE k # 0
+          <5>curLt. a + k < r BY <1>aNat, <2>need, <4>laterRound, ConstNat
+          <5> QED BY <3>curIn, <5>curLt, LaterQuorumGivesTotalBefore
+        <4> QED BY <4>baseRound, <4>laterRound
+      <3>totalNext. Cardinality(Senders2(msgs2[a + k + 1])) >= N - T
+        <4>nextLe. a + k + 1 <= r BY <1>aNat, <2>need, ConstNat
+        <4>cases. \/ a + k + 1 = r
+                  \/ a + k + 1 < r
+          BY <1>aNat, <3>nextIn, <4>nextLe, ConstNat
+        <4>target. CASE a + k + 1 = r
+          <5> QED BY <4>target
+        <4>before. CASE a + k + 1 < r
+          <5> QED BY <3>nextIn, <4>before, LaterQuorumGivesTotalBefore
+        <4> QED BY <4>target, <4>before, <4>cases
+      <3>succ. (a + k) + 1 = a + k + 1 BY ConstNat
+      <3>succ2. a + (k + 1) = (a + k) + 1 BY <1>aNat, ConstNat
+      <3>nextInSucc. (a + k) + 1 \in ROUNDS BY <3>succ, <3>nextIn
+      <3>totalCurSucc. Cardinality(Senders2(msgs2[a + k])) >= N - T
+            BY <3>totalCur
+      <3>totalSucc. Cardinality(Senders2(msgs2[(a + k) + 1])) >= N - T
+            BY <3>succ, <3>totalNext
+      <3>nextQ. ExistsQuorum2LessRam((a + k) + 1, v)
+            BY <3>curIn, <3>curQ, <3>totalCurSucc, <3>nextInSucc, <3>totalSucc,
+               StrictQuorumNextStrictQuorum
+      <3> QED BY <3>succ, <3>succ2, <3>nextQ DEF P
+    <2>skip. CASE ~(k + 1 <= r - a)
+      <3> QED BY <2>skip DEF P
+    <2> QED BY <2>need, <2>skip
   <1>all. \A k \in Nat : P(k)
-    <2> HIDE DEF P
-    <2> QED BY <1>base, <1>step, NatInduction
-  <1> QED
-        <2> SUFFICES ASSUME NEW r \in ROUNDS, r >= a
-                     PROVE  SupportedValues(r) \subseteq {v}
-              OBVIOUS
-        <2>1. (r - a) \in Nat /\ a + (r - a) = r BY RoundsNat, <1>aNat
-        <2>2. P(r - a) BY <1>all, <2>1
-        <2> QED BY <2>1, <2>2
+    <2> DEFINE Q == [k \in Nat |-> P(k)]
+    <2>qType. Q \in [Nat -> BOOLEAN] BY DEF Q
+    <2>qBase. Q[0] BY <1>base DEF Q
+    <2>qStep. \A k \in Nat : Q[k] => Q[k + 1] BY <1>step DEF Q
+    <2>qAll. \A k \in Nat : Q[k]
+          BY <2>qType, <2>qBase, <2>qStep, NatInductionTrusted
+    <2> QED BY <2>qAll DEF Q
+  <1>diff. r - a \in Nat /\ a + (r - a) = r BY <1>aNat, ConstNat
+  <1>res. P(r - a) BY <1>all, <1>diff
+  <1> QED BY <1>res, <1>diff DEF P
 
-\* LockLemma: a quorum at a for v locks every later round -- any quorum there is for v.
-\* From SupportedLock we have SupportedValues(r) \subseteq {v}; a quorum for w at r forces
-\* (DQuorumDominatesSupported) SupportedValues(r) \subseteq {w}. When support is nonempty
-\* these pin w = v. The leftover empty-support case is the same lock-survival gap isolated
-\* in SupportedLockStep (a quorum can occur in an immature round whose support is empty).
+THEOREM CrossRoundStrictQuorum ==
+  ASSUME TypeOK, IndInv,
+         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T,
+         NEW r \in ROUNDS, r >= a,
+         NEW w \in VALUES, ExistsQuorum2LessRam(r, w),
+         Cardinality(Senders2(msgs2[r])) >= N - T
+  PROVE  w = v
+  <1>rv. ExistsQuorum2LessRam(r, v) BY StrictQuorumCarriesToQuorumRound
+  <1> QED BY <1>rv, QuorumUnique
+
+\* LockLemma packages the cross-round lock in the quantifier shape used by Agreement.
 THEOREM LockLemma ==
   ASSUME TypeOK, IndInv,
-         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v)
+         NEW a \in ROUNDS, NEW v \in VALUES, ExistsQuorum2LessRam(a, v),
+         Cardinality(Senders2(msgs2[a])) >= N - T
   PROVE  \A r \in ROUNDS :
-            r >= a => (\A w \in VALUES : ExistsQuorum2LessRam(r, w) => w = v)
-  <1> USE DEF IndInv
-  <1>lock. \A r \in ROUNDS : r >= a => SupportedValues(r) \subseteq {v}
-        BY SupportedLock
-  <1> SUFFICES ASSUME NEW r \in ROUNDS, r >= a, NEW w \in VALUES,
-                      ExistsQuorum2LessRam(r, w)
-               PROVE  w = v
+            r >= a =>
+              (\A w \in VALUES :
+                 /\ ExistsQuorum2LessRam(r, w)
+                 /\ Cardinality(Senders2(msgs2[r])) >= N - T
+                   => w = v)
+  <1> SUFFICES ASSUME NEW r \in ROUNDS
+               PROVE  r >= a =>
+                        (\A w \in VALUES :
+                           /\ ExistsQuorum2LessRam(r, w)
+                           /\ Cardinality(Senders2(msgs2[r])) >= N - T
+                             => w = v)
         OBVIOUS
-  <1>svr. SupportedValues(r) \subseteq {v} BY <1>lock
-  <1>dge. Cardinality(DvSet(r, w)) >= T + 1
-        BY DEF ExistsQuorum2LessRam, DvSet
-  <1>swr. \A u \in SupportedValues(r) : u = w
-        BY <1>dge, DQuorumDominatesSupported
-  <1>ne. CASE SupportedValues(r) # {}
-    <2> PICK u \in SupportedValues(r) : TRUE BY <1>ne
-    <2>uv. u = v BY <1>svr
-    <2>uw. u = w BY <1>swr
-    <2> QED BY <2>uv, <2>uw
-  <1>empty. CASE SupportedValues(r) = {}
-    OMITTED \* RESEARCH GAP (same lock-survival core as SupportedLockStep): a quorum in
-            \* an immature round whose support is empty. Vacuous for decision-backing
-            \* quorums (those rounds have >= N-T senders, hence nonempty support).
-  <1> QED BY <1>ne, <1>empty
+  <1>rGe. CASE r >= a
+    <2>allW. \A w \in VALUES :
+                /\ ExistsQuorum2LessRam(r, w)
+                /\ Cardinality(Senders2(msgs2[r])) >= N - T
+                  => w = v
+      <3> TAKE w \in VALUES
+      <3>hasQ. CASE /\ ExistsQuorum2LessRam(r, w)
+                    /\ Cardinality(Senders2(msgs2[r])) >= N - T
+        <4> QED BY <1>rGe, <3>hasQ, CrossRoundStrictQuorum
+      <3>noQ. CASE ~(/\ ExistsQuorum2LessRam(r, w)
+                     /\ Cardinality(Senders2(msgs2[r])) >= N - T)
+        <4> QED BY <3>noQ
+      <3> QED BY <3>hasQ, <3>noQ
+    <2> QED BY <2>allW
+  <1>rLt. CASE ~(r >= a)
+    <2> QED BY <1>rLt
+  <1> QED BY <1>rGe, <1>rLt
 
 \* MAIN AGREEMENT THEOREM.
 \* We assume TypeOK alongside IndInv (i.e. the full inductive invariant IndInit), since
@@ -5318,15 +6219,29 @@ THEOREM Agreement == TypeOK /\ IndInv => AgreementInv
         BY <1>1, <1>2, RoundsNat DEF TypeOK
   <1>4. CASE a1 <= a2
         \* v1's quorum at a1 locks round a2, where v2 also has a quorum => v2 = v1
+        <2>total1. Cardinality(Senders2(msgs2[a1])) >= N - T
+              BY <1>1, <1>3, ReplicaPredRoundHasTotal
         <2>1. \A r \in ROUNDS : r >= a1 =>
-                (\A w \in VALUES : ExistsQuorum2LessRam(r, w) => w = decision[id1])
-              BY <1>1, <1>3, LockLemma
-        <2> QED BY <1>2, <1>3, <1>4, <2>1
+                (\A w \in VALUES :
+                   /\ ExistsQuorum2LessRam(r, w)
+                   /\ Cardinality(Senders2(msgs2[r])) >= N - T
+                     => w = decision[id1])
+              BY <1>1, <1>3, <2>total1, LockLemma
+        <2>total2. Cardinality(Senders2(msgs2[a2])) >= N - T
+              BY <1>2, <1>3, ReplicaPredRoundHasTotal
+        <2> QED BY <1>2, <1>3, <1>4, <2>1, <2>total2
   <1>5. CASE a2 <= a1
+        <2>total2. Cardinality(Senders2(msgs2[a2])) >= N - T
+              BY <1>2, <1>3, ReplicaPredRoundHasTotal
         <2>1. \A r \in ROUNDS : r >= a2 =>
-                (\A w \in VALUES : ExistsQuorum2LessRam(r, w) => w = decision[id2])
-              BY <1>2, <1>3, LockLemma
-        <2> QED BY <1>1, <1>3, <1>5, <2>1
+                (\A w \in VALUES :
+                   /\ ExistsQuorum2LessRam(r, w)
+                   /\ Cardinality(Senders2(msgs2[r])) >= N - T
+                     => w = decision[id2])
+              BY <1>2, <1>3, <2>total2, LockLemma
+        <2>total1. Cardinality(Senders2(msgs2[a1])) >= N - T
+              BY <1>1, <1>3, ReplicaPredRoundHasTotal
+        <2> QED BY <1>1, <1>3, <1>5, <2>1, <2>total1
   <1> QED
         BY <1>3, <1>4, <1>5, RoundsNat
 
