@@ -20,7 +20,7 @@
  * See README.md for details. Syntax/semantic check used while editing: SANY with
  * tla2tools.jar and the same local TLAPM library path.
  *
- * Igor Konnov & Claude, June 2026
+ * Igor Konnov, Claude Opus 4.8 (xhigh/high) & Codex GPT 5.5 (xhigh/high), June 2026
  *)
 EXTENDS Ben_or83_inductive, FiniteSetTheorems, TLAPS
 
