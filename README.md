@@ -8,7 +8,7 @@ check [TLA+ Examples][tlaplus-examples].
 | Specification | Author       | Customer     | Syntax          | Description |
 |---------------|--------------|--------------|-----------------|-------------|
 | [tftp][]      | Igor Konnov  | Research project  | TLA<sup>+</sup> | Specification and conformance testing of six implementations. |
-| [Ben-Or 83][] | Igor Konnov  | Research project  | TLA<sup>+</sup> | Checking safety of Ben-Or's probabilistic consensus that tolerates Byzantine failures. |
+| [Ben-Or 83][] | Igor Konnov  | Research project  | TLA<sup>+</sup> | Checking safety of Ben-Or's probabilistic consensus that tolerates Byzantine failures. Inductive invariant and agreement (manual + [Apalache][]). Complete proofs with TLAPS (AI-assisted). |
 | [distributed-termination-detection][] | Giuliano Losa | | TLA<sup>+</sup> | Formalization of a distributed termination-detection algorithm, including a proof checked with Apalache |
 | [labyrinth][] | Igor Konnov  | Fun project  | TLA<sup>+</sup> | Simple exploration in a 2D-labyrinth |
 | [matter-labs-chonkybft][] | Igor Konnov, Denis Kolegov | Matter Labs | Quint | BFT consensus by Matter Labs |
@@ -33,3 +33,4 @@ customer's GitHub repository.
 [TetraBFT]: ./tetra-bft/
 [tla-apalache-workshop]: https://github.com/informalsystems/tla-apalache-workshop
 [tlaplus-examples]: https://github.com/tlaplus/Examples
+[Apalache]: https://apalache-mc.org
