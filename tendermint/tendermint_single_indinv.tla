@@ -1,0 +1,947 @@
+----------------------- MODULE tendermint_single_indinv ------------------------
+EXTENDS Integers, FiniteSets, Sequences, Apalache
+
+CONSTANTS
+  \* @type: Set(Int);
+  Corr,
+  \* @type: Set(Int);
+  Faulty,
+  \* @type: Int;
+  N,
+  \* @type: Int;
+  T,
+  \* @type: Set(Int);
+  ValidValues,
+  \* @type: Set(Int);
+  InvalidValues,
+  \* @type: Int;
+  MaxRound,
+  \* @type: Int -> Int;
+  Proposer
+
+VARIABLES
+  \* @type: Int -> Int;
+  round,
+  \* @type: Int -> STEP;
+  step,
+  \* @type: Int -> Int;
+  decision,
+  \* @type: Int -> Int;
+  locked_value,
+  \* @type: Int -> Int;
+  locked_round,
+  \* @type: Int -> Int;
+  valid_value,
+  \* @type: Int -> Int;
+  valid_round,
+  \* @type: Int -> Set({proposal: Int, round: Int, src: Int, valid_round: Int});
+  msgs_propose,
+  \* @type: Int -> Set({id: Int, kind: VOTEKIND, round: Int, src: Int});
+  msgs_prevote,
+  \* @type: Int -> Set({id: Int, kind: VOTEKIND, round: Int, src: Int});
+  msgs_precommit,
+  \* @type: Str;
+  last_action
+
+\* @type: (a, b, c, d, e, f, g) => <<a, b, c, d, e, f, g>>;
+WSMkTuple7(x0, x1, x2, x3, x4, x5, x6) ==
+  <<x0, x1, x2, x3, x4, x5, x6>>
+
+\* 14: if proposer(h_p, round_p) = p then
+\* 15:   if validValue_p != nil then
+\* 16:     proposal <- validValue_p
+\* 17:   else:
+\* 18:     proposal <- getValue()
+\* 19:   broadcast <PROPOSAL, h_p, round_p, proposal, validRound_p>
+\* 20: else:
+\* 21:   schedule OnTimeoutPropose(h_p, round_p) ...
+\* @type: (Int) => Bool;
+InsertProposal(p) ==
+  InsertProposal ::
+  LET v_cache59 ==
+    round[p]
+  IN
+    /\ (p = Proposer[v_cache59])
+    /\ (step[p] = "PROPOSE_OF_STEP")
+    /\ \A v_v60 \in msgs_propose[v_cache59]: (p /= v_v60.src)
+    /\ /\ \E v \in ValidValues:
+            /\ msgs_propose' =
+                 [msgs_propose EXCEPT ![v_cache59] =
+                   (msgs_propose[v_cache59] \union {[proposal |-> (IF (valid_value[p] /= -1)
+                       THEN
+                         valid_value[p]
+                       ELSE
+                         v),
+                       round |-> v_cache59,
+                       src |-> p,
+                       valid_round |-> valid_round[p]]})]
+            /\ last_action' = "INSERT_PROPOSAL"
+
+\* 22: upon proposal (v, -1) from proposer while step_p = propose
+\* 23:   if valid(v) and (lockedRound_p = -1 or lockedValue_p = v) then
+\* 24:     broadcast PREVOTE for v
+\* 25:   else
+\* 26:     broadcast PREVOTE for nil
+\* 27:   step_p <- prevote
+\* @type: (Int) => Bool;
+UponProposalInPropose(p) ==
+  UponProposalInPropose ::
+  LET v_cache61 ==
+    round[p]
+  IN
+    /\ (step[p] = "PROPOSE_OF_STEP")
+    /\ /\ \E v \in (ValidValues \union InvalidValues):
+            /\ ([proposal |-> v,
+                 round |-> v_cache61,
+                 src |-> Proposer[v_cache61],
+                 valid_round |-> -1] \in msgs_propose[v_cache61])
+            /\ msgs_prevote' =
+                 [msgs_prevote EXCEPT ![v_cache61] =
+                   (msgs_prevote[v_cache61] \union {[id |-> (IF /\ (v \in ValidValues)
+                                                                /\ \/ (locked_round[p] = -1)
+                                                                   \/ (locked_value[p] = v)
+                       THEN
+                         v
+                       ELSE
+                         -1),
+                       kind |-> "PREVOTE_OF_VOTEKIND",
+                       round |-> v_cache61,
+                       src |-> p]})]
+            /\ step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"]
+            /\ last_action' = "UPON_PROPOSAL_PROPOSE"
+
+\* 28: upon proposal (v, vr) from proposer and 2f+1 prevotes for v in vr
+\*     while step_p = propose and 0 <= vr < round_p
+\* 29:   if valid(v) and (lockedRound_p <= vr or lockedValue_p = v) then
+\* 30:     broadcast PREVOTE for v
+\* 31:   else
+\* 32:     broadcast PREVOTE for nil
+\* 33:   step_p <- prevote
+\* @type: (Int) => Bool;
+UponProposalInProposeAndPrevote(p) ==
+  UponProposalInProposeAndPrevote ::
+  LET v_cache62 ==
+    round[p]
+  IN
+    /\ (step[p] = "PROPOSE_OF_STEP")
+    /\ /\ \E v \in (ValidValues \union InvalidValues):
+            /\ \E vr \in (0)..(MaxRound):
+                 /\ (vr >= 0)
+                 /\ (vr < v_cache62)
+                 /\ LET v_cache64 ==
+                      {m63 \in msgs_prevote[vr]: (v = m63.id)}
+                    IN
+                      /\ ([proposal |-> v,
+                           round |-> v_cache62,
+                           src |-> Proposer[v_cache62],
+                           valid_round |-> vr] \in msgs_propose[v_cache62])
+                      /\ (Cardinality(v_cache64) >= ((2 * T) + 1))
+                      /\ msgs_prevote' =
+                           [msgs_prevote EXCEPT ![v_cache62] =
+                             (msgs_prevote[v_cache62] \union {[id |-> (IF /\ (v \in ValidValues)
+                                                                          /\ \/ (locked_round[p] <= vr)
+                                                                             \/ (locked_value[p] = v)
+                                 THEN
+                                   v
+                                 ELSE
+                                   -1),
+                                 kind |-> "PREVOTE_OF_VOTEKIND",
+                                 round |-> v_cache62,
+                                 src |-> p]})]
+                      /\ step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"]
+                      /\ last_action' = "UPON_PROPOSAL_PROPOSE_AND_PREVOTE"
+
+\* 34: upon 2f+1 current-round prevotes while step_p = prevote
+\* 35:   schedule OnTimeoutPrevote(h_p, round_p)
+\*
+\* This safety model does not store timers. The transition represents the
+\* timeout firing and immediately takes the nil-precommit path.
+\* @type: (Int) => Bool;
+UponQuorumOfPrevotesAny(p) ==
+  UponQuorumOfPrevotesAny ::
+  LET v_cache65 ==
+    round[p]
+  IN
+    /\ (step[p] = "PREVOTE_OF_STEP")
+    /\ /\ \E my_evidence \in SUBSET msgs_prevote[v_cache65]:
+            /\ (Cardinality({v_v66 \in (Corr \union Faulty): (\E v_v67 \in my_evidence: (v_v66 = v_v67.src))}) >= ((2 * T) + 1))
+            /\ msgs_precommit' =
+                 [msgs_precommit EXCEPT ![v_cache65] =
+                   (msgs_precommit[v_cache65] \union {[id |-> -1,
+                       kind |-> "PRECOMMIT_OF_VOTEKIND",
+                       round |-> v_cache65,
+                       src |-> p]})]
+            /\ step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"]
+            /\ last_action' = "UPON_QUORUM_PREVOTES_ANY"
+
+\* 36: upon proposal (v, *) and 2f+1 current-round prevotes for v
+\*     while valid(v) and step_p >= prevote
+\* 37:   if step_p = prevote then
+\* 38:     lockedValue_p <- v
+\* 39:     lockedRound_p <- round_p
+\* 40:     broadcast PRECOMMIT for v
+\* 41:     step_p <- precommit
+\* 42:   validValue_p <- v
+\* 43:   validRound_p <- round_p
+\* @type: (Int) => Bool;
+UponProposalInPrevoteOrCommitAndPrevote(p) ==
+  UponProposalInPrevoteOrCommitAndPrevote ::
+  LET v_cache68 ==
+    round[p]
+  IN
+    /\ \/ (step[p] = "PREVOTE_OF_STEP")
+       \/ (step[p] = "PRECOMMIT_OF_STEP")
+    /\ /\ \E v \in ValidValues:
+            /\ \E vr \in ((0)..(MaxRound) \union {-1}):
+                 LET v_cache70 ==
+                   {m69 \in msgs_prevote[v_cache68]: (v = m69.id)}
+                 IN
+                   /\ ([proposal |-> v,
+                        round |-> v_cache68,
+                        src |-> Proposer[v_cache68],
+                        valid_round |-> vr] \in msgs_propose[v_cache68])
+                   /\ (Cardinality(v_cache70) >= ((2 * T) + 1))
+                   /\ \/ lab_then(v, vr) ::
+                         /\ (step[p] = "PREVOTE_OF_STEP")
+                         /\ locked_value' = [locked_value EXCEPT ![p] = v]
+                         /\ locked_round' =
+                              [locked_round EXCEPT ![p] = v_cache68]
+                         /\ msgs_precommit' =
+                              [msgs_precommit EXCEPT ![v_cache68] =
+                                (msgs_precommit[v_cache68] \union {[id |-> v,
+                                    kind |-> "PRECOMMIT_OF_VOTEKIND",
+                                    round |-> v_cache68,
+                                    src |-> p]})]
+                         /\ step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"]
+                      \/ lab_else(v, vr) ::
+                         ~((step[p] = "PREVOTE_OF_STEP"))
+                         /\ UNCHANGED <<step, locked_value, locked_round, msgs_precommit>>
+                   /\ valid_value' = [valid_value EXCEPT ![p] = v]
+                   /\ valid_round' = [valid_round EXCEPT ![p] = v_cache68]
+                   /\ last_action' =
+                        "UPON_PROPOSAL_PREVOTE_OR_COMMIT_AND_PREVOTE"
+
+\* 47: upon 2f+1 current-round precommits
+\* 48:   schedule OnTimeoutPrecommit(h_p, round_p)
+\*
+\* This safety model does not store timers. The transition represents the
+\* timeout firing and immediately advances to the next modeled round.
+\* @type: (Int) => Bool;
+UponQuorumOfPrecommitsAny(p) ==
+  UponQuorumOfPrecommitsAny ::
+  LET v_cache71 ==
+    round[p]
+  IN
+    /\ \E my_evidence \in SUBSET msgs_precommit[v_cache71]:
+         /\ (Cardinality({v_v72 \in (Corr \union Faulty): (\E v_v73 \in my_evidence: (v_v72 = v_v73.src))}) >= ((2 * T) + 1))
+         /\ ((v_cache71 + 1) \in (0)..(MaxRound))
+         /\ (step[p] /= "DECIDED_OF_STEP")
+         /\ round' = [round EXCEPT ![p] = (v_cache71 + 1)]
+         /\ step' = [step EXCEPT ![p] = "PROPOSE_OF_STEP"]
+         /\ last_action' = "UPON_QUORUM_PRECOMMITS_ANY"
+
+\* 49: upon proposal (v, *) and 2f+1 precommits for v while undecided
+\* 50:   if valid(v) then
+\* 51:     decision_p[h_p] <- v
+\* 52:     h_p <- h_p + 1
+\* 53:     reset locks, valid value, valid round, and message log
+\* 54:     StartRound(0)
+\*
+\* This one-height model records the decision and moves the process to DECIDED.
+\* @type: (Int) => Bool;
+UponProposalInPrecommitNoDecision(p) ==
+  UponProposalInPrecommitNoDecision ::
+  /\ (decision[p] = -1)
+  /\ /\ \E v \in ValidValues:
+          /\ \E rnd \in (0)..(MaxRound):
+               /\ \E vr \in ((0)..(MaxRound) \union {-1}):
+                    LET v_cache75 ==
+                      {m74 \in msgs_precommit[rnd]: (v = m74.id)}
+                    IN
+                      /\ ([proposal |-> v,
+                           round |-> rnd,
+                           src |-> Proposer[rnd],
+                           valid_round |-> vr] \in msgs_propose[rnd])
+                      /\ (Cardinality(v_cache75) >= ((2 * T) + 1))
+                      /\ decision' = [decision EXCEPT ![p] = v]
+                      /\ step' = [step EXCEPT ![p] = "DECIDED_OF_STEP"]
+                      /\ last_action' = "UPON_PROPOSAL_PRECOMMIT_NO_DECISION"
+
+\* 57: OnTimeoutPropose(height, round)
+\* 58:   if height = h_p and round = round_p and step_p = propose then
+\* 59:     broadcast PREVOTE for nil
+\* 60:     step_p <- prevote
+\* @type: (Int) => Bool;
+OnTimeoutPropose(p) ==
+  OnTimeoutPropose ::
+  LET v_cache76 ==
+    round[p]
+  IN
+    /\ (step[p] = "PROPOSE_OF_STEP")
+    /\ (p /= Proposer[v_cache76])
+    /\ msgs_prevote' =
+         [msgs_prevote EXCEPT ![v_cache76] =
+           (msgs_prevote[v_cache76] \union {[id |-> -1,
+               kind |-> "PREVOTE_OF_VOTEKIND",
+               round |-> v_cache76,
+               src |-> p]})]
+    /\ step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"]
+    /\ last_action' = "ON_TIMEOUT_PROPOSE"
+
+\* 44: upon 2f+1 current-round PREVOTE nil messages while step_p = prevote
+\* 45:   broadcast PRECOMMIT for nil
+\* 46:   step_p <- precommit
+\* @type: (Int) => Bool;
+OnQuorumOfNilPrevotes(p) ==
+  OnQuorumOfNilPrevotes ::
+  LET v_cache77 ==
+    round[p]
+  IN
+    /\ (step[p] = "PREVOTE_OF_STEP")
+    /\ LET v_cache79 ==
+         {m78 \in msgs_prevote[v_cache77]: (m78.id = -1)}
+       IN
+         /\ (Cardinality(v_cache79) >= ((2 * T) + 1))
+         /\ msgs_precommit' =
+              [msgs_precommit EXCEPT ![v_cache77] =
+                (msgs_precommit[v_cache77] \union {[id |-> -1,
+                    kind |-> "PRECOMMIT_OF_VOTEKIND",
+                    round |-> v_cache77,
+                    src |-> p]})]
+         /\ step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"]
+         /\ last_action' = "ON_QUORUM_NIL_PREVOTES"
+
+\* 55: upon f+1 messages from a higher round
+\* 56:   StartRound(round)
+\* @type: (Int) => Bool;
+OnRoundCatchup(p) ==
+  OnRoundCatchup ::
+  /\ \E rnd \in (0)..(MaxRound):
+       /\ \E ev_propose \in SUBSET msgs_propose[rnd]:
+            /\ \E ev_prevote \in SUBSET msgs_prevote[rnd]:
+                 /\ \E ev_precommit \in SUBSET msgs_precommit[rnd]:
+                      /\ (rnd > round[p])
+                      /\ (Cardinality((({v_v80 \in (Corr \union Faulty): (\E v_v81 \in ev_propose: (v_v80 = v_v81.src))} \union {v_v82 \in (Corr \union Faulty): (\E v_v83 \in ev_prevote: (v_v82 = v_v83.src))}) \union {v_v84 \in (Corr \union Faulty): (\E v_v85 \in ev_precommit: (v_v84 = v_v85.src))})) >= (T + 1))
+                      /\ (step[p] /= "DECIDED_OF_STEP")
+                      /\ round' = [round EXCEPT ![p] = rnd]
+                      /\ step' = [step EXCEPT ![p] = "PROPOSE_OF_STEP"]
+                      /\ last_action' = "ON_ROUND_CATCHUP"
+
+\* Algorithm 1, lines 1-9, adapted to one height.
+\* This initializer starts with empty message logs for faulty processes.
+Init ==
+  /\ round = [v_v0 \in Corr |-> 0]
+  /\ step = [v_v1 \in Corr |-> "PROPOSE_OF_STEP"]
+  /\ decision = [v_v2 \in Corr |-> -1]
+  /\ locked_value = [v_v3 \in Corr |-> -1]
+  /\ locked_round = [v_v4 \in Corr |-> -1]
+  /\ valid_value = [v_v5 \in Corr |-> -1]
+  /\ valid_round = [v_v6 \in Corr |-> -1]
+  /\ msgs_propose = [v_v7 \in (0)..(MaxRound) |-> {}]
+  /\ msgs_prevote = [v_v8 \in (0)..(MaxRound) |-> {}]
+  /\ msgs_precommit = [v_v9 \in (0)..(MaxRound) |-> {}]
+  /\ last_action = "INIT"
+
+\* Algorithm 1, lines 1-9, adapted to one height.
+\* Extension: the initial message logs may contain arbitrary faulty messages.
+InitWithFaults ==
+  /\ \E faulty_proposals \in SUBSET {[proposal |-> v_v10[3],
+       round |-> v_v10[2],
+       src |-> v_v10[1],
+       valid_round |-> v_v10[4]]: v_v10 \in (Faulty) \X ((0)..(MaxRound)) \X ((ValidValues \union InvalidValues)) \X (((0)..(MaxRound) \union {-1}))}:
+       /\ \E faulty_prevotes \in SUBSET {[id |-> v_v11[3],
+            kind |-> "PREVOTE_OF_VOTEKIND",
+            round |-> v_v11[2],
+            src |-> v_v11[1]]: v_v11 \in (Faulty) \X ((0)..(MaxRound)) \X ((ValidValues \union InvalidValues))}:
+            /\ \E faulty_precommits \in SUBSET {[id |-> v_v12[3],
+                 kind |-> "PRECOMMIT_OF_VOTEKIND",
+                 round |-> v_v12[2],
+                 src |-> v_v12[1]]: v_v12 \in (Faulty) \X ((0)..(MaxRound)) \X ((ValidValues \union InvalidValues))}:
+                 /\ round = [v_v13 \in Corr |-> 0]
+                 /\ step = [v_v14 \in Corr |-> "PROPOSE_OF_STEP"]
+                 /\ decision = [v_v15 \in Corr |-> -1]
+                 /\ locked_value = [v_v16 \in Corr |-> -1]
+                 /\ locked_round = [v_v17 \in Corr |-> -1]
+                 /\ valid_value = [v_v18 \in Corr |-> -1]
+                 /\ valid_round = [v_v19 \in Corr |-> -1]
+                 /\ msgs_propose =
+                      [v_v20 \in (0)..(MaxRound) |-> {m21 \in faulty_proposals: (v_v20 = m21.round)}]
+                 /\ msgs_prevote =
+                      [v_v22 \in (0)..(MaxRound) |-> {m23 \in faulty_prevotes: (v_v22 = m23.round)}]
+                 /\ msgs_precommit =
+                      [v_v24 \in (0)..(MaxRound) |-> {m25 \in faulty_precommits: (v_v24 = m25.round)}]
+                 /\ last_action = "INIT"
+
+\* Choose one correct process and execute one enabled protocol transition.
+CorrectStep ==
+  /\ \E p \in Corr:
+       \/ lab_InsertProposal(p) ::
+          InsertProposal(p)
+          /\ UNCHANGED <<round, step, decision, locked_value, locked_round, valid_value, valid_round, msgs_prevote, msgs_precommit>>
+       \/ lab_UponProposalInPropose(p) ::
+          UponProposalInPropose(p)
+          /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+       \/ lab_UponProposalInProposeAndPrevote(p) ::
+          UponProposalInProposeAndPrevote(p)
+          /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+       \/ lab_UponQuorumOfPrevotesAny(p) ::
+          UponQuorumOfPrevotesAny(p)
+          /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
+       \/ lab_UponProposalInPrevoteOrCommitAndPrevote(p) ::
+          UponProposalInPrevoteOrCommitAndPrevote(p)
+          /\ UNCHANGED <<round, decision, msgs_propose, msgs_prevote>>
+       \/ lab_UponQuorumOfPrecommitsAny(p) ::
+          UponQuorumOfPrecommitsAny(p)
+          /\ UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+       \/ lab_UponProposalInPrecommitNoDecision(p) ::
+          UponProposalInPrecommitNoDecision(p)
+          /\ UNCHANGED <<round, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+       \/ lab_OnTimeoutPropose(p) ::
+          OnTimeoutPropose(p)
+          /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+       \/ lab_OnQuorumOfNilPrevotes(p) ::
+          OnQuorumOfNilPrevotes(p)
+          /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
+       \/ lab_OnRoundCatchup(p) ::
+          OnRoundCatchup(p)
+          /\ UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+
+\* Inject arbitrary proposal, prevote, and precommit messages by faulty replicas.
+FaultyStep ==
+  /\ \E r \in (0)..(MaxRound):
+       /\ /\ \E fps1 \in SUBSET Faulty:
+               /\ \E v1 \in (ValidValues \union InvalidValues):
+                    /\ \E vr1 \in ((0)..(MaxRound) \union {-1}):
+                         msgs_propose' =
+                           [msgs_propose EXCEPT ![r] =
+                             (msgs_propose[r] \union {[proposal |-> v1,
+                               round |-> r,
+                               src |-> v_v53,
+                               valid_round |-> vr1]: v_v53 \in fps1})]
+       /\ /\ \E fps2 \in SUBSET Faulty:
+               /\ \E v2 \in (ValidValues \union InvalidValues):
+                    msgs_prevote' =
+                      [msgs_prevote EXCEPT ![r] =
+                        (msgs_prevote[r] \union {[id |-> v2,
+                          kind |-> "PREVOTE_OF_VOTEKIND",
+                          round |-> r,
+                          src |-> v_v54]: v_v54 \in fps2})]
+       /\ /\ \E fps3 \in SUBSET Faulty:
+               /\ \E v3 \in (ValidValues \union InvalidValues):
+                    msgs_precommit' =
+                      [msgs_precommit EXCEPT ![r] =
+                        (msgs_precommit[r] \union {[id |-> v3,
+                          kind |-> "PRECOMMIT_OF_VOTEKIND",
+                          round |-> r,
+                          src |-> v_v55]: v_v55 \in fps3})]
+
+\* A system transition: either faulty message injection or a correct step.
+Step ==
+  \/ lab_faulty_step ::
+     FaultyStep
+     /\ UNCHANGED <<round, step, decision, locked_value, locked_round, valid_value, valid_round, last_action>>
+  \/ lab_correct_step ::
+     /\ \E p \in Corr:
+          \/ lab_InsertProposal(p) ::
+             InsertProposal(p)
+             /\ UNCHANGED <<round, step, decision, locked_value, locked_round, valid_value, valid_round, msgs_prevote, msgs_precommit>>
+          \/ lab_UponProposalInPropose(p) ::
+             UponProposalInPropose(p)
+             /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+          \/ lab_UponProposalInProposeAndPrevote(p) ::
+             UponProposalInProposeAndPrevote(p)
+             /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+          \/ lab_UponQuorumOfPrevotesAny(p) ::
+             UponQuorumOfPrevotesAny(p)
+             /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
+          \/ lab_UponProposalInPrevoteOrCommitAndPrevote(p) ::
+             UponProposalInPrevoteOrCommitAndPrevote(p)
+             /\ UNCHANGED <<round, decision, msgs_propose, msgs_prevote>>
+          \/ lab_UponQuorumOfPrecommitsAny(p) ::
+             UponQuorumOfPrecommitsAny(p)
+             /\ UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+          \/ lab_UponProposalInPrecommitNoDecision(p) ::
+             UponProposalInPrecommitNoDecision(p)
+             /\ UNCHANGED <<round, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+          \/ lab_OnTimeoutPropose(p) ::
+             OnTimeoutPropose(p)
+             /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
+          \/ lab_OnQuorumOfNilPrevotes(p) ::
+             OnQuorumOfNilPrevotes(p)
+             /\ UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
+          \/ lab_OnRoundCatchup(p) ::
+             OnRoundCatchup(p)
+             /\ UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
+
+\* The Tendermint safety property: agreement among correct processes.
+Agreement ==
+  Agreement ::
+  \A v_v86 \in Corr, v_v87 \in Corr: \/ \/ (decision[v_v86] = -1)
+                                        \/ (decision[v_v87] = -1)
+                                     \/ (decision[v_v86] = decision[v_v87])
+
+\* Protocol validity: correct decisions are valid values or nil.
+Validity ==
+  Validity ::
+  \A v_v88 \in Corr: \/ (decision[v_v88] = -1)
+                     \/ (decision[v_v88] \in ValidValues)
+
+IndTypeOk ==
+  IndTypeOk ::
+  /\ (round \in [Corr -> (0)..(MaxRound)])
+  /\ (step \in [Corr -> {"PROPOSE_OF_STEP",
+       "PREVOTE_OF_STEP",
+       "PRECOMMIT_OF_STEP",
+       "DECIDED_OF_STEP"}])
+  /\ (decision \in [Corr -> (ValidValues \union {-1})])
+  /\ (locked_value \in [Corr -> (ValidValues \union {-1})])
+  /\ (locked_round \in [Corr -> ((0)..(MaxRound) \union {-1})])
+  /\ (valid_value \in [Corr -> (ValidValues \union {-1})])
+  /\ (valid_round \in [Corr -> ((0)..(MaxRound) \union {-1})])
+  /\ (DOMAIN msgs_propose = (0)..(MaxRound))
+  /\ (\A v_v89 \in (0)..(MaxRound): \A v_v90 \in msgs_propose[v_v89]: (v_v90 \in {[proposal |-> v_v91[3],
+             round |-> v_v91[2],
+             src |-> v_v91[1],
+             valid_round |-> v_v91[4]]: v_v91 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))}))
+  /\ (\A v_v92 \in DOMAIN msgs_propose: \A v_v93 \in msgs_propose[v_v92]: (v_v92 = v_v93.round))
+  /\ (DOMAIN msgs_prevote = (0)..(MaxRound))
+  /\ (\A v_v94 \in (0)..(MaxRound): \A v_v95 \in msgs_prevote[v_v94]: (v_v95 \in {[id |-> v_v96[3],
+             kind |-> "PREVOTE_OF_VOTEKIND",
+             round |-> v_v96[2],
+             src |-> v_v96[1]]: v_v96 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}))
+  /\ (\A v_v97 \in DOMAIN msgs_prevote: \A v_v98 \in msgs_prevote[v_v97]: (v_v97 = v_v98.round))
+  /\ (DOMAIN msgs_precommit = (0)..(MaxRound))
+  /\ (\A v_v99 \in (0)..(MaxRound): \A v_v100 \in msgs_precommit[v_v99]: (v_v100 \in {[id |-> v_v101[3],
+             kind |-> "PRECOMMIT_OF_VOTEKIND",
+             round |-> v_v101[2],
+             src |-> v_v101[1]]: v_v101 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}))
+  /\ (\A v_v102 \in DOMAIN msgs_precommit: \A v_v103 \in msgs_precommit[v_v102]: (v_v102 = v_v103.round))
+  /\ (last_action \in {"INIT",
+       "INSERT_PROPOSAL",
+       "UPON_PROPOSAL_PROPOSE",
+       "UPON_PROPOSAL_PROPOSE_AND_PREVOTE",
+       "UPON_QUORUM_PREVOTES_ANY",
+       "UPON_PROPOSAL_PREVOTE_OR_COMMIT_AND_PREVOTE",
+       "UPON_QUORUM_PRECOMMITS_ANY",
+       "UPON_PROPOSAL_PRECOMMIT_NO_DECISION",
+       "ON_TIMEOUT_PROPOSE",
+       "ON_QUORUM_NIL_PREVOTES",
+       "ON_ROUND_CATCHUP"})
+
+\* Use this action as the initial action to reason about inductive invariants
+IndInit ==
+  /\ \E iround \in [Corr -> (0)..(MaxRound)]:
+       /\ \E istep \in [Corr -> {"PROPOSE_OF_STEP",
+            "PREVOTE_OF_STEP",
+            "PRECOMMIT_OF_STEP",
+            "DECIDED_OF_STEP"}]:
+            /\ \E idecision \in [Corr -> (ValidValues \union {-1})]:
+                 /\ \E ilocked_value \in [Corr -> (ValidValues \union {-1})]:
+                      /\ \E ilocked_round \in [Corr -> ((0)..(MaxRound) \union {-1})]:
+                           /\ \E ivalid_value \in [Corr -> (ValidValues \union {-1})]:
+                                /\ \E ivalid_round \in [Corr -> ((0)..(MaxRound) \union {-1})]:
+                                     /\ \E imsgs_propose \in [(0)..(MaxRound) -> SUBSET {[proposal |-> v_v296[3],
+                                          round |-> v_v296[2],
+                                          src |-> v_v296[1],
+                                          valid_round |-> v_v296[4]]: v_v296 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))}]:
+                                          /\ \E imsgs_prevote \in [(0)..(MaxRound) -> SUBSET {[id |-> v_v297[3],
+                                               kind |-> "PREVOTE_OF_VOTEKIND",
+                                               round |-> v_v297[2],
+                                               src |-> v_v297[1]]: v_v297 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}]:
+                                               /\ \E imsgs_precommit \in [(0)..(MaxRound) -> SUBSET {[id |-> v_v298[3],
+                                                    kind |-> "PRECOMMIT_OF_VOTEKIND",
+                                                    round |-> v_v298[2],
+                                                    src |-> v_v298[1]]: v_v298 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}]:
+                                                    /\ \E iaction \in {"INIT",
+                                                         "INSERT_PROPOSAL",
+                                                         "UPON_PROPOSAL_PROPOSE",
+                                                         "UPON_PROPOSAL_PROPOSE_AND_PREVOTE",
+                                                         "UPON_QUORUM_PREVOTES_ANY",
+                                                         "UPON_PROPOSAL_PREVOTE_OR_COMMIT_AND_PREVOTE",
+                                                         "UPON_QUORUM_PRECOMMITS_ANY",
+                                                         "UPON_PROPOSAL_PRECOMMIT_NO_DECISION",
+                                                         "ON_TIMEOUT_PROPOSE",
+                                                         "ON_QUORUM_NIL_PREVOTES",
+                                                         "ON_ROUND_CATCHUP"}:
+                                                         /\ \A v_v299 \in DOMAIN imsgs_propose: \A v_v300 \in imsgs_propose[v_v299]: (v_v299 = v_v300.round)
+                                                         /\ \A v_v301 \in DOMAIN imsgs_prevote: \A v_v302 \in imsgs_prevote[v_v301]: (v_v301 = v_v302.round)
+                                                         /\ \A v_v303 \in DOMAIN imsgs_precommit: \A v_v304 \in imsgs_precommit[v_v303]: (v_v303 = v_v304.round)
+                                                         /\ round = iround
+                                                         /\ step = istep
+                                                         /\ decision = idecision
+                                                         /\ locked_value =
+                                                              ilocked_value
+                                                         /\ locked_round =
+                                                              ilocked_round
+                                                         /\ valid_value =
+                                                              ivalid_value
+                                                         /\ valid_round =
+                                                              ivalid_round
+                                                         /\ msgs_propose =
+                                                              imsgs_propose
+                                                         /\ msgs_prevote =
+                                                              imsgs_prevote
+                                                         /\ msgs_precommit =
+                                                              imsgs_precommit
+                                                         /\ last_action =
+                                                              iaction
+                                                         /\ /\ (\A v_v305 \in Corr: /\ /\ \/ (v_v305 = Proposer[iround[v_v305]])
+                                                                                          \/ (\A v_v306 \in imsgs_propose[iround[v_v305]]: (v_v305 /= v_v306.src))
+                                                                                       /\ \/ (istep[v_v305] = "PREVOTE_OF_STEP")
+                                                                                          \/ (istep[v_v305] = "PRECOMMIT_OF_STEP")
+                                                                                          \/ (istep[v_v305] = "DECIDED_OF_STEP")
+                                                                                          \/ (\A v_v307 \in imsgs_prevote[iround[v_v305]]: (v_v305 /= v_v307.src))
+                                                                                       /\ \/ (istep[v_v305] = "PRECOMMIT_OF_STEP")
+                                                                                          \/ (istep[v_v305] = "DECIDED_OF_STEP")
+                                                                                          \/ (\A v_v308 \in imsgs_precommit[iround[v_v305]]: (v_v305 /= v_v308.src))
+                                                                                    /\ (\A v_v310 \in {v_v309 \in (0)..(MaxRound): (v_v309 > iround[v_v305])}: /\ (\A v_v311 \in imsgs_propose[v_v310]: (v_v305 /= v_v311.src))
+                                                                                                                                                               /\ (\A v_v312 \in imsgs_prevote[v_v310]: (v_v305 /= v_v312.src))
+                                                                                                                                                               /\ (\A v_v313 \in imsgs_precommit[v_v310]: (v_v305 /= v_v313.src))))
+                                                            /\ (\A v_v314 \in Corr: ((istep[v_v314] = "PREVOTE_OF_STEP")) => (\E v_v315 \in imsgs_prevote[iround[v_v314]]: /\ (v_v315.id \in ((ValidValues \union InvalidValues) \union {-1}))
+                                                                                                                                                                           /\ (v_v314 = v_v315.src)))
+                                                            /\ (\A v_v316 \in Corr: ((istep[v_v316] = "PRECOMMIT_OF_STEP")) => (\E v_v317 \in imsgs_precommit[iround[v_v316]]: /\ (v_v317.id \in ((ValidValues \union InvalidValues) \union {-1}))
+                                                                                                                                                                               /\ (v_v316 = v_v317.src)))
+                                                            /\ (\A v_v318 \in Corr: ((istep[v_v318] = "DECIDED_OF_STEP")) => (\E v_v319 \in (0)..(MaxRound): \E v_v320 \in imsgs_propose[v_v319]: /\ (v_v320.src = Proposer[v_v319])
+                                                                                                                                                                                                  /\ (v_v320.proposal = idecision[v_v318])))
+                                                            /\ (\A v_v321 \in Corr: ((istep[v_v321] = "DECIDED_OF_STEP")) => (\E v_v322 \in (0)..(MaxRound): (Cardinality({v_v324 \in (Corr \union Faulty): (\E v_v325 \in {v_v323 \in imsgs_precommit[v_v322]: (v_v323.id = idecision[v_v321])}: (v_v324 = v_v325.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v326 \in Corr: ((istep[v_v326] = "DECIDED_OF_STEP") = (idecision[v_v326] \in ValidValues)))
+                                                            /\ (\A v_v327 \in Corr: ((ilocked_round[v_v327] = -1) = (ilocked_value[v_v327] = -1)))
+                                                            /\ (\A v_v328 \in Corr: ((ivalid_round[v_v328] = -1) = (ivalid_value[v_v328] = -1)))
+                                                            /\ (\A v_v329 \in Corr: /\ (ivalid_round[v_v329] <= iround[v_v329])
+                                                                                    /\ (ilocked_round[v_v329] <= iround[v_v329]))
+                                                            /\ (\A v_v330 \in Corr: ((ivalid_round[v_v330] /= -1)) => ((Cardinality({v_v332 \in (Corr \union Faulty): (\E v_v333 \in {v_v331 \in imsgs_prevote[ivalid_round[v_v330]]: (v_v331.id = ivalid_value[v_v330])}: (v_v332 = v_v333.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v334 \in Corr: ((ilocked_round[v_v334] /= -1)) => (\E v_v335 \in (0)..(MaxRound): /\ (v_v335 <= iround[v_v334])
+                                                                                                                                                       /\ (\E v_v336 \in imsgs_precommit[v_v335]: /\ (v_v334 = v_v336.src)
+                                                                                                                                                                                                  /\ (v_v336.id = ilocked_value[v_v334]))))
+                                                            /\ (\A v_v337 \in Corr: \/ /\ (ilocked_round[v_v337] = -1)
+                                                                                       /\ (ilocked_value[v_v337] = -1)
+                                                                                       /\ (\A v_v338 \in (0)..(MaxRound): \A v_v339 \in imsgs_precommit[v_v338]: \/ (v_v337 /= v_v339.src)
+                                                                                                                                                                 \/ (v_v339.id = -1))
+                                                                                    \/ /\ (ilocked_round[v_v337] /= -1)
+                                                                                       /\ (ilocked_value[v_v337] /= -1)
+                                                                                       /\ (\A v_v340 \in (0)..(MaxRound): \A v_v341 \in imsgs_precommit[v_v340]: \/ \/ (v_v337 /= v_v341.src)
+                                                                                                                                                                    \/ (v_v341.round <= ilocked_round[v_v337])
+                                                                                                                                                                 \/ (v_v341.id = -1))
+                                                                                       /\ (\E v_v342 \in imsgs_precommit[ilocked_round[v_v337]]: /\ (v_v337 = v_v342.src)
+                                                                                                                                                 /\ (v_v342.id = ilocked_value[v_v337])))
+                                                            /\ (\A v_v343 \in (0)..(MaxRound): \A v_v344 \in imsgs_prevote[v_v343]: \/ (v_v344.src \in Faulty)
+                                                                                                                                    \/ (v_v344.id = -1)
+                                                                                                                                    \/ /\ (v_v344.id /= -1)
+                                                                                                                                       /\ \/ (\E v_v345 \in imsgs_propose[v_v343]: /\ (v_v345.src = Proposer[v_v343])
+                                                                                                                                                                                   /\ (v_v345.proposal = v_v344.id)
+                                                                                                                                                                                   /\ (v_v345.valid_round = -1))
+                                                                                                                                          \/ (\E v_v347 \in {rr346 \in (0)..(MaxRound): (rr346 < v_v343)}: /\ (\E v_v348 \in imsgs_propose[v_v343]: /\ (v_v348.src = Proposer[v_v343])
+                                                                                                                                                                                                                                                    /\ (v_v348.proposal = v_v344.id)
+                                                                                                                                                                                                                                                    /\ (v_v347 = v_v348.valid_round))
+                                                                                                                                                                                                           /\ (Cardinality({v_v350 \in (Corr \union Faulty): (\E v_v351 \in {v_v349 \in imsgs_prevote[v_v347]: (v_v349.id = v_v344.id)}: (v_v350 = v_v351.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v352 \in (0)..(MaxRound): \A v_v353 \in imsgs_precommit[v_v352]: ((v_v353.src \in Corr)) => (\E v_v354 \in imsgs_prevote[v_v352]: (v_v354.src = v_v353.src)))
+                                                            /\ (\A v_v355 \in (0)..(MaxRound): \A v_v356 \in imsgs_precommit[v_v355]: ((v_v356.src \in Corr)) => (\/ /\ (v_v356.id \in ValidValues)
+                                                                                                                                                                     /\ (Cardinality({v_v358 \in (Corr \union Faulty): (\E v_v359 \in {v_v357 \in imsgs_prevote[v_v355]: (v_v357.id = v_v356.id)}: (v_v358 = v_v359.src))}) >= ((2 * T) + 1))
+                                                                                                                                                                  \/ /\ (v_v356.id = -1)
+                                                                                                                                                                     /\ (Cardinality({v_v360 \in (Corr \union Faulty): (\E v_v361 \in imsgs_prevote[v_v355]: (v_v360 = v_v361.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v362 \in (0)..(MaxRound): /\ (\E v_v363 \in ValidValues: \E v_v364 \in ((0)..(MaxRound) \union {-1}): \A v_v365 \in imsgs_propose[v_v362]: \/ (v_v365.src \in Faulty)
+                                                                                                                                                                                                                \/ /\ /\ (v_v365.src = Proposer[v_v362])
+                                                                                                                                                                                                                      /\ (v_v363 = v_v365.proposal)
+                                                                                                                                                                                                                   /\ (v_v364 = v_v365.valid_round))
+                                                                                               /\ (\A v_v366 \in Corr: \E v_v367 \in (ValidValues \union {-1}): \A v_v368 \in imsgs_prevote[v_v362]: ((v_v366 = v_v368.src)) => ((v_v367 = v_v368.id)))
+                                                                                               /\ (\A v_v369 \in Corr: \E v_v370 \in (ValidValues \union {-1}): \A v_v371 \in imsgs_precommit[v_v362]: ((v_v369 = v_v371.src)) => ((v_v370 = v_v371.id))))
+                                                            /\ (\A v_v372 \in (0)..(MaxRound), v_v373 \in ValidValues: \/ (Cardinality({v_v375 \in (Corr \union Faulty): (\E v_v376 \in {v_v374 \in imsgs_precommit[v_v372]: (v_v373 = v_v374.id)}: (v_v375 = v_v376.src))}) < ((2 * T) + 1))
+                                                                                                                       \/ (\A v_v378 \in {v_v377 \in (0)..(MaxRound): (v_v377 > v_v372)}: \A v_v379 \in (ValidValues \ {v_v373}): (Cardinality({v_v381 \in (Corr \union Faulty): (\E v_v382 \in {v_v380 \in imsgs_prevote[v_v378]: (v_v379 = v_v380.id)}: (v_v381 = v_v382.src))}) < ((2 * T) + 1))))
+                                                            /\ (\A v_v383 \in Corr, v_v384 \in (0)..(MaxRound), v_v385 \in ValidValues, v_v386 \in (0)..(MaxRound): (/\ (v_v386 > v_v384)
+                                                                                                                                                                     /\ (\E v_v387 \in imsgs_precommit[v_v384]: /\ /\ (v_v383 = v_v387.src)
+                                                                                                                                                                                                                   /\ (v_v387.id /= -1)
+                                                                                                                                                                                                                /\ (v_v385 /= v_v387.id))
+                                                                                                                                                                     /\ (\E v_v388 \in imsgs_prevote[v_v386]: /\ (v_v383 = v_v388.src)
+                                                                                                                                                                                                              /\ (v_v385 = v_v388.id))) => (\E v_v390 \in {v_v389 \in (0)..(MaxRound): /\ (v_v389 >= v_v384)
+                                                                                                                                                                                                                                                                                       /\ (v_v389 < v_v386)}: (Cardinality({v_v392 \in (Corr \union Faulty): (\E v_v393 \in {v_v391 \in imsgs_prevote[v_v390]: (v_v385 = v_v391.id)}: (v_v392 = v_v393.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v394 \in (0)..(MaxRound): (/\ (Proposer[v_v394] \in Corr)
+                                                                                                /\ (\E v_v395 \in imsgs_propose[v_v394]: /\ (v_v395.src = Proposer[v_v394])
+                                                                                                                                         /\ (v_v395.valid_round = -1))) => (\A v_v397 \in {v_v396 \in (0)..(MaxRound): (v_v396 < v_v394)}: ~(\E v_v398 \in imsgs_precommit[v_v397]: /\ (v_v398.src = Proposer[v_v394])
+                                                                                                                                                                                                                                                                                    /\ (v_v398.id /= -1))))
+                                                            /\ (\A v_v399 \in Corr, v_v400 \in (0)..(MaxRound): \/ (v_v400 > iround[v_v399])
+                                                                                                                \/ (v_v400 = 0)
+                                                                                                                \/ (Cardinality(({v_v403 \in (Corr \union Faulty): (\E v_v404 \in imsgs_prevote[v_v400]: (v_v403 = v_v404.src))} \union {v_v401 \in (Corr \union Faulty): (\E v_v402 \in imsgs_precommit[v_v400]: (v_v401 = v_v402.src))})) >= (T + 1))
+                                                                                                                \/ (Cardinality({v_v405 \in (Corr \union Faulty): (\E v_v406 \in imsgs_precommit[(v_v400 - 1)]: (v_v405 = v_v406.src))}) >= ((2 * T) + 1)))
+                                                            /\ (\A v_v410 \in (0)..(MaxRound): ((v_v410 < LET (* @type: (Int, Int) => Int; *)
+                                                                  set_reduce_755(acc408, x409) ==
+                                                                    IF (x409 > acc408)
+                                                                    THEN
+                                                                      x409
+                                                                    ELSE
+                                                                      acc408
+                                                                  IN
+                                                                    ApaFoldSet(set_reduce_755,
+                                                                      0,
+                                                                      {iround[k407]: k407 \in DOMAIN iround}))) => ((Cardinality({v_v411 \in (Corr \union Faulty): (\E v_v412 \in imsgs_precommit[v_v410]: (v_v411 = v_v412.src))}) >= ((2 * T) + 1))))
+                                                            /\ (\A v_v413 \in Corr: ((ivalid_round[v_v413] = iround[v_v413])) => (\/ (istep[v_v413] = "PRECOMMIT_OF_STEP")
+                                                                                                                                  \/ (istep[v_v413] = "DECIDED_OF_STEP")))
+                                                            /\ (\A v_v414 \in Corr: (ilocked_round[v_v414] <= ivalid_round[v_v414]))
+                                                            /\ (\A v_v415 \in Corr: ((ivalid_round[v_v415] /= -1)) => (\E v_v416 \in imsgs_precommit[ivalid_round[v_v415]]: (v_v415 = v_v416.src)))
+                                                            /\ (\A v_v417 \in (0)..(MaxRound): \A v_v418 \in imsgs_propose[v_v417]: ((v_v418.src \in Corr)) => ((v_v417 > v_v418.valid_round)))
+
+\* Reduced coverage projection over per-process protocol state.
+MinCov ==
+  WSMkTuple7(round,
+    step,
+    decision,
+    locked_value,
+    locked_round,
+    valid_value,
+    valid_round)
+
+AllNoFutureMessagesSent ==
+  AllNoFutureMessagesSent ::
+  \A v_v641 \in Corr: /\ /\ \/ (v_v641 = Proposer[round[v_v641]])
+                            \/ (\A v_v642 \in msgs_propose[round[v_v641]]: (v_v641 /= v_v642.src))
+                         /\ \/ (step[v_v641] = "PREVOTE_OF_STEP")
+                            \/ (step[v_v641] = "PRECOMMIT_OF_STEP")
+                            \/ (step[v_v641] = "DECIDED_OF_STEP")
+                            \/ (\A v_v643 \in msgs_prevote[round[v_v641]]: (v_v641 /= v_v643.src))
+                         /\ \/ (step[v_v641] = "PRECOMMIT_OF_STEP")
+                            \/ (step[v_v641] = "DECIDED_OF_STEP")
+                            \/ (\A v_v644 \in msgs_precommit[round[v_v641]]: (v_v641 /= v_v644.src))
+                      /\ (\A v_v646 \in {v_v645 \in (0)..(MaxRound): (v_v645 > round[v_v641])}: /\ (\A v_v647 \in msgs_propose[v_v646]: (v_v641 /= v_v647.src))
+                                                                                                /\ (\A v_v648 \in msgs_prevote[v_v646]: (v_v641 /= v_v648.src))
+                                                                                                /\ (\A v_v649 \in msgs_precommit[v_v646]: (v_v641 /= v_v649.src)))
+
+AllIfInPrevoteThenSentPrevote ==
+  AllIfInPrevoteThenSentPrevote ::
+  \A v_v650 \in Corr: ((step[v_v650] = "PREVOTE_OF_STEP")) => (\E v_v651 \in msgs_prevote[round[v_v650]]: /\ (v_v651.id \in ((ValidValues \union InvalidValues) \union {-1}))
+                                                                                                          /\ (v_v650 = v_v651.src))
+
+AllIfInPrecommitThenSentPrecommit ==
+  AllIfInPrecommitThenSentPrecommit ::
+  \A v_v652 \in Corr: ((step[v_v652] = "PRECOMMIT_OF_STEP")) => (\E v_v653 \in msgs_precommit[round[v_v652]]: /\ (v_v653.id \in ((ValidValues \union InvalidValues) \union {-1}))
+                                                                                                              /\ (v_v652 = v_v653.src))
+
+AllIfInDecidedThenReceivedProposal ==
+  AllIfInDecidedThenReceivedProposal ::
+  \A v_v654 \in Corr: ((step[v_v654] = "DECIDED_OF_STEP")) => (\E v_v655 \in (0)..(MaxRound): \E v_v656 \in msgs_propose[v_v655]: /\ (v_v656.src = Proposer[v_v655])
+                                                                                                                                  /\ (v_v656.proposal = decision[v_v654]))
+
+AllIfInDecidedThenReceivedTwoThirds ==
+  AllIfInDecidedThenReceivedTwoThirds ::
+  \A v_v657 \in Corr: ((step[v_v657] = "DECIDED_OF_STEP")) => (\E v_v658 \in (0)..(MaxRound): (Cardinality({v_v660 \in (Corr \union Faulty): (\E v_v661 \in {v_v659 \in msgs_precommit[v_v658]: (v_v659.id = decision[v_v657])}: (v_v660 = v_v661.src))}) >= ((2 * T) + 1)))
+
+AllIfInDecidedThenValidDecision ==
+  AllIfInDecidedThenValidDecision ::
+  \A v_v662 \in Corr: ((step[v_v662] = "DECIDED_OF_STEP") = (decision[v_v662] \in ValidValues))
+
+AllLockedRoundIffLockedValue ==
+  AllLockedRoundIffLockedValue ::
+  \A v_v663 \in Corr: ((locked_round[v_v663] = -1) = (locked_value[v_v663] = -1))
+
+AllValidRoundIffValidValue ==
+  AllValidRoundIffValidValue ::
+  \A v_v664 \in Corr: ((valid_round[v_v664] = -1) = (valid_value[v_v664] = -1))
+
+AllValidAndLockedRoundBounded ==
+  AllValidAndLockedRoundBounded ::
+  \A v_v665 \in Corr: /\ (valid_round[v_v665] <= round[v_v665])
+                      /\ (locked_round[v_v665] <= round[v_v665])
+
+AllIfValidRoundThenTwoThirdsPrevotes ==
+  AllIfValidRoundThenTwoThirdsPrevotes ::
+  \A v_v666 \in Corr: ((valid_round[v_v666] /= -1)) => ((Cardinality({v_v668 \in (Corr \union Faulty): (\E v_v669 \in {v_v667 \in msgs_prevote[valid_round[v_v666]]: (v_v667.id = valid_value[v_v666])}: (v_v668 = v_v669.src))}) >= ((2 * T) + 1)))
+
+AllIfLockedRoundThenSentCommit ==
+  AllIfLockedRoundThenSentCommit ::
+  \A v_v670 \in Corr: ((locked_round[v_v670] /= -1)) => (\E v_v671 \in (0)..(MaxRound): /\ (v_v671 <= round[v_v670])
+                                                                                        /\ (\E v_v672 \in msgs_precommit[v_v671]: /\ (v_v670 = v_v672.src)
+                                                                                                                                  /\ (v_v672.id = locked_value[v_v670])))
+
+AllLatestPrecommitHasLockedRound ==
+  AllLatestPrecommitHasLockedRound ::
+  \A v_v673 \in Corr: \/ /\ (locked_round[v_v673] = -1)
+                         /\ (locked_value[v_v673] = -1)
+                         /\ (\A v_v674 \in (0)..(MaxRound): \A v_v675 \in msgs_precommit[v_v674]: \/ (v_v673 /= v_v675.src)
+                                                                                                  \/ (v_v675.id = -1))
+                      \/ /\ (locked_round[v_v673] /= -1)
+                         /\ (locked_value[v_v673] /= -1)
+                         /\ (\A v_v676 \in (0)..(MaxRound): \A v_v677 \in msgs_precommit[v_v676]: \/ \/ (v_v673 /= v_v677.src)
+                                                                                                     \/ (v_v677.round <= locked_round[v_v673])
+                                                                                                  \/ (v_v677.id = -1))
+                         /\ (\E v_v678 \in msgs_precommit[locked_round[v_v673]]: /\ (v_v673 = v_v678.src)
+                                                                                 /\ (v_v678.id = locked_value[v_v673]))
+
+AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
+  AllIfSentPrevoteThenReceivedProposalOrTwoThirds ::
+  \A v_v679 \in (0)..(MaxRound): \A v_v680 \in msgs_prevote[v_v679]: \/ (v_v680.src \in Faulty)
+                                                                     \/ (v_v680.id = -1)
+                                                                     \/ /\ (v_v680.id /= -1)
+                                                                        /\ \/ (\E v_v681 \in msgs_propose[v_v679]: /\ (v_v681.src = Proposer[v_v679])
+                                                                                                                   /\ (v_v681.proposal = v_v680.id)
+                                                                                                                   /\ (v_v681.valid_round = -1))
+                                                                           \/ (\E v_v683 \in {rr682 \in (0)..(MaxRound): (rr682 < v_v679)}: /\ (\E v_v684 \in msgs_propose[v_v679]: /\ (v_v684.src = Proposer[v_v679])
+                                                                                                                                                                                    /\ (v_v684.proposal = v_v680.id)
+                                                                                                                                                                                    /\ (v_v683 = v_v684.valid_round))
+                                                                                                                                            /\ (Cardinality({v_v686 \in (Corr \union Faulty): (\E v_v687 \in {v_v685 \in msgs_prevote[v_v683]: (v_v685.id = v_v680.id)}: (v_v686 = v_v687.src))}) >= ((2 * T) + 1)))
+
+IfSentPrecommitThenSentPrevote ==
+  IfSentPrecommitThenSentPrevote ::
+  \A v_v688 \in (0)..(MaxRound): \A v_v689 \in msgs_precommit[v_v688]: ((v_v689.src \in Corr)) => (\E v_v690 \in msgs_prevote[v_v688]: (v_v690.src = v_v689.src))
+
+IfSentPrecommitThenReceivedTwoThirds ==
+  IfSentPrecommitThenReceivedTwoThirds ::
+  \A v_v691 \in (0)..(MaxRound): \A v_v692 \in msgs_precommit[v_v691]: ((v_v692.src \in Corr)) => (\/ /\ (v_v692.id \in ValidValues)
+                                                                                                      /\ (Cardinality({v_v694 \in (Corr \union Faulty): (\E v_v695 \in {v_v693 \in msgs_prevote[v_v691]: (v_v693.id = v_v692.id)}: (v_v694 = v_v695.src))}) >= ((2 * T) + 1))
+                                                                                                   \/ /\ (v_v692.id = -1)
+                                                                                                      /\ (Cardinality({v_v696 \in (Corr \union Faulty): (\E v_v697 \in msgs_prevote[v_v691]: (v_v696 = v_v697.src))}) >= ((2 * T) + 1)))
+
+AllNoEquivocationByCorrect ==
+  AllNoEquivocationByCorrect ::
+  \A v_v698 \in (0)..(MaxRound): /\ (\E v_v699 \in ValidValues: \E v_v700 \in ((0)..(MaxRound) \union {-1}): \A v_v701 \in msgs_propose[v_v698]: \/ (v_v701.src \in Faulty)
+                                                                                                                                                 \/ /\ /\ (v_v701.src = Proposer[v_v698])
+                                                                                                                                                       /\ (v_v699 = v_v701.proposal)
+                                                                                                                                                    /\ (v_v700 = v_v701.valid_round))
+                                 /\ (\A v_v702 \in Corr: \E v_v703 \in (ValidValues \union {-1}): \A v_v704 \in msgs_prevote[v_v698]: ((v_v702 = v_v704.src)) => ((v_v703 = v_v704.id)))
+                                 /\ (\A v_v705 \in Corr: \E v_v706 \in (ValidValues \union {-1}): \A v_v707 \in msgs_precommit[v_v698]: ((v_v705 = v_v707.src)) => ((v_v706 = v_v707.id)))
+
+PrecommitsLockValue ==
+  PrecommitsLockValue ::
+  \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues: \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit[v_v708]: (v_v709 = v_v710.id)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
+                                                         \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote[v_v714]: (v_v715 = v_v716.id)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)))
+
+IndInvMin ==
+  IndInvMin ::
+  /\ AllNoFutureMessagesSent
+  /\ AllIfInPrevoteThenSentPrevote
+  /\ AllIfInPrecommitThenSentPrecommit
+  /\ AllIfInDecidedThenReceivedProposal
+  /\ AllIfInDecidedThenReceivedTwoThirds
+  /\ AllIfInDecidedThenValidDecision
+  /\ AllLockedRoundIffLockedValue
+  /\ AllValidRoundIffValidValue
+  /\ AllValidAndLockedRoundBounded
+  /\ AllIfValidRoundThenTwoThirdsPrevotes
+  /\ AllIfLockedRoundThenSentCommit
+  /\ AllLatestPrecommitHasLockedRound
+  /\ AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+  /\ IfSentPrecommitThenSentPrevote
+  /\ IfSentPrecommitThenReceivedTwoThirds
+  /\ AllNoEquivocationByCorrect
+  /\ PrecommitsLockValue
+
+TypedIndInvMin ==
+  TypedIndInvMin ::
+  /\ IndTypeOk
+  /\ IndInvMin
+
+\* Per-process support that makes precommits_lock_value inductive. If a correct
+\* process precommitted a non-NIL value (!= w) in round r (locking it), then it
+\* prevotes w in a later round r2 only if w reached a 2f+1 prevote quorum in some
+\* round in [r, r2) -- the only way it could re-lock to w. Quantifiers range over
+\* the small Corr/rounds/ValidValues domains; message pools appear only under
+\* existentials, keeping the SMT encoding cheap.
+PrecommitLocksLaterPrevotes ==
+  PrecommitLocksLaterPrevotes ::
+  \A v_v719 \in Corr, v_v720 \in (0)..(MaxRound), v_v721 \in ValidValues, v_v722 \in (0)..(MaxRound): (/\ (v_v722 > v_v720)
+                                                                                                       /\ (\E v_v723 \in msgs_precommit[v_v720]: /\ /\ (v_v719 = v_v723.src)
+                                                                                                                                                    /\ (v_v723.id /= -1)
+                                                                                                                                                 /\ (v_v721 /= v_v723.id))
+                                                                                                       /\ (\E v_v724 \in msgs_prevote[v_v722]: /\ (v_v719 = v_v724.src)
+                                                                                                                                               /\ (v_v721 = v_v724.id))) => (\E v_v726 \in {v_v725 \in (0)..(MaxRound): /\ (v_v725 >= v_v720)
+                                                                                                                                                                                                                        /\ (v_v725 < v_v722)}: (Cardinality({v_v728 \in (Corr \union Faulty): (\E v_v729 \in {v_v727 \in msgs_prevote[v_v726]: (v_v721 = v_v727.id)}: (v_v728 = v_v729.src))}) >= ((2 * T) + 1)))
+
+\* A correct proposer that already locked (precommitted a non-NIL value in an
+\* earlier round) never sends a fresh proposal (valid_round == NIL): a non-NIL
+\* precommit sets valid_value, which never reverts to NIL, so insert_proposal
+\* re-proposes it with a non-NIL valid_round.
+AllLockedProposerReproposes ==
+  AllLockedProposerReproposes ::
+  \A v_v730 \in (0)..(MaxRound): (/\ (Proposer[v_v730] \in Corr)
+                                  /\ (\E v_v731 \in msgs_propose[v_v730]: /\ (v_v731.src = Proposer[v_v730])
+                                                                          /\ (v_v731.valid_round = -1))) => (\A v_v733 \in {v_v732 \in (0)..(MaxRound): (v_v732 < v_v730)}: ~(\E v_v734 \in msgs_precommit[v_v733]: /\ (v_v734.src = Proposer[v_v730])
+                                                                                                                                                                                                                    /\ (v_v734.id /= -1)))
+
+\* To be in a round, requires StartRound in the past
+AllPastStartRound ==
+  AllPastStartRound ::
+  \A v_v735 \in Corr, v_v736 \in (0)..(MaxRound): \/ (v_v736 > round[v_v735])
+                                                  \/ (v_v736 = 0)
+                                                  \/ (Cardinality(({v_v739 \in (Corr \union Faulty): (\E v_v740 \in msgs_prevote[v_v736]: (v_v739 = v_v740.src))} \union {v_v737 \in (Corr \union Faulty): (\E v_v738 \in msgs_precommit[v_v736]: (v_v737 = v_v738.src))})) >= (T + 1))
+                                                  \/ (Cardinality({v_v741 \in (Corr \union Faulty): (\E v_v742 \in msgs_precommit[(v_v736 - 1)]: (v_v741 = v_v742.src))}) >= ((2 * T) + 1))
+
+\* A correct process can only be in round r if every earlier round already
+\* collected a 2f+1 precommit quorum (the only way the global maximum round
+\* advances is upon_quorum_of_precommits_any, which needs 2f+1 precommits in
+\* round r-1).
+\*
+\* The inner constraint does not depend on the process, so instead of quantifying
+\* over Corr we take the maximum round reached by any correct process and require
+\* the quorum in every round strictly below it.
+AllRoundsBelowHavePrecommitQuorum ==
+  AllRoundsBelowHavePrecommitQuorum ::
+  \A v_v746 \in (0)..(MaxRound): ((v_v746 < LET (* @type: (Int, Int) => Int; *)
+     set_reduce_756(acc744, x745) ==
+       IF (x745 > acc744) THEN x745 ELSE acc744
+     IN
+       ApaFoldSet(set_reduce_756, 0, {round[k743]: k743 \in DOMAIN round}))) => ((Cardinality({v_v747 \in (Corr \union Faulty): (\E v_v748 \in msgs_precommit[v_v746]: (v_v747 = v_v748.src))}) >= ((2 * T) + 1)))
+
+\* If a correct process set valid_round in the round it is still in, it has
+\* already passed PREVOTE: valid_round is only assigned by
+\* upon_proposal_in_prevote_or_commit_and_prevote (guard step PREVOTE/PRECOMMIT),
+\* which leaves the process in step PRECOMMIT. A round is never revisited and the
+\* step only advances within a round, so step must be PRECOMMIT or DECIDED.
+\* valid_round == NIL never equals round >= 0, so the NIL case is vacuous.
+AllValidInCurrentRoundPrecommitted ==
+  AllValidInCurrentRoundPrecommitted ::
+  \A v_v749 \in Corr: ((valid_round[v_v749] = round[v_v749])) => (\/ (step[v_v749] = "PRECOMMIT_OF_STEP")
+                                                                  \/ (step[v_v749] = "DECIDED_OF_STEP"))
+
+\* locked_* and valid_* are set together when locking (the prevote branch of
+\* upon_proposal_in_prevote_or_commit_and_prevote), and valid_round only advances
+\* afterwards, so locked_round <= valid_round. NIL_ROUND = -1 makes the unlocked
+\* case free and forces valid_round != NIL whenever the process is locked.
+AllLockedRoundBelowValidRound ==
+  AllLockedRoundBelowValidRound ::
+  \A v_v750 \in Corr: (locked_round[v_v750] <= valid_round[v_v750])
+
+\* Setting valid_round = r requires reaching step PREVOTE/PRECOMMIT in round r,
+\* after which the process has broadcast a precommit in round r (the prevote branch
+\* precommits the value; the precommit branch means it already precommitted).
+AllIfValidRoundThenPrecommitted ==
+  AllIfValidRoundThenPrecommitted ::
+  \A v_v751 \in Corr: ((valid_round[v_v751] /= -1)) => (\E v_v752 \in msgs_precommit[valid_round[v_v751]]: (v_v751 = v_v752.src))
+
+\* A correct proposer broadcasts (insert_proposal) while in step PROPOSE, where
+\* valid_round[p] < round[p] (it equals round only from PRECOMMIT on, and is
+\* bounded by round). So every proposal from a correct src has valid_round < round.
+AllCorrectProposalValidRoundBelowRound ==
+  AllCorrectProposalValidRoundBelowRound ::
+  \A v_v753 \in (0)..(MaxRound): \A v_v754 \in msgs_propose[v_v753]: ((v_v754.src \in Corr)) => ((v_v753 > v_v754.valid_round))
+
+IndInv ==
+  IndInv ::
+  /\ AllNoFutureMessagesSent
+  /\ AllIfInPrevoteThenSentPrevote
+  /\ AllIfInPrecommitThenSentPrecommit
+  /\ AllIfInDecidedThenReceivedProposal
+  /\ AllIfInDecidedThenReceivedTwoThirds
+  /\ AllIfInDecidedThenValidDecision
+  /\ AllLockedRoundIffLockedValue
+  /\ AllValidRoundIffValidValue
+  /\ AllValidAndLockedRoundBounded
+  /\ AllIfValidRoundThenTwoThirdsPrevotes
+  /\ AllIfLockedRoundThenSentCommit
+  /\ AllLatestPrecommitHasLockedRound
+  /\ AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+  /\ IfSentPrecommitThenSentPrevote
+  /\ IfSentPrecommitThenReceivedTwoThirds
+  /\ AllNoEquivocationByCorrect
+  /\ PrecommitsLockValue
+  /\ PrecommitLocksLaterPrevotes
+  /\ AllLockedProposerReproposes
+  /\ AllPastStartRound
+  /\ AllRoundsBelowHavePrecommitQuorum
+  /\ AllValidInCurrentRoundPrecommitted
+  /\ AllLockedRoundBelowValidRound
+  /\ AllIfValidRoundThenPrecommitted
+  /\ AllCorrectProposalValidRoundBelowRound
+
+TypedIndInv ==
+  TypedIndInv ::
+  /\ IndTypeOk
+  /\ IndInv
+
+================================================================================
