@@ -31,7 +31,7 @@
  * higher-order operator argument trips the frontend), so a minimal parse-time
  * shim `Apalache.tla` sits in this directory (see its header). Verify with:
  *   tlapm --stretch 2 --threads 4 -I . tendermint_single_indinv_proofs.tla
- *   => "All 372 obligations proved"; every OMITTED stub contributes no
+ *   => "All 633 obligations proved"; every OMITTED stub contributes no
  *      obligation, exit 0.
  * Syntax/semantic checks while editing: SANY via tla2tools.jar.
  *
@@ -132,9 +132,9 @@ THEOREM InitInd ==
               /\ valid_value[p] = -1 /\ valid_round[p] = -1
         OBVIOUS
   <1>type. IndTypeOk
-        BY DEF IndTypeOk
+        BY SMT DEF IndTypeOk
   <1>1.  AllNoFutureMessagesSent
-        BY <1>e DEF AllNoFutureMessagesSent
+        BY <1>e, SMT DEF AllNoFutureMessagesSent
   <1>2.  AllIfInPrevoteThenSentPrevote
         BY <1>e DEF AllIfInPrevoteThenSentPrevote
   <1>3.  AllIfInPrecommitThenSentPrecommit
@@ -144,13 +144,13 @@ THEOREM InitInd ==
   <1>5.  AllIfInDecidedThenReceivedTwoThirds
         BY <1>e DEF AllIfInDecidedThenReceivedTwoThirds
   <1>6.  AllIfInDecidedThenValidDecision
-        BY <1>e, NilNotValid DEF AllIfInDecidedThenValidDecision
+        BY <1>e, NilNotValid, SMT DEF AllIfInDecidedThenValidDecision
   <1>7.  AllLockedRoundIffLockedValue
         BY <1>e DEF AllLockedRoundIffLockedValue
   <1>8.  AllValidRoundIffValidValue
         BY <1>e DEF AllValidRoundIffValidValue
   <1>9.  AllValidAndLockedRoundBounded
-        BY <1>e DEF AllValidAndLockedRoundBounded
+        BY <1>e, SMT DEF AllValidAndLockedRoundBounded
   <1>10. AllIfValidRoundThenTwoThirdsPrevotes
         BY <1>e DEF AllIfValidRoundThenTwoThirdsPrevotes
   <1>11. AllIfLockedRoundThenSentCommit
@@ -166,7 +166,23 @@ THEOREM InitInd ==
   <1>16. AllNoEquivocationByCorrect
         BY <1>e, ValidValuesNonEmpty DEF AllNoEquivocationByCorrect
   <1>17. PrecommitsLockValue
-        BY <1>e, FS_EmptySet, ConstNat DEF PrecommitsLockValue
+    <2> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW v \in ValidValues
+                 PROVE  Cardinality({s \in (Corr \union Faulty) :
+                           \E m \in {mm \in msgs_precommit[r] : v = mm.id} : s = m.src}) < 2 * T + 1
+        BY DEF PrecommitsLockValue
+    <2>1. msgs_precommit[r] = {}
+          BY <1>e
+    <2>2. {mm \in msgs_precommit[r] : v = mm.id} = {}
+          BY <2>1, FS_EmptySet
+    <2>3. {s \in (Corr \union Faulty) :
+             \E m \in {mm \in msgs_precommit[r] : v = mm.id} : s = m.src} = {}
+          BY <2>2, FS_EmptySet
+    <2>4. Cardinality({s \in (Corr \union Faulty) :
+             \E m \in {mm \in msgs_precommit[r] : v = mm.id} : s = m.src}) = 0
+          BY <2>3, FS_EmptySet
+    <2>5. 0 < 2 * T + 1
+          BY ConstNat, SMT
+    <2> QED BY <2>4, <2>5
   <1> QED
       BY <1>type, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9, <1>10,
          <1>11, <1>12, <1>13, <1>14, <1>15, <1>16, <1>17
@@ -185,7 +201,7 @@ LEMMA ProposeRecTyped ==
                   t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))}
   <1>1. <<s, rr, pr, vr>> \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))
         OBVIOUS
-  <1> QED BY <1>1
+  <1> QED BY <1>1, SMT
 
 LEMMA PrevoteRecTyped ==
   ASSUME NEW s \in (Corr \union Faulty), NEW rr \in (0)..(MaxRound),
@@ -195,7 +211,7 @@ LEMMA PrevoteRecTyped ==
                   t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}
   <1>1. <<s, rr, idv>> \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))
         OBVIOUS
-  <1> QED BY <1>1
+  <1> QED BY <1>1, SMT
 
 LEMMA PrecommitRecTyped ==
   ASSUME NEW s \in (Corr \union Faulty), NEW rr \in (0)..(MaxRound),
@@ -205,7 +221,7 @@ LEMMA PrecommitRecTyped ==
                   t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}
   <1>1. <<s, rr, idv>> \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))
         OBVIOUS
-  <1> QED BY <1>1
+  <1> QED BY <1>1, SMT
 
 \* Message monotonicity: every Step action either leaves a message log unchanged
 \* or appends to it (EXCEPT-union), so entries are never removed. Used by the
@@ -221,11 +237,11 @@ LEMMA ProposeMonotone ==
   <1>2. CASE \E p \in Corr : InsertProposal(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_propose' = [msgs_propose EXCEPT ![idx] = (msgs_propose[idx] \union S)]
             BY <1>2 DEF InsertProposal
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>3. CASE FaultyStep
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_propose' = [msgs_propose EXCEPT ![idx] = (msgs_propose[idx] \union S)]
             BY <1>3 DEF FaultyStep
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1> QED  BY <1>sel, <1>1, <1>2, <1>3
 
 LEMMA PrevoteMonotone ==
@@ -242,19 +258,19 @@ LEMMA PrevoteMonotone ==
   <1>2. CASE \E p \in Corr : UponProposalInPropose(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
             BY <1>2 DEF UponProposalInPropose
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>3. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
             BY <1>3 DEF UponProposalInProposeAndPrevote
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>4. CASE \E p \in Corr : OnTimeoutPropose(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
             BY <1>4 DEF OnTimeoutPropose
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>5. CASE FaultyStep
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
             BY <1>5 DEF FaultyStep
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
 
 LEMMA PrecommitMonotone ==
@@ -273,20 +289,27 @@ LEMMA PrecommitMonotone ==
       <2>1. msgs_precommit' = msgs_precommit
             \/ (\E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)])
             BY <1>2 DEF UponProposalInPrevoteOrCommitAndPrevote
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>3. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
             BY <1>3 DEF UponQuorumOfPrevotesAny
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>4. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
             BY <1>4 DEF OnQuorumOfNilPrevotes
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1>5. CASE FaultyStep
       <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
             BY <1>5 DEF FaultyStep
-      <2> QED  BY <2>1
+      <2> QED  BY <2>1, SMT
   <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
+LEMMA StepUpdateChangedProcess ==
+  ASSUME IndTypeOk, NEW p \in Corr, NEW q \in Corr, NEW st,
+         step' = [step EXCEPT ![p] = st],
+         step'[q] # step[q]
+  PROVE  q = p
+  BY SMT DEF IndTypeOk
 
 \* If a correct process q's step changed over Step, then q is the acting process
 \* and took one of its nine step-changing actions. (InsertProposal and FaultyStep
@@ -311,11 +334,55 @@ LEMMA StepChangeChar ==
           \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
           \/ \E p \in Corr : OnRoundCatchup(p)
       BY DEF Step
-  <1> QED
-      BY <1>sel
-      DEF UponProposalInPropose, UponProposalInProposeAndPrevote, UponQuorumOfPrevotesAny,
-          UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrecommitsAny,
-          UponProposalInPrecommitNoDecision, OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
+  <1>0. CASE step' = step
+      BY <1>0
+  <1>1. CASE \E p \in Corr : UponProposalInPropose(p)
+    <2> PICK p \in Corr : UponProposalInPropose(p) BY <1>1
+    <2>1. step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"] BY DEF UponProposalInPropose
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>1, <2>2
+  <1>2. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
+    <2> PICK p \in Corr : UponProposalInProposeAndPrevote(p) BY <1>2
+    <2>1. step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"] BY DEF UponProposalInProposeAndPrevote
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>2, <2>2
+  <1>3. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+    <2> PICK p \in Corr : UponQuorumOfPrevotesAny(p) BY <1>3
+    <2>1. step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"] BY DEF UponQuorumOfPrevotesAny
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>3, <2>2
+  <1>4. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+    <2> PICK p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p) BY <1>4
+    <2>1. step' = step \/ step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"]
+          BY DEF UponProposalInPrevoteOrCommitAndPrevote
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>4, <2>2
+  <1>5. CASE \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+    <2> PICK p \in Corr : UponQuorumOfPrecommitsAny(p) BY <1>5
+    <2>1. step' = [step EXCEPT ![p] = "PROPOSE_OF_STEP"] BY DEF UponQuorumOfPrecommitsAny
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>5, <2>2
+  <1>6. CASE \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+    <2> PICK p \in Corr : UponProposalInPrecommitNoDecision(p) BY <1>6
+    <2>1. step' = [step EXCEPT ![p] = "DECIDED_OF_STEP"] BY DEF UponProposalInPrecommitNoDecision
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>6, <2>2
+  <1>7. CASE \E p \in Corr : OnTimeoutPropose(p)
+    <2> PICK p \in Corr : OnTimeoutPropose(p) BY <1>7
+    <2>1. step' = [step EXCEPT ![p] = "PREVOTE_OF_STEP"] BY DEF OnTimeoutPropose
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>7, <2>2
+  <1>8. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+    <2> PICK p \in Corr : OnQuorumOfNilPrevotes(p) BY <1>8
+    <2>1. step' = [step EXCEPT ![p] = "PRECOMMIT_OF_STEP"] BY DEF OnQuorumOfNilPrevotes
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>8, <2>2
+  <1>9. CASE \E p \in Corr : OnRoundCatchup(p)
+    <2> PICK p \in Corr : OnRoundCatchup(p) BY <1>9
+    <2>1. step' = [step EXCEPT ![p] = "PROPOSE_OF_STEP"] BY DEF OnRoundCatchup
+    <2>2. q = p BY <2>1, StepUpdateChangedProcess
+    <2> QED BY <1>9, <2>2
+  <1> QED BY <1>sel, <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9
 
 \* Type preservation, grouped by type conjunct: each state variable is touched
 \* by only a few Step actions; for all other actions it is UNCHANGED and its type
@@ -330,22 +397,22 @@ THEOREM TypePres ==
   <1>1. (round \in [Corr -> (0)..(MaxRound)])'
         BY DEF Step, UponQuorumOfPrecommitsAny, OnRoundCatchup
   <1>2. (step \in [Corr -> {"PROPOSE_OF_STEP", "PREVOTE_OF_STEP", "PRECOMMIT_OF_STEP", "DECIDED_OF_STEP"}])'
-        BY DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
+        BY SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
             UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
             UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
             OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
   <1>3. (decision \in [Corr -> (ValidValues \union {-1})])'
         BY DEF Step, UponProposalInPrecommitNoDecision
   <1>4. (locked_value \in [Corr -> (ValidValues \union {-1})])'
-        BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+        BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
   <1>5. (locked_round \in [Corr -> ((0)..(MaxRound) \union {-1})])'
-        BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+        BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
   <1>6. (valid_value \in [Corr -> (ValidValues \union {-1})])'
         BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote
   <1>7. (valid_round \in [Corr -> ((0)..(MaxRound) \union {-1})])'
-        BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+        BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
   <1>8. (DOMAIN msgs_propose = (0)..(MaxRound))'
-        BY DEF Step, InsertProposal, FaultyStep
+        BY SMT DEF Step, InsertProposal, FaultyStep
   <1>9. (\A v_v89 \in (0)..(MaxRound): \A v_v90 \in msgs_propose[v_v89]: (v_v90 \in {[proposal |-> v_v91[3], round |-> v_v91[2], src |-> v_v91[1], valid_round |-> v_v91[4]]: v_v91 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))}))'
     <2> DEFINE RecP == {[proposal |-> t[3], round |-> t[2], src |-> t[1], valid_round |-> t[4]]: t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) \X (((0)..(MaxRound) \union {-1}))}
     <2> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW m \in msgs_propose'[r]
@@ -394,9 +461,9 @@ THEOREM TypePres ==
         <3> QED  BY <3>2, <3>3, <3>4
     <2> QED  BY <2>sel, <2>1, <2>2, <2>3
   <1>10. (\A v_v92 \in DOMAIN msgs_propose: \A v_v93 \in msgs_propose[v_v92]: (v_v92 = v_v93.round))'
-        BY DEF Step, InsertProposal, FaultyStep
+        BY SMT DEF Step, InsertProposal, FaultyStep
   <1>11. (DOMAIN msgs_prevote = (0)..(MaxRound))'
-        BY DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote, OnTimeoutPropose, FaultyStep
+        BY SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote, OnTimeoutPropose, FaultyStep
   <1>12. (\A v_v94 \in (0)..(MaxRound): \A v_v95 \in msgs_prevote[v_v94]: (v_v95 \in {[id |-> v_v96[3], kind |-> "PREVOTE_OF_VOTEKIND", round |-> v_v96[2], src |-> v_v96[1]]: v_v96 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}))'
     <2> DEFINE RecV == {[id |-> t[3], kind |-> "PREVOTE_OF_VOTEKIND", round |-> t[2], src |-> t[1]]: t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}
     <2> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW m \in msgs_prevote'[r]
@@ -464,14 +531,14 @@ THEOREM TypePres ==
         <3> QED  BY <3>2, <3>3, <3>4
     <2> QED  BY <2>sel, <2>1, <2>2, <2>3, <2>4, <2>5
   <1>13. (\A v_v97 \in DOMAIN msgs_prevote: \A v_v98 \in msgs_prevote[v_v97]: (v_v97 = v_v98.round))'
-        BY DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote, OnTimeoutPropose, FaultyStep
+        BY SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote, OnTimeoutPropose, FaultyStep
   <1>14. (DOMAIN msgs_precommit = (0)..(MaxRound))'
-        BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
+        BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
   <1>15. (\A v_v99 \in (0)..(MaxRound): \A v_v100 \in msgs_precommit[v_v99]: (v_v100 \in {[id |-> v_v101[3], kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> v_v101[2], src |-> v_v101[1]]: v_v101 \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}))'
     <2> DEFINE RecC == {[id |-> t[3], kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> t[2], src |-> t[1]]: t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}
     <2> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW m \in msgs_precommit'[r]
                  PROVE  m \in RecC
-        OBVIOUS
+        BY SMT
     <2>H. \A mm \in msgs_precommit[r] : mm \in RecC  BY DEF IndTypeOk
     <2>corr. ASSUME NEW p \in Corr,
                     \E idv \in ((ValidValues \union InvalidValues) \union {-1}) :
@@ -539,7 +606,7 @@ THEOREM TypePres ==
         <3> QED  BY <3>2, <3>3, <3>4
     <2> QED  BY <2>sel, <2>1, <2>2, <2>3, <2>4, <2>5
   <1>16. (\A v_v102 \in DOMAIN msgs_precommit: \A v_v103 \in msgs_precommit[v_v102]: (v_v102 = v_v103.round))'
-        BY DEF Step, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
+        BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
   <1>17. (last_action \in {"INIT", "INSERT_PROPOSAL", "UPON_PROPOSAL_PROPOSE", "UPON_PROPOSAL_PROPOSE_AND_PREVOTE", "UPON_QUORUM_PREVOTES_ANY", "UPON_PROPOSAL_PREVOTE_OR_COMMIT_AND_PREVOTE", "UPON_QUORUM_PRECOMMITS_ANY", "UPON_PROPOSAL_PRECOMMIT_NO_DECISION", "ON_TIMEOUT_PROPOSE", "ON_QUORUM_NIL_PREVOTES", "ON_ROUND_CATCHUP"})'
         BY DEF Step, InsertProposal, UponProposalInPropose, UponProposalInProposeAndPrevote,
             UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
@@ -648,11 +715,11 @@ THEOREM Pres_Bounded_UponProposalInPrevoteOrCommitAndPrevote ==
         BY DEF UponProposalInPrevoteOrCommitAndPrevote
   <1>4. /\ DOMAIN round = Corr /\ DOMAIN valid_round = Corr /\ DOMAIN locked_round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        OBVIOUS
+        BY SMT DEF TypedIndInvMin, IndTypeOk
   <1>5. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
-      BY <1>1, <1>2, <1>3, <1>4, <1>5
+      BY <1>1, <1>2, <1>3, <1>4, <1>5, SMT
 
 \* Advances round[p] to round[p]+1; valid_round and locked_round are UNCHANGED.
 THEOREM Pres_Bounded_UponQuorumOfPrecommitsAny ==
@@ -667,14 +734,14 @@ THEOREM Pres_Bounded_UponQuorumOfPrecommitsAny ==
   <1>1. round' = [round EXCEPT ![p] = round[p] + 1]
         BY DEF UponQuorumOfPrecommitsAny
   <1>2. valid_round' = valid_round /\ locked_round' = locked_round
-        OBVIOUS
+        BY SMT
   <1>3. /\ DOMAIN round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        OBVIOUS
+        BY SMT DEF TypedIndInvMin, IndTypeOk
   <1>4. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
-      BY <1>1, <1>2, <1>3, <1>4
+      BY <1>1, <1>2, <1>3, <1>4, SMT
 
 \* Jumps round[p] up to some rnd > round[p]; valid_round and locked_round UNCHANGED.
 THEOREM Pres_Bounded_OnRoundCatchup ==
@@ -689,14 +756,14 @@ THEOREM Pres_Bounded_OnRoundCatchup ==
   <1>1. \E rnd \in (0)..(MaxRound) : rnd > round[p] /\ round' = [round EXCEPT ![p] = rnd]
         BY DEF OnRoundCatchup
   <1>2. valid_round' = valid_round /\ locked_round' = locked_round
-        OBVIOUS
+        BY SMT
   <1>3. /\ DOMAIN round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        OBVIOUS
+        BY SMT DEF TypedIndInvMin, IndTypeOk
   <1>4. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
-      BY <1>1, <1>2, <1>3, <1>4
+      BY <1>1, <1>2, <1>3, <1>4, SMT
 
 \* Assembler: split Step into its 11 disjuncts.
 THEOREM Pres_AllValidAndLockedRoundBounded ==
@@ -746,8 +813,12 @@ THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
                         mm.src = Proposer[rr] /\ mm.proposal = decision'[q]
       BY DEF AllIfInDecidedThenReceivedProposal
   <1>1. CASE step[q] = "DECIDED_OF_STEP"
+      <2>0. decision[q] \in ValidValues
+            BY <1>1 DEF AllIfInDecidedThenValidDecision
+      <2>00. decision[q] # -1
+            BY <2>0, NilNotValid
       <2>1. decision'[q] = decision[q]
-            BY NilNotValid DEF Step, UponProposalInPrecommitNoDecision, AllIfInDecidedThenValidDecision
+            BY <2>00, SMT DEF Step, UponProposalInPrecommitNoDecision
       <2>2. PICK rr \in (0)..(MaxRound) : \E mm \in msgs_propose[rr] :
               mm.src = Proposer[rr] /\ mm.proposal = decision[q]
             BY <1>1 DEF AllIfInDecidedThenReceivedProposal
@@ -756,10 +827,18 @@ THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
       <2>4. mm \in msgs_propose'[rr]  BY <2>3, ProposeMonotone
       <2> QED  BY <2>1, <2>3, <2>4
   <1>2. CASE step[q] # "DECIDED_OF_STEP"
+      <2>0. step'[q] # step[q]
+            BY <1>2
+      <2>a. \/ UponProposalInPropose(q) \/ UponProposalInProposeAndPrevote(q)
+             \/ UponQuorumOfPrevotesAny(q) \/ UponProposalInPrevoteOrCommitAndPrevote(q)
+             \/ UponQuorumOfPrecommitsAny(q) \/ UponProposalInPrecommitNoDecision(q)
+             \/ OnTimeoutPropose(q) \/ OnQuorumOfNilPrevotes(q) \/ OnRoundCatchup(q)
+            BY <2>0, StepChangeChar
       <2>1. UponProposalInPrecommitNoDecision(q)
-            BY <1>2 DEF Step, InsertProposal, UponProposalInPropose, UponProposalInProposeAndPrevote,
-               UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrecommitsAny,
-               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+            BY <2>a, SMT DEF UponProposalInPropose, UponProposalInProposeAndPrevote,
+               UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
       <2>2. PICK v \in ValidValues, rnd \in (0)..(MaxRound), vr \in ((0)..(MaxRound) \union {-1}) :
               /\ [proposal |-> v, round |-> rnd, src |-> Proposer[rnd], valid_round |-> vr] \in msgs_propose[rnd]
               /\ decision' = [decision EXCEPT ![q] = v]
@@ -788,7 +867,7 @@ THEOREM Pres_AllIfInDecidedThenValidDecision ==
                PROVE  (step'[q] = "DECIDED_OF_STEP") = (decision'[q] \in ValidValues)
       OBVIOUS
   <1> QED
-      BY NilNotValid
+      BY NilNotValid, SMT
       DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
           UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
           UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
@@ -806,7 +885,7 @@ THEOREM Pres_AllLockedRoundIffLockedValue ==
                PROVE  (locked_round'[q] = -1) = (locked_value'[q] = -1)
       OBVIOUS
   <1> QED
-      BY NilNotValid DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+      BY NilNotValid, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
 
 \* Symmetric to the above: only UponProposalInPrevoteOrCommitAndPrevote sets
 \* valid_value[p]:=v (/= -1) and valid_round[p]:=round[p] (/= -1) together.
@@ -818,7 +897,7 @@ THEOREM Pres_AllValidRoundIffValidValue ==
                PROVE  (valid_round'[q] = -1) = (valid_value'[q] = -1)
       OBVIOUS
   <1> QED
-      BY NilNotValid DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+      BY NilNotValid, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
 
 THEOREM Pres_AllIfValidRoundThenTwoThirdsPrevotes ==
   ASSUME TypedIndInvMin, Step PROVE AllIfValidRoundThenTwoThirdsPrevotes'
