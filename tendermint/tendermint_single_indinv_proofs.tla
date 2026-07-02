@@ -207,6 +207,116 @@ LEMMA PrecommitRecTyped ==
         OBVIOUS
   <1> QED BY <1>1
 
+\* Message monotonicity: every Step action either leaves a message log unchanged
+\* or appends to it (EXCEPT-union), so entries are never removed. Used by the
+\* Section C "in step X => already sent Y" conjuncts to carry a witnessing
+\* message across a step.
+LEMMA ProposeMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound), NEW x \in msgs_propose[r]
+  PROVE  x \in msgs_propose'[r]
+  <1> USE DEF IndTypeOk
+  <1>sel. msgs_propose' = msgs_propose \/ (\E p \in Corr : InsertProposal(p)) \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_propose' = msgs_propose  BY <1>1
+  <1>2. CASE \E p \in Corr : InsertProposal(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_propose' = [msgs_propose EXCEPT ![idx] = (msgs_propose[idx] \union S)]
+            BY <1>2 DEF InsertProposal
+      <2> QED  BY <2>1
+  <1>3. CASE FaultyStep
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_propose' = [msgs_propose EXCEPT ![idx] = (msgs_propose[idx] \union S)]
+            BY <1>3 DEF FaultyStep
+      <2> QED  BY <2>1
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3
+
+LEMMA PrevoteMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound), NEW x \in msgs_prevote[r]
+  PROVE  x \in msgs_prevote'[r]
+  <1> USE DEF IndTypeOk
+  <1>sel. \/ msgs_prevote' = msgs_prevote
+          \/ \E p \in Corr : UponProposalInPropose(p)
+          \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
+          \/ \E p \in Corr : OnTimeoutPropose(p)
+          \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_prevote' = msgs_prevote  BY <1>1
+  <1>2. CASE \E p \in Corr : UponProposalInPropose(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
+            BY <1>2 DEF UponProposalInPropose
+      <2> QED  BY <2>1
+  <1>3. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
+            BY <1>3 DEF UponProposalInProposeAndPrevote
+      <2> QED  BY <2>1
+  <1>4. CASE \E p \in Corr : OnTimeoutPropose(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
+            BY <1>4 DEF OnTimeoutPropose
+      <2> QED  BY <2>1
+  <1>5. CASE FaultyStep
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_prevote' = [msgs_prevote EXCEPT ![idx] = (msgs_prevote[idx] \union S)]
+            BY <1>5 DEF FaultyStep
+      <2> QED  BY <2>1
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
+LEMMA PrecommitMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound), NEW x \in msgs_precommit[r]
+  PROVE  x \in msgs_precommit'[r]
+  <1> USE DEF IndTypeOk
+  <1>sel. \/ msgs_precommit' = msgs_precommit
+          \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+          \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+          \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
+          \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_precommit' = msgs_precommit  BY <1>1
+  <1>2. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+      \* then-branch appends, else leaves unchanged; either way x persists
+      <2>1. msgs_precommit' = msgs_precommit
+            \/ (\E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)])
+            BY <1>2 DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2> QED  BY <2>1
+  <1>3. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
+            BY <1>3 DEF UponQuorumOfPrevotesAny
+      <2> QED  BY <2>1
+  <1>4. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
+            BY <1>4 DEF OnQuorumOfNilPrevotes
+      <2> QED  BY <2>1
+  <1>5. CASE FaultyStep
+      <2>1. \E idx \in (0)..(MaxRound) : \E S : msgs_precommit' = [msgs_precommit EXCEPT ![idx] = (msgs_precommit[idx] \union S)]
+            BY <1>5 DEF FaultyStep
+      <2> QED  BY <2>1
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
+\* If a correct process q's step changed over Step, then q is the acting process
+\* and took one of its nine step-changing actions. (InsertProposal and FaultyStep
+\* leave step unchanged; every other action sets step via [step EXCEPT ![p] = ..],
+\* so a change at q forces q = p.) Used to identify the enabling action from the
+\* post-state in the Section C "in step X" conjuncts.
+LEMMA StepChangeChar ==
+  ASSUME IndTypeOk, Step, NEW q \in Corr, step'[q] # step[q]
+  PROVE  \/ UponProposalInPropose(q) \/ UponProposalInProposeAndPrevote(q)
+         \/ UponQuorumOfPrevotesAny(q) \/ UponProposalInPrevoteOrCommitAndPrevote(q)
+         \/ UponQuorumOfPrecommitsAny(q) \/ UponProposalInPrecommitNoDecision(q)
+         \/ OnTimeoutPropose(q) \/ OnQuorumOfNilPrevotes(q) \/ OnRoundCatchup(q)
+  <1> USE DEF IndTypeOk
+  <1>sel. \/ step' = step
+          \/ \E p \in Corr : UponProposalInPropose(p)
+          \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
+          \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+          \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+          \/ \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+          \/ \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+          \/ \E p \in Corr : OnTimeoutPropose(p)
+          \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
+          \/ \E p \in Corr : OnRoundCatchup(p)
+      BY DEF Step
+  <1> QED
+      BY <1>sel
+      DEF UponProposalInPropose, UponProposalInProposeAndPrevote, UponQuorumOfPrevotesAny,
+          UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrecommitsAny,
+          UponProposalInPrecommitNoDecision, OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
+
 \* Type preservation, grouped by type conjunct: each state variable is touched
 \* by only a few Step actions; for all other actions it is UNCHANGED and its type
 \* carries from the hypothesis IndTypeOk. `BY DEF Step, <actions>` unfolds Step's
@@ -623,9 +733,42 @@ THEOREM Pres_AllIfInPrecommitThenSentPrecommit ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInPrecommitThenSentPrecommit'
 OMITTED
 
+\* A decided process received a matching proposal (at some round). Only
+\* UponProposalInPrecommitNoDecision decides, and its guard exhibits the proposal;
+\* an already-decided process keeps its decision (it cannot act) and the proposal
+\* persists by ProposeMonotone.
 THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfInDecidedThenReceivedProposal'
-OMITTED
+  ASSUME TypedIndInvMin, Step
+  PROVE  AllIfInDecidedThenReceivedProposal'
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "DECIDED_OF_STEP"
+               PROVE  \E rr \in (0)..(MaxRound) : \E mm \in msgs_propose'[rr] :
+                        mm.src = Proposer[rr] /\ mm.proposal = decision'[q]
+      BY DEF AllIfInDecidedThenReceivedProposal
+  <1>1. CASE step[q] = "DECIDED_OF_STEP"
+      <2>1. decision'[q] = decision[q]
+            BY NilNotValid DEF Step, UponProposalInPrecommitNoDecision, AllIfInDecidedThenValidDecision
+      <2>2. PICK rr \in (0)..(MaxRound) : \E mm \in msgs_propose[rr] :
+              mm.src = Proposer[rr] /\ mm.proposal = decision[q]
+            BY <1>1 DEF AllIfInDecidedThenReceivedProposal
+      <2>3. PICK mm \in msgs_propose[rr] : mm.src = Proposer[rr] /\ mm.proposal = decision[q]
+            BY <2>2
+      <2>4. mm \in msgs_propose'[rr]  BY <2>3, ProposeMonotone
+      <2> QED  BY <2>1, <2>3, <2>4
+  <1>2. CASE step[q] # "DECIDED_OF_STEP"
+      <2>1. UponProposalInPrecommitNoDecision(q)
+            BY <1>2 DEF Step, InsertProposal, UponProposalInPropose, UponProposalInProposeAndPrevote,
+               UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrecommitsAny,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+      <2>2. PICK v \in ValidValues, rnd \in (0)..(MaxRound), vr \in ((0)..(MaxRound) \union {-1}) :
+              /\ [proposal |-> v, round |-> rnd, src |-> Proposer[rnd], valid_round |-> vr] \in msgs_propose[rnd]
+              /\ decision' = [decision EXCEPT ![q] = v]
+            BY <2>1 DEF UponProposalInPrecommitNoDecision
+      <2>3. decision'[q] = v  BY <2>2
+      <2>4. [proposal |-> v, round |-> rnd, src |-> Proposer[rnd], valid_round |-> vr] \in msgs_propose'[rnd]
+            BY <2>2, ProposeMonotone
+      <2> QED  BY <2>2, <2>3, <2>4
+  <1> QED  BY <1>1, <1>2
 
 THEOREM Pres_AllIfInDecidedThenReceivedTwoThirds ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInDecidedThenReceivedTwoThirds'
