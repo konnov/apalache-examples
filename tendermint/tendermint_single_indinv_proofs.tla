@@ -384,6 +384,30 @@ LEMMA StepChangeChar ==
     <2> QED BY <1>9, <2>2
   <1> QED BY <1>sel, <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9
 
+LEMMA EnteredPrevoteHasSentPrevote ==
+  ASSUME TypedIndInvMin, Step, NEW q \in Corr,
+         step[q] # "PREVOTE_OF_STEP", step'[q] = "PREVOTE_OF_STEP"
+  PROVE  \E m \in msgs_prevote'[round'[q]] :
+           /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+           /\ q = m.src
+  BY SMT DEF TypedIndInvMin, IndInvMin, IndTypeOk, Step, InsertProposal,
+     UponProposalInPropose, UponProposalInProposeAndPrevote,
+     UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
+     UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+     OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+
+LEMMA EnteredPrecommitHasSentPrecommit ==
+  ASSUME TypedIndInvMin, Step, NEW q \in Corr,
+         step[q] # "PRECOMMIT_OF_STEP", step'[q] = "PRECOMMIT_OF_STEP"
+  PROVE  \E m \in msgs_precommit'[round'[q]] :
+           /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+           /\ q = m.src
+  BY SMT DEF TypedIndInvMin, IndInvMin, IndTypeOk, Step, InsertProposal,
+     UponProposalInPropose, UponProposalInProposeAndPrevote,
+     UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
+     UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+     OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+
 \* Type preservation, grouped by type conjunct: each state variable is touched
 \* by only a few Step actions; for all other actions it is UNCHANGED and its type
 \* carries from the hypothesis IndTypeOk. `BY DEF Step, <actions>` unfolds Step's
@@ -794,11 +818,51 @@ OMITTED
 
 THEOREM Pres_AllIfInPrevoteThenSentPrevote ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInPrevoteThenSentPrevote'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "PREVOTE_OF_STEP"
+               PROVE  \E m \in msgs_prevote'[round'[q]] :
+                         /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+                         /\ q = m.src
+      BY DEF AllIfInPrevoteThenSentPrevote
+  <1>1. CASE step[q] = "PREVOTE_OF_STEP"
+      <2>0. round'[q] = round[q]
+            BY <1>1, SMT DEF Step, UponQuorumOfPrevotesAny,
+               UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrecommitsAny,
+               OnQuorumOfNilPrevotes, OnRoundCatchup
+      <2>1. PICK m \in msgs_prevote[round[q]] :
+                /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+                /\ q = m.src
+            BY <1>1 DEF AllIfInPrevoteThenSentPrevote
+      <2>2. m \in msgs_prevote'[round'[q]]
+            BY <2>0, <2>1, PrevoteMonotone
+      <2> QED BY <2>1, <2>2
+  <1>2. CASE step[q] # "PREVOTE_OF_STEP"
+      <2> QED BY <1>2, EnteredPrevoteHasSentPrevote
+  <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfInPrecommitThenSentPrecommit ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInPrecommitThenSentPrecommit'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "PRECOMMIT_OF_STEP"
+               PROVE  \E m \in msgs_precommit'[round'[q]] :
+                         /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+                         /\ q = m.src
+      BY DEF AllIfInPrecommitThenSentPrecommit
+  <1>1. CASE step[q] = "PRECOMMIT_OF_STEP"
+      <2>0. round'[q] = round[q]
+            BY <1>1, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnRoundCatchup
+      <2>1. PICK m \in msgs_precommit[round[q]] :
+                /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
+                /\ q = m.src
+            BY <1>1 DEF AllIfInPrecommitThenSentPrecommit
+      <2>2. m \in msgs_precommit'[round'[q]]
+            BY <2>0, <2>1, PrecommitMonotone
+      <2> QED BY <2>1, <2>2
+  <1>2. CASE step[q] # "PRECOMMIT_OF_STEP"
+      <2> QED BY <1>2, EnteredPrecommitHasSentPrecommit
+  <1> QED BY <1>1, <1>2
 
 \* A decided process received a matching proposal (at some round). Only
 \* UponProposalInPrecommitNoDecision decides, and its guard exhibits the proposal;
