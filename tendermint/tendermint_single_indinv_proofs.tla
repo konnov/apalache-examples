@@ -1042,7 +1042,112 @@ THEOREM Pres_AllIfLockedRoundThenSentCommit ==
 
 THEOREM Pres_AllLatestPrecommitHasLockedRound ==
   ASSUME TypedIndInvMin, Step PROVE AllLatestPrecommitHasLockedRound'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr
+               PROVE  \/ /\ locked_round'[q] = -1
+                          /\ locked_value'[q] = -1
+                          /\ \A r \in (0)..(MaxRound) : \A m \in msgs_precommit'[r] :
+                               \/ q # m.src
+                               \/ m.id = -1
+                       \/ /\ locked_round'[q] # -1
+                          /\ locked_value'[q] # -1
+                          /\ \A r \in (0)..(MaxRound) : \A m \in msgs_precommit'[r] :
+                               \/ \/ q # m.src
+                                  \/ m.round <= locked_round'[q]
+                               \/ m.id = -1
+                          /\ \E m \in msgs_precommit'[locked_round'[q]] :
+                               /\ q = m.src
+                               /\ m.id = locked_value'[q]
+      BY DEF AllLatestPrecommitHasLockedRound
+  <1>1. CASE locked_round'[q] = locked_round[q] /\ locked_value'[q] = locked_value[q]
+      <2>old. \/ /\ locked_round[q] = -1
+                   /\ locked_value[q] = -1
+                   /\ \A r \in (0)..(MaxRound) : \A m \in msgs_precommit[r] :
+                        \/ q # m.src
+                        \/ m.id = -1
+                \/ /\ locked_round[q] # -1
+                   /\ locked_value[q] # -1
+                   /\ \A r \in (0)..(MaxRound) : \A m \in msgs_precommit[r] :
+                        \/ \/ q # m.src
+                           \/ m.round <= locked_round[q]
+                        \/ m.id = -1
+                   /\ \E m \in msgs_precommit[locked_round[q]] :
+                        /\ q = m.src
+                        /\ m.id = locked_value[q]
+            BY DEF AllLatestPrecommitHasLockedRound
+      <2>typep. IndTypeOk'
+            BY TypePres
+      <2>shape. \A r \in (0)..(MaxRound) : \A m \in msgs_precommit'[r] :
+                   /\ m.round = r
+                   /\ \/ m \in msgs_precommit[r]
+                      \/ q # m.src
+                      \/ /\ r = round[q]
+                         /\ \/ m.id = -1
+                            \/ /\ locked_round'[q] = round[q]
+                               /\ m.id = locked_value'[q]
+            BY DisjointCF, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep, IndTypeOk
+      <2>1. CASE locked_round[q] = -1
+          <3>oldNil. /\ locked_value[q] = -1
+                      /\ \A r \in (0)..(MaxRound) : \A m \in msgs_precommit[r] :
+                           \/ q # m.src
+                           \/ m.id = -1
+                BY <2>old, <2>1, SMT
+          <3> QED
+                BY <1>1, <2>1, <3>oldNil, <2>shape, ConstNat, SMT
+                DEF TypedIndInvMin, IndTypeOk
+      <2>2. CASE locked_round[q] # -1
+          <3>0. locked_round[q] \in (0)..(MaxRound)
+                BY <2>2, SMT DEF TypedIndInvMin, IndTypeOk
+          <3>oldVal. locked_value[q] # -1
+                BY <2>old, <2>2, SMT
+          <3>oldUni. \A r \in (0)..(MaxRound) : \A m \in msgs_precommit[r] :
+                         \/ \/ q # m.src
+                            \/ m.round <= locked_round[q]
+                         \/ m.id = -1
+                BY <2>old, <2>2, SMT
+          <3>oldExist. \E m \in msgs_precommit[locked_round[q]] :
+                         /\ q = m.src
+                         /\ m.id = locked_value[q]
+                BY <2>old, <2>2, SMT
+          <3>1. PICK m \in msgs_precommit[locked_round[q]] :
+                    /\ q = m.src
+                    /\ m.id = locked_value[q]
+                BY <3>oldExist
+          <3>2. m \in msgs_precommit'[locked_round'[q]]
+                BY <1>1, <2>2, <3>0, <3>1, PrecommitMonotone
+          <3> QED
+                BY <1>1, <2>2, <2>shape, <3>oldVal, <3>oldUni, <3>1, <3>2, SMT
+      <2> QED BY <2>old, <2>1, <2>2
+  <1>2. CASE locked_round'[q] # locked_round[q] \/ locked_value'[q] # locked_value[q]
+      <2>1. UponProposalInPrevoteOrCommitAndPrevote(q)
+            BY <1>2, SMT DEF Step, InsertProposal, UponProposalInPropose,
+               UponProposalInProposeAndPrevote, UponQuorumOfPrevotesAny,
+               UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+      <2>2. PICK v \in ValidValues, vr \in ((0)..(MaxRound) \union {-1}) :
+                /\ locked_value' = [locked_value EXCEPT ![q] = v]
+                /\ locked_round' = [locked_round EXCEPT ![q] = round[q]]
+                /\ msgs_precommit' =
+                     [msgs_precommit EXCEPT ![round[q]] =
+                       (msgs_precommit[round[q]] \union {[id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q]})]
+            BY <1>2, <2>1, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2>3. locked_value'[q] = v /\ locked_round'[q] = round[q]
+            BY <2>2, SMT DEF IndTypeOk
+      <2>4. locked_round'[q] # -1 /\ locked_value'[q] # -1
+            BY <2>2, <2>3, NilNotValid, SMT DEF IndTypeOk
+      <2>5. [id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q]
+              \in msgs_precommit'[locked_round'[q]]
+            BY <2>2, <2>3
+      <2>6. \A r \in (0)..(MaxRound) : \A m \in msgs_precommit'[r] :
+               \/ \/ q # m.src
+                  \/ m.round <= locked_round'[q]
+               \/ m.id = -1
+            BY <2>2, <2>3, SMT DEF AllLatestPrecommitHasLockedRound,
+               AllValidAndLockedRoundBounded, IndTypeOk
+      <2> QED BY <2>3, <2>4, <2>5, <2>6
+  <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
   ASSUME TypedIndInvMin, Step PROVE AllIfSentPrevoteThenReceivedProposalOrTwoThirds'
