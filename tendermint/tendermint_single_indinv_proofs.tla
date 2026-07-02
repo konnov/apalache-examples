@@ -304,6 +304,52 @@ LEMMA PrecommitMonotone ==
       <2> QED  BY <2>1, SMT
   <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
 
+LEMMA PrevoteSenderSetCardinalityMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_prevote[r] : mm.id = idv} : s = m.src})
+         <=
+         Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_prevote'[r] : mm.id = idv} : s = m.src})
+  <1> DEFINE Old == {s \in (Corr \union Faulty) :
+                       \E m \in {mm \in msgs_prevote[r] : mm.id = idv} : s = m.src}
+              New == {s \in (Corr \union Faulty) :
+                       \E m \in {mm \in msgs_prevote'[r] : mm.id = idv} : s = m.src}
+  <1>sub. Old \subseteq New
+        BY PrevoteMonotone DEF Old, New
+  <1>newSub. New \subseteq (Corr \union Faulty)
+        BY DEF New
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finNew. IsFiniteSet(New)
+        BY <1>newSub, <1>finCF, FS_Subset
+  <1> QED
+        BY <1>sub, <1>finNew, FS_Subset
+
+LEMMA PrecommitSenderSetCardinalityMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_precommit[r] : mm.id = idv} : s = m.src})
+         <=
+         Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_precommit'[r] : mm.id = idv} : s = m.src})
+  <1> DEFINE Old == {s \in (Corr \union Faulty) :
+                       \E m \in {mm \in msgs_precommit[r] : mm.id = idv} : s = m.src}
+              New == {s \in (Corr \union Faulty) :
+                       \E m \in {mm \in msgs_precommit'[r] : mm.id = idv} : s = m.src}
+  <1>sub. Old \subseteq New
+        BY PrecommitMonotone DEF Old, New
+  <1>newSub. New \subseteq (Corr \union Faulty)
+        BY DEF New
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finNew. IsFiniteSet(New)
+        BY <1>newSub, <1>finCF, FS_Subset
+  <1> QED
+        BY <1>sub, <1>finNew, FS_Subset
+
 LEMMA StepUpdateChangedProcess ==
   ASSUME IndTypeOk, NEW p \in Corr, NEW q \in Corr, NEW st,
          step' = [step EXCEPT ![p] = st],
