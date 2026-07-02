@@ -89,6 +89,18 @@ ASSUME NilNotValid == -1 \notin ValidValues
 \* existential witness inside AllNoEquivocationByCorrect over empty message logs.
 ASSUME ValidValuesNonEmpty == ValidValues # {}
 
+LEMMA IntLeGeTrans ==
+  ASSUME NEW a \in Int, NEW b \in Int, NEW c \in Int, NEW k \in Int,
+         a >= k, a <= b, b <= c
+  PROVE  c >= k
+  BY SMT
+
+LEMMA IntLeGeTrans1 ==
+  ASSUME NEW a \in Int, NEW b \in Int, NEW k \in Int,
+         a >= k, a <= b
+  PROVE  b >= k
+  BY SMT
+
 \*****************************************************************************
 \* SECTION A -- FOUNDATIONAL CARDINALITY / QUORUM LEMMAS
 \*
@@ -358,6 +370,61 @@ LEMMA PrecommitValueMessagesCardinalityLeSenders ==
          Cardinality({s \in (Corr \union Faulty) :
             \E m \in {mm \in msgs_precommit[r] : mm.id = idv} : s = m.src})
   <1> DEFINE Msgs == {m \in msgs_precommit[r] : m.id = idv}
+              Senders == {s \in (Corr \union Faulty) : \E m \in Msgs : s = m.src}
+              SrcOf == [m \in Msgs |-> m.src]
+  <1>sendersSub. Senders \subseteq (Corr \union Faulty)
+        BY DEF Senders
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finSenders. IsFiniteSet(Senders)
+        BY <1>sendersSub, <1>finCF, FS_Subset
+  <1>dom. DOMAIN SrcOf = Msgs
+        BY DEF SrcOf
+  <1>range. \A x \in Msgs : SrcOf[x] \in Senders
+        BY SMT DEF SrcOf, Senders, Msgs, IndTypeOk
+  <1>fun. SrcOf \in [Msgs -> Senders]
+        BY <1>dom, <1>range, SMT
+  <1>one. \A x \in Msgs : \A y \in Msgs : SrcOf[x] = SrcOf[y] => x = y
+        BY SMT DEF SrcOf, Msgs, IndTypeOk
+  <1>inj. SrcOf \in Injection(Msgs, Senders)
+        BY <1>fun, <1>one DEF Injection, IsInjective
+  <1> QED
+        BY <1>inj, <1>finSenders, FS_Injection
+
+LEMMA PrevoteValueMessagesCardinalityLeSenders ==
+  ASSUME IndTypeOk, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  Cardinality({m \in msgs_prevote[r] : m.id = idv})
+         <=
+         Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_prevote[r] : mm.id = idv} : s = m.src})
+  <1> DEFINE Msgs == {m \in msgs_prevote[r] : m.id = idv}
+              Senders == {s \in (Corr \union Faulty) : \E m \in Msgs : s = m.src}
+              SrcOf == [m \in Msgs |-> m.src]
+  <1>sendersSub. Senders \subseteq (Corr \union Faulty)
+        BY DEF Senders
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finSenders. IsFiniteSet(Senders)
+        BY <1>sendersSub, <1>finCF, FS_Subset
+  <1>dom. DOMAIN SrcOf = Msgs
+        BY DEF SrcOf
+  <1>range. \A x \in Msgs : SrcOf[x] \in Senders
+        BY SMT DEF SrcOf, Senders, Msgs, IndTypeOk
+  <1>fun. SrcOf \in [Msgs -> Senders]
+        BY <1>dom, <1>range, SMT
+  <1>one. \A x \in Msgs : \A y \in Msgs : SrcOf[x] = SrcOf[y] => x = y
+        BY SMT DEF SrcOf, Msgs, IndTypeOk
+  <1>inj. SrcOf \in Injection(Msgs, Senders)
+        BY <1>fun, <1>one DEF Injection, IsInjective
+  <1> QED
+        BY <1>inj, <1>finSenders, FS_Injection
+
+LEMMA PrevoteValueMessagesFinite ==
+  ASSUME IndTypeOk, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  IsFiniteSet({m \in msgs_prevote[r] : m.id = idv})
+  <1> DEFINE Msgs == {m \in msgs_prevote[r] : m.id = idv}
               Senders == {s \in (Corr \union Faulty) : \E m \in Msgs : s = m.src}
               SrcOf == [m \in Msgs |-> m.src]
   <1>sendersSub. Senders \subseteq (Corr \union Faulty)
@@ -1045,7 +1112,110 @@ THEOREM Pres_AllValidRoundIffValidValue ==
 
 THEOREM Pres_AllIfValidRoundThenTwoThirdsPrevotes ==
   ASSUME TypedIndInvMin, Step PROVE AllIfValidRoundThenTwoThirdsPrevotes'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] # -1
+               PROVE  Cardinality({s \in (Corr \union Faulty) :
+                         \E m \in {mm \in msgs_prevote'[valid_round'[q]] :
+                           mm.id = valid_value'[q]} : s = m.src})
+                       >= ((2 * T) + 1)
+      BY DEF AllIfValidRoundThenTwoThirdsPrevotes
+  <1>1. CASE valid_round'[q] = valid_round[q] /\ valid_value'[q] = valid_value[q]
+      <2>0. valid_round[q] # -1
+            BY <1>1
+      <2>00. valid_round[q] \in (0)..(MaxRound)
+            BY <2>0, SMT DEF IndTypeOk
+      <2>1. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote[valid_round[q]] : mm.id = valid_value[q]} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>0 DEF AllIfValidRoundThenTwoThirdsPrevotes
+      <2>2. valid_value[q] \in ((ValidValues \union InvalidValues) \union {-1})
+            BY SMT DEF IndTypeOk
+      <2>3. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote[valid_round[q]] : mm.id = valid_value[q]} : s = m.src})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[valid_round[q]] : mm.id = valid_value[q]} : s = m.src})
+            BY <2>00, <2>2, PrevoteSenderSetCardinalityMonotone
+      <2>4. valid_round'[q] = valid_round[q] /\ valid_value'[q] = valid_value[q]
+            BY <1>1
+      <2>5. /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_prevote[valid_round[q]] : mm.id = valid_value[q]} : s = m.src}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_prevote'[valid_round[q]] : mm.id = valid_value[q]} : s = m.src}) \in Int
+              /\ ((2 * T) + 1) \in Int
+            BY FiniteCF, FS_Union, FS_Subset, FS_CardinalityType, ConstNat, SMT
+      <2>6. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[valid_round[q]] : mm.id = valid_value[q]} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>1, <2>3, <2>5, IntLeGeTrans1
+      <2>7. {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote'[valid_round'[q]] : mm.id = valid_value'[q]} : s = m.src}
+              =
+              {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote'[valid_round[q]] : mm.id = valid_value[q]} : s = m.src}
+            BY <2>4, SMT
+      <2>8. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[valid_round'[q]] : mm.id = valid_value'[q]} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>6, <2>7
+      <2> QED BY <2>8
+  <1>2. CASE valid_round'[q] # valid_round[q] \/ valid_value'[q] # valid_value[q]
+      <2>1. UponProposalInPrevoteOrCommitAndPrevote(q)
+            BY <1>2, SMT DEF Step, InsertProposal, UponProposalInPropose,
+               UponProposalInProposeAndPrevote, UponQuorumOfPrevotesAny,
+               UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+      <2>2. PICK v \in ValidValues, vr \in ((0)..(MaxRound) \union {-1}) :
+                /\ Cardinality({m \in msgs_prevote[round[q]] : m.id = v}) >= ((2 * T) + 1)
+                /\ valid_value' = [valid_value EXCEPT ![q] = v]
+                /\ valid_round' = [valid_round EXCEPT ![q] = round[q]]
+            BY <2>1 DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2>3. valid_value'[q] = v /\ valid_round'[q] = round[q]
+            BY <2>2, SMT DEF IndTypeOk
+      <2>4. round[q] \in (0)..(MaxRound)
+            BY SMT DEF IndTypeOk
+      <2>4a. v \in ((ValidValues \union InvalidValues) \union {-1})
+            BY <2>2
+      <2>5. Cardinality({m \in msgs_prevote[round[q]] : m.id = v})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote[round[q]] : mm.id = v} : s = m.src})
+            BY <2>4, <2>4a, PrevoteValueMessagesCardinalityLeSenders
+      <2>6. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote[round[q]] : mm.id = v} : s = m.src})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[round[q]] : mm.id = v} : s = m.src})
+            BY <2>4, <2>4a, PrevoteSenderSetCardinalityMonotone
+      <2>7. /\ Cardinality({m \in msgs_prevote[round[q]] : m.id = v}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_prevote[round[q]] : mm.id = v} : s = m.src}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_prevote'[round[q]] : mm.id = v} : s = m.src}) \in Int
+              /\ ((2 * T) + 1) \in Int
+            BY <2>4, <2>4a, PrevoteValueMessagesFinite, FiniteCF, FS_Union,
+               FS_Subset, FS_CardinalityType, ConstNat, SMT
+      <2>8. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote[round[q]] : mm.id = v} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>2, <2>5, <2>7, IntLeGeTrans1
+      <2>9. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[round[q]] : mm.id = v} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>6, <2>7, <2>8, IntLeGeTrans1
+      <2>10. {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote'[valid_round'[q]] : mm.id = valid_value'[q]} : s = m.src}
+              =
+              {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote'[round[q]] : mm.id = v} : s = m.src}
+            BY <2>3, SMT
+      <2>11. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote'[valid_round'[q]] : mm.id = valid_value'[q]} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>9, <2>10
+      <2> QED BY <2>11
+  <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfLockedRoundThenSentCommit ==
   ASSUME TypedIndInvMin, Step PROVE AllIfLockedRoundThenSentCommit'
