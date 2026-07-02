@@ -350,6 +350,35 @@ LEMMA PrecommitSenderSetCardinalityMonotone ==
   <1> QED
         BY <1>sub, <1>finNew, FS_Subset
 
+LEMMA PrecommitValueMessagesCardinalityLeSenders ==
+  ASSUME IndTypeOk, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  Cardinality({m \in msgs_precommit[r] : m.id = idv})
+         <=
+         Cardinality({s \in (Corr \union Faulty) :
+            \E m \in {mm \in msgs_precommit[r] : mm.id = idv} : s = m.src})
+  <1> DEFINE Msgs == {m \in msgs_precommit[r] : m.id = idv}
+              Senders == {s \in (Corr \union Faulty) : \E m \in Msgs : s = m.src}
+              SrcOf == [m \in Msgs |-> m.src]
+  <1>sendersSub. Senders \subseteq (Corr \union Faulty)
+        BY DEF Senders
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finSenders. IsFiniteSet(Senders)
+        BY <1>sendersSub, <1>finCF, FS_Subset
+  <1>dom. DOMAIN SrcOf = Msgs
+        BY DEF SrcOf
+  <1>range. \A x \in Msgs : SrcOf[x] \in Senders
+        BY SMT DEF SrcOf, Senders, Msgs, IndTypeOk
+  <1>fun. SrcOf \in [Msgs -> Senders]
+        BY <1>dom, <1>range, SMT
+  <1>one. \A x \in Msgs : \A y \in Msgs : SrcOf[x] = SrcOf[y] => x = y
+        BY SMT DEF SrcOf, Msgs, IndTypeOk
+  <1>inj. SrcOf \in Injection(Msgs, Senders)
+        BY <1>fun, <1>one DEF Injection, IsInjective
+  <1> QED
+        BY <1>inj, <1>finSenders, FS_Injection
+
 LEMMA StepUpdateChangedProcess ==
   ASSUME IndTypeOk, NEW p \in Corr, NEW q \in Corr, NEW st,
          step' = [step EXCEPT ![p] = st],
