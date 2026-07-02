@@ -1050,7 +1050,42 @@ OMITTED
 
 THEOREM Pres_IfSentPrecommitThenSentPrevote ==
   ASSUME TypedIndInvMin, Step PROVE IfSentPrecommitThenSentPrevote'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
+                       NEW m \in msgs_precommit'[r],
+                       m.src \in Corr
+               PROVE  \E pv \in msgs_prevote'[r] : pv.src = m.src
+      BY DEF IfSentPrecommitThenSentPrevote
+  <1>split. \/ m \in msgs_precommit[r]
+             \/ \E p \in Corr :
+                  /\ step[p] = "PREVOTE_OF_STEP"
+                  /\ r = round[p]
+                  /\ m.src = p
+      BY DisjointCF, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+         UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
+  <1>1. CASE m \in msgs_precommit[r]
+      <2>1. PICK pv \in msgs_prevote[r] : pv.src = m.src
+            BY <1>1 DEF IfSentPrecommitThenSentPrevote
+      <2>2. pv \in msgs_prevote'[r]
+            BY <2>1, PrevoteMonotone
+      <2> QED BY <2>1, <2>2
+  <1>2. CASE \E p \in Corr :
+                  /\ step[p] = "PREVOTE_OF_STEP"
+                  /\ r = round[p]
+                  /\ m.src = p
+      <2> PICK p \in Corr :
+                  /\ step[p] = "PREVOTE_OF_STEP"
+                  /\ r = round[p]
+                  /\ m.src = p
+            BY <1>2
+      <2>1. PICK pv \in msgs_prevote[round[p]] :
+                /\ pv.id \in ((ValidValues \union InvalidValues) \union {-1})
+                /\ p = pv.src
+            BY DEF AllIfInPrevoteThenSentPrevote
+      <2>2. pv \in msgs_prevote'[r]
+            BY <2>1, PrevoteMonotone
+      <2> QED BY <2>1, <2>2
+  <1> QED BY <1>split, <1>1, <1>2
 
 THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
   ASSUME TypedIndInvMin, Step PROVE IfSentPrecommitThenReceivedTwoThirds'
