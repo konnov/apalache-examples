@@ -408,6 +408,11 @@ LEMMA EnteredPrecommitHasSentPrecommit ==
      UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
      OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
 
+LEMMA RoundMonotone ==
+  ASSUME IndTypeOk, Step, NEW q \in Corr
+  PROVE  round[q] <= round'[q]
+  BY SMT DEF IndTypeOk, Step, UponQuorumOfPrecommitsAny, OnRoundCatchup
+
 \* Type preservation, grouped by type conjunct: each state variable is touched
 \* by only a few Step actions; for all other actions it is UNCHANGED and its type
 \* carries from the hypothesis IndTypeOk. `BY DEF Step, <actions>` unfolds Step's
@@ -969,7 +974,71 @@ OMITTED
 
 THEOREM Pres_AllIfLockedRoundThenSentCommit ==
   ASSUME TypedIndInvMin, Step PROVE AllIfLockedRoundThenSentCommit'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, locked_round'[q] # -1
+               PROVE  \E rr \in (0)..(MaxRound) :
+                         /\ rr <= round'[q]
+                         /\ \E m \in msgs_precommit'[rr] :
+                              /\ q = m.src
+                              /\ m.id = locked_value'[q]
+      BY DEF AllIfLockedRoundThenSentCommit
+  <1>1. CASE locked_value'[q] = locked_value[q]
+      <2>post. AllLockedRoundIffLockedValue'
+            BY Pres_AllLockedRoundIffLockedValue
+      <2>0. locked_value'[q] # -1
+            BY <2>post DEF AllLockedRoundIffLockedValue
+      <2>00. locked_value[q] # -1
+            BY <1>1, <2>0
+      <2>000. locked_round[q] # -1
+            BY <2>00 DEF AllLockedRoundIffLockedValue
+      <2>1. PICK rr \in (0)..(MaxRound) :
+                /\ rr <= round[q]
+                /\ \E m \in msgs_precommit[rr] :
+                     /\ q = m.src
+                     /\ m.id = locked_value[q]
+            BY <2>000 DEF AllIfLockedRoundThenSentCommit
+      <2>2. PICK m \in msgs_precommit[rr] :
+                /\ rr <= round[q]
+                /\ q = m.src
+                /\ m.id = locked_value[q]
+            BY <2>1
+      <2>3. rr <= round[q]
+            BY <2>2
+      <2>4. m \in msgs_precommit'[rr]
+            BY <2>2, PrecommitMonotone
+      <2>5. round[q] <= round'[q]
+            BY RoundMonotone DEF TypedIndInvMin, IndTypeOk
+      <2>6. IndTypeOk'
+            BY TypePres
+      <2>7. /\ rr \in Int /\ round[q] \in Int /\ round'[q] \in Int
+            BY <2>1, <2>6, ConstNat, SMT DEF TypedIndInvMin, IndTypeOk
+      <2>8. rr <= round'[q]
+            BY <2>3, <2>5, <2>7, SMT
+      <2> QED BY <1>1, <2>1, <2>2, <2>4, <2>8
+  <1>2. CASE locked_value'[q] # locked_value[q]
+      <2>1. UponProposalInPrevoteOrCommitAndPrevote(q)
+            BY <1>2, SMT DEF Step, InsertProposal, UponProposalInPropose,
+               UponProposalInProposeAndPrevote, UponQuorumOfPrevotesAny,
+               UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
+      <2>2. PICK v \in ValidValues, vr \in ((0)..(MaxRound) \union {-1}) :
+                /\ locked_value' = [locked_value EXCEPT ![q] = v]
+                /\ locked_round' = [locked_round EXCEPT ![q] = round[q]]
+                /\ msgs_precommit' =
+                     [msgs_precommit EXCEPT ![round[q]] =
+                       (msgs_precommit[round[q]] \union {[id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q]})]
+            BY <1>2, <2>1, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2>3. round[q] <= round'[q]
+            BY RoundMonotone DEF TypedIndInvMin, IndTypeOk
+      <2>4. round[q] \in (0)..(MaxRound)
+            BY SMT DEF IndTypeOk
+      <2>5. [id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q] \in msgs_precommit'[round[q]]
+            BY <2>2
+      <2>6. locked_value'[q] = v
+            BY <2>2, SMT DEF IndTypeOk
+      <2> QED BY <2>3, <2>4, <2>5, <2>6
+  <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllLatestPrecommitHasLockedRound ==
   ASSUME TypedIndInvMin, Step PROVE AllLatestPrecommitHasLockedRound'
