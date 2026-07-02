@@ -391,6 +391,32 @@ LEMMA PrecommitValueMessagesCardinalityLeSenders ==
   <1> QED
         BY <1>inj, <1>finSenders, FS_Injection
 
+LEMMA PrecommitValueMessagesFinite ==
+  ASSUME IndTypeOk, NEW r \in (0)..(MaxRound),
+         NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
+  PROVE  IsFiniteSet({m \in msgs_precommit[r] : m.id = idv})
+  <1> DEFINE Msgs == {m \in msgs_precommit[r] : m.id = idv}
+              Senders == {s \in (Corr \union Faulty) : \E m \in Msgs : s = m.src}
+              SrcOf == [m \in Msgs |-> m.src]
+  <1>sendersSub. Senders \subseteq (Corr \union Faulty)
+        BY DEF Senders
+  <1>finCF. IsFiniteSet(Corr \union Faulty)
+        BY FiniteCF, FS_Union
+  <1>finSenders. IsFiniteSet(Senders)
+        BY <1>sendersSub, <1>finCF, FS_Subset
+  <1>dom. DOMAIN SrcOf = Msgs
+        BY DEF SrcOf
+  <1>range. \A x \in Msgs : SrcOf[x] \in Senders
+        BY SMT DEF SrcOf, Senders, Msgs, IndTypeOk
+  <1>fun. SrcOf \in [Msgs -> Senders]
+        BY <1>dom, <1>range, SMT
+  <1>one. \A x \in Msgs : \A y \in Msgs : SrcOf[x] = SrcOf[y] => x = y
+        BY SMT DEF SrcOf, Msgs, IndTypeOk
+  <1>inj. SrcOf \in Injection(Msgs, Senders)
+        BY <1>fun, <1>one DEF Injection, IsInjective
+  <1> QED
+        BY <1>inj, <1>finSenders, FS_Injection
+
 LEMMA PrevoteValueMessagesCardinalityLeSenders ==
   ASSUME IndTypeOk, NEW r \in (0)..(MaxRound),
          NEW idv \in ((ValidValues \union InvalidValues) \union {-1})
@@ -1062,7 +1088,123 @@ THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
 
 THEOREM Pres_AllIfInDecidedThenReceivedTwoThirds ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInDecidedThenReceivedTwoThirds'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "DECIDED_OF_STEP"
+               PROVE  \E rr \in (0)..(MaxRound) :
+                         Cardinality({s \in (Corr \union Faulty) :
+                           \E m \in {mm \in msgs_precommit'[rr] :
+                             mm.id = decision'[q]} : s = m.src})
+                         >= ((2 * T) + 1)
+      BY DEF AllIfInDecidedThenReceivedTwoThirds
+  <1>1. CASE step[q] = "DECIDED_OF_STEP"
+      <2>0. decision[q] \in ValidValues
+            BY <1>1 DEF AllIfInDecidedThenValidDecision
+      <2>00. decision[q] # -1
+            BY <2>0, NilNotValid
+      <2>1. decision'[q] = decision[q]
+            BY <2>00, SMT DEF Step, UponProposalInPrecommitNoDecision
+      <2>2. PICK rr \in (0)..(MaxRound) :
+                Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit[rr] :
+                    mm.id = decision[q]} : s = m.src})
+                >= ((2 * T) + 1)
+            BY <1>1 DEF AllIfInDecidedThenReceivedTwoThirds
+      <2>3. decision[q] \in ((ValidValues \union InvalidValues) \union {-1})
+            BY <2>0
+      <2>4. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit[rr] :
+                    mm.id = decision[q]} : s = m.src})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit'[rr] :
+                    mm.id = decision[q]} : s = m.src})
+            BY <2>2, <2>3, PrecommitSenderSetCardinalityMonotone
+      <2>5. /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_precommit[rr] :
+                      mm.id = decision[q]} : s = m.src}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_precommit'[rr] :
+                      mm.id = decision[q]} : s = m.src}) \in Int
+              /\ ((2 * T) + 1) \in Int
+            BY FiniteCF, FS_Union, FS_Subset, FS_CardinalityType, ConstNat, SMT
+      <2>6. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit'[rr] :
+                    mm.id = decision[q]} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>2, <2>4, <2>5, IntLeGeTrans1
+      <2>7. {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_precommit'[rr] :
+                  mm.id = decision'[q]} : s = m.src}
+              =
+              {s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_precommit'[rr] :
+                  mm.id = decision[q]} : s = m.src}
+            BY <2>1, SMT
+      <2> QED BY <2>2, <2>6, <2>7
+  <1>2. CASE step[q] # "DECIDED_OF_STEP"
+      <2>0. step'[q] # step[q]
+            BY <1>2
+      <2>a. \/ UponProposalInPropose(q) \/ UponProposalInProposeAndPrevote(q)
+             \/ UponQuorumOfPrevotesAny(q) \/ UponProposalInPrevoteOrCommitAndPrevote(q)
+             \/ UponQuorumOfPrecommitsAny(q) \/ UponProposalInPrecommitNoDecision(q)
+             \/ OnTimeoutPropose(q) \/ OnQuorumOfNilPrevotes(q) \/ OnRoundCatchup(q)
+            BY <2>0, StepChangeChar
+      <2>1. UponProposalInPrecommitNoDecision(q)
+            BY <1>2, <2>a, SMT DEF UponProposalInPropose, UponProposalInProposeAndPrevote,
+               UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
+               UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
+               OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
+      <2>2. PICK v \in ValidValues, rnd \in (0)..(MaxRound), vr \in ((0)..(MaxRound) \union {-1}) :
+                /\ Cardinality({m \in msgs_precommit[rnd] : v = m.id}) >= ((2 * T) + 1)
+                /\ decision' = [decision EXCEPT ![q] = v]
+            BY <2>1 DEF UponProposalInPrecommitNoDecision
+      <2>3. decision'[q] = v
+            BY <2>2
+      <2>4. v \in ((ValidValues \union InvalidValues) \union {-1})
+            BY <2>2
+      <2>4b. {m \in msgs_precommit[rnd] : m.id = v}
+              =
+              {m \in msgs_precommit[rnd] : v = m.id}
+            BY SMT
+      <2>4c. Cardinality({m \in msgs_precommit[rnd] : m.id = v}) >= ((2 * T) + 1)
+            BY <2>2, <2>4b
+      <2>5. Cardinality({m \in msgs_precommit[rnd] : m.id = v})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_precommit[rnd] : mm.id = v} : s = m.src})
+            BY <2>2, <2>4, PrecommitValueMessagesCardinalityLeSenders
+      <2>6. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit[rnd] : mm.id = v} : s = m.src})
+              <=
+              Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit'[rnd] : mm.id = v} : s = m.src})
+            BY <2>2, <2>4, PrecommitSenderSetCardinalityMonotone
+      <2>7. /\ Cardinality({m \in msgs_precommit[rnd] : m.id = v}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_precommit[rnd] : mm.id = v} : s = m.src}) \in Int
+              /\ Cardinality({s \in (Corr \union Faulty) :
+                    \E m \in {mm \in msgs_precommit'[rnd] : mm.id = v} : s = m.src}) \in Int
+              /\ ((2 * T) + 1) \in Int
+            BY <2>2, <2>4, PrecommitValueMessagesFinite, FiniteCF, FS_Union,
+               FS_Subset, FS_CardinalityType, ConstNat, SMT
+      <2>8. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit[rnd] : mm.id = v} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>4c, <2>5, <2>7, IntLeGeTrans1
+      <2>9. Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_precommit'[rnd] : mm.id = v} : s = m.src})
+              >= ((2 * T) + 1)
+            BY <2>6, <2>7, <2>8, IntLeGeTrans1
+      <2>10. {s \in (Corr \union Faulty) :
+                 \E m \in {mm \in msgs_precommit'[rnd] :
+                   mm.id = decision'[q]} : s = m.src}
+              =
+              {s \in (Corr \union Faulty) :
+                 \E m \in {mm \in msgs_precommit'[rnd] :
+                   mm.id = v} : s = m.src}
+            BY <2>3, SMT
+      <2> QED BY <2>2, <2>9, <2>10
+  <1> QED BY <1>1, <1>2
 
 \* (step[p]=DECIDED) <=> (decision[p] in ValidValues). Only
 \* UponProposalInPrecommitNoDecision sets step:=DECIDED, and it simultaneously
