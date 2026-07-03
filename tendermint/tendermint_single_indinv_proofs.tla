@@ -1760,18 +1760,18 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                                \E pv \in msgs_prevote'[r] : s = pv.src}) >= ((2 * T) + 1)
       BY DEF IfSentPrecommitThenReceivedTwoThirds
   <1>split. \/ m \in msgs_precommit[r]
-             \/ \E p \in Corr, v \in ValidValues, vr \in ((0)..(MaxRound) \union {-1}) :
-                  /\ r = round[p]
-                  /\ m = [id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
-                  /\ Cardinality({pv \in msgs_prevote[round[p]] : v = pv.id}) >= ((2 * T) + 1)
-             \/ \E p \in Corr : \E ev \in SUBSET msgs_prevote[round[p]] :
-                  /\ r = round[p]
-                  /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
-                  /\ Cardinality({s \in (Corr \union Faulty) : \E pv \in ev : s = pv.src}) >= ((2 * T) + 1)
-             \/ \E p \in Corr :
-                  /\ r = round[p]
-                  /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
-                  /\ Cardinality({pv \in msgs_prevote[round[p]] : pv.id = -1}) >= ((2 * T) + 1)
+             \/ (\E p \in Corr, v \in ValidValues, vr \in ((0)..(MaxRound) \union {-1}) :
+                   /\ r = round[p]
+                   /\ m = [id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
+                   /\ Cardinality({pv \in msgs_prevote[round[p]] : v = pv.id}) >= ((2 * T) + 1))
+             \/ (\E p \in Corr : \E ev \in SUBSET msgs_prevote[round[p]] :
+                   /\ r = round[p]
+                   /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
+                   /\ Cardinality({s \in (Corr \union Faulty) : \E pv \in ev : s = pv.src}) >= ((2 * T) + 1))
+             \/ (\E p \in Corr :
+                   /\ r = round[p]
+                   /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
+                   /\ Cardinality({pv \in msgs_prevote[round[p]] : pv.id = -1}) >= ((2 * T) + 1))
       \* Only 4 actions touch msgs_precommit; the other 7 keep it via UNCHANGED. Split
       \* per action so each SMT call reasons about a single action body (the monolithic
       \* call over all four bodies at once was too large to discharge).
@@ -1807,10 +1807,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                        /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[pp], src |-> pp]
                        /\ Cardinality({s \in (Corr \union Faulty) : \E pv \in ev : s = pv.src}) >= ((2 * T) + 1)
                   BY <3>ev, <4>eq
-              \* Pure disjunction-introduction from the proved disjunct <4>d3. Zenon/SMT in
-              \* this tlapm build (no Isabelle) fail to alpha-match the large third disjunct
-              \* against the goal; the mathematical content is fully discharged in <4>d3.
-              <4> QED  OMITTED
+              <4> QED  BY <4>d3
           <3> QED  BY <3>1, <3>2
       <2>4. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
           <3> PICK p \in Corr : OnQuorumOfNilPrevotes(p)  BY <2>4
