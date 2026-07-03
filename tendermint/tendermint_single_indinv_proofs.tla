@@ -2688,15 +2688,95 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
          <2>proposalPrevoteCommit, <2>nilPrevotes
   <1> QED BY <1>prop, <1>prevote, <1>precommit
 
+\* PrecommitsLockValue is NOT inductive relative to IndInvMin alone (Apalache CE): a
+\* fresh prevote for w2 in a round above an existing precommit lock for w must be
+\* blocked, which needs the per-process lock PrecommitLocksLaterPrevotes (and the
+\* valid-round conjuncts). Hence this preservation is stated over the full TypedIndInv.
+\* Proof strategy (to mechanize). Assume, for a counterexample, a post-state precommit
+\* quorum for w at r0 (>= 2T+1) and a post-state prevote quorum for w2 (in ValidValues,
+\* w2 # w) at some r > r0. A single correct Step changes at most one of msgs_precommit /
+\* msgs_prevote (no correct action touches both; only FaultyStep does, and it adds only
+\* faulty senders, which cannot supply the >= T+1 correct part of a 2T+1 quorum). So one
+\* of the two quorums is entirely pre-state.
+\*   - If the precommit quorum is pre-state: PrecommitsLockValue (pre) already forbids a
+\*     pre-state prevote quorum for w2 in r > r0; the fresh prevote adds one correct
+\*     sender (PrevoteSenderSetCardinalityMonotone), so the pre-state prevote count was
+\*     exactly 2T. The >= T+1 correct precommitters of w at r0 and the >= T+1 correct
+\*     prevoters of w2 at r intersect (N = 3T+1); the shared correct process c either
+\*     (a) prevoted w2 at r in the pre-state -- then PrecommitLocksLaterPrevotes gives a
+\*     2T+1 prevote quorum for w2 at some r1 in [r0, r), contradicting PrecommitsLockValue
+\*     (pre) [r1 = r0 handled by same-round quorum uniqueness + AllNoEquivocationByCorrect];
+\*     or (b) c is the acting process casting the fresh prevote -- then its prevote-guard
+\*     (locked on w via AllIfLockedRoundThenSentCommit) forces a valid-round vr in [r0, r)
+\*     with a 2T+1 prevote quorum for w2 (AllIfValidRoundThenTwoThirdsPrevotes /
+\*     AllCorrectProposalValidRoundBelowRound), again contradicting PrecommitsLockValue.
+\*   - If the precommit quorum is fresh: symmetric, the acting process precommits w at r0
+\*     and the pre-state carries a prevote quorum for w2 at r.
+\* This is the core research obligation; it needs PrecommitLocksLaterPrevotes and the
+\* valid-round conjuncts, hence the hypothesis is the full TypedIndInv.
+\*
+\* NOTE: this build's backends will not match the goal PrecommitsLockValue' (a doubly-
+\* quantified disjunction whose atoms are Cardinality of nested set-builders) against an
+\* explicit primed unfolding, so even the SUFFICES reduction to the counterexample form
+\* does not go through yet -- resolving that plumbing is a prerequisite to mechanizing
+\* the argument above.
 THEOREM Pres_PrecommitsLockValue ==
-  ASSUME TypedIndInvMin, Step PROVE PrecommitsLockValue'
-OMITTED
+  ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
+  <1> USE DEF TypedIndInv, IndTypeOk
+  \* Reduce the primed goal to its explicit unfolded form via an equivalence step; the
+  \* backends match the doubly-quantified Cardinality-disjunction goal only through this
+  \* detour, not by unfolding it in place inside a SUFFICES.
+  <1>unfold. PrecommitsLockValue' <=>
+               (\A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
+                  \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[v_v708]: (v_v710.id = v_v709)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
+                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[v_v714]: (v_v716.id = v_v715)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1))))
+      BY DEF PrecommitsLockValue
+  <1> SUFFICES \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
+                  \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[v_v708]: (v_v710.id = v_v709)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
+                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[v_v714]: (v_v716.id = v_v715)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)))
+      BY <1>unfold
+  <1> TAKE r0 \in (0)..(MaxRound), w \in ValidValues
+  \* Counterexample form: a post-state precommit quorum for w at r0 forces every other
+  \* valid value w2 to lack a post-state prevote quorum in each later round r.
+  <1> SUFFICES ASSUME ~(Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[r0]: (v_v710.id = w)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1)),
+                      NEW r \in {v_v713 \in (0)..(MaxRound): (v_v713 > r0)},
+                      NEW w2 \in (ValidValues \ {w})
+               PROVE  Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[r]: (v_v716.id = w2)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)
+      OBVIOUS
+  \* Pre-state lock (PrecommitsLockValue at (r0, w)): either w has no pre-state precommit
+  \* quorum at r0, or no other valid value has a pre-state prevote quorum above r0.
+  <1>pre. \/ Cardinality({s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_precommit[r0] : mm.id = w} : s = m.src}) < 2 * T + 1
+          \/ (\A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) :
+                Cardinality({s \in (Corr \union Faulty) :
+                  \E m \in {mm \in msgs_prevote[rr] : mm.id = ww} : s = m.src}) < 2 * T + 1)
+      BY Zenon, SMT DEF TypedIndInv, IndInv, PrecommitsLockValue
+  \* ---- remaining mathematical core (OMITTED) --------------------------------------
+  \* A single correct Step changes at most one of msgs_precommit / msgs_prevote (only
+  \* FaultyStep touches both, and it adds only faulty senders, which cannot form the
+  \* >= T+1 correct part of a 2T+1 quorum). So one of the two quorums is entirely
+  \* pre-state. Using PrevoteSenderSetCardinalityMonotone / PrecommitSenderSetCardinality-
+  \* Monotone, the fresh vote adds one correct sender, so the pre-state count was exactly
+  \* 2T. The >= T+1 correct precommitters of w at r0 and the >= T+1 correct prevoters of
+  \* w2 at r intersect (N = 3T+1); the shared correct process c either (a) prevoted w2 at
+  \* r pre-state -> PrecommitLocksLaterPrevotes gives a 2T+1 prevote quorum for w2 at some
+  \* r1 in [r0, r), contradicting <1>pre [r1 = r0: same-round quorum uniqueness +
+  \* AllNoEquivocationByCorrect]; or (b) c is the acting process, whose prevote guard
+  \* (locked on w) forces a valid_round vr in [r0, r) with a 2T+1 prevote quorum for w2
+  \* (AllIfValidRoundThenTwoThirdsPrevotes / AllCorrectProposalValidRoundBelowRound),
+  \* again contradicting <1>pre.
+  <1> QED
+    OMITTED
 
 \* ---------------------------------------------------------------------------
 \* TOP-LEVEL INDUCTIVE STEP: assemble type preservation + all 17 conjuncts.
 \* ---------------------------------------------------------------------------
+\* Preserving the 17 IndInvMin conjuncts. PrecommitsLockValue needs the extra IndInv
+\* conjuncts (via Pres_PrecommitsLockValue), so the hypothesis is the full TypedIndInv;
+\* the other 16 preservations only use the TypedIndInvMin part. Extending the conclusion
+\* to the full TypedIndInv' requires preserving the remaining 7 support conjuncts.
 THEOREM Inductive ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  TypedIndInvMin'
   BY TypePres,
      Pres_AllNoFutureMessagesSent,
@@ -2716,7 +2796,7 @@ THEOREM Inductive ==
      Pres_IfSentPrecommitThenReceivedTwoThirds,
      Pres_AllNoEquivocationByCorrect,
      Pres_PrecommitsLockValue
-  DEF TypedIndInvMin, IndInvMin
+  DEF TypedIndInvMin, IndInvMin, TypedIndInv, IndInv
 
 \*****************************************************************************
 \* SECTION D -- AGREEMENT
