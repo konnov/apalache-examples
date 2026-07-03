@@ -1825,10 +1825,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                        /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[pp], src |-> pp]
                        /\ Cardinality({pv \in msgs_prevote[round[pp]] : pv.id = -1}) >= ((2 * T) + 1)
                   BY <3>a, <4>eq
-              \* Pure disjunction-introduction from the proved disjunct <4>d4. Zenon/SMT in
-              \* this tlapm build (no Isabelle) fail to alpha-match the large fourth disjunct
-              \* against the goal; the mathematical content is fully discharged in <4>d4.
-              <4> QED  OMITTED
+              <4> QED  BY <4>d4
           <3> QED  BY <3>1, <3>2
       <2>5. CASE FaultyStep
           BY <2>5, DisjointCF, SMT DEF FaultyStep
@@ -2038,13 +2035,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                   {s \in (Corr \union Faulty) : \E pv \in msgs_prevote'[round[p]] : s = pv.src}
             BY <2>wit, SMT
       <2> QED BY <2>wit, <2>newAll, <2>posteq
-  \* Disjunction-elimination over <1>split's four cases, each of which (<1>1..<1>4)
-  \* proves the goal. Zenon/SMT in this tlapm build (no Isabelle) cannot eliminate over
-  \* these four large existential/Cardinality disjuncts (the working pattern, e.g.
-  \* PrecommitSenderSet..., eliminates over small action-selector disjuncts instead).
-  \* Every case <1>1..<1>4 and the provenance split <1>split are mechanically checked;
-  \* only this trivial propositional assembly is trusted.
-  <1> QED OMITTED
+  <1> QED BY <1>split, <1>1, <1>2, <1>3, <1>4
 
 THEOREM Pres_AllNoEquivocationByCorrect ==
   ASSUME TypedIndInvMin, Step PROVE AllNoEquivocationByCorrect'
