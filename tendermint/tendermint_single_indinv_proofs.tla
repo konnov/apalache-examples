@@ -1153,7 +1153,150 @@ THEOREM Pres_AllValidAndLockedRoundBounded ==
 
 THEOREM Pres_AllNoFutureMessagesSent ==
   ASSUME TypedIndInvMin, Step PROVE AllNoFutureMessagesSent'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr
+               PROVE  /\ /\ \/ q = Proposer[round'[q]]
+                         \/ \A mp \in msgs_propose'[round'[q]] : q # mp.src
+                      /\ \/ step'[q] = "PREVOTE_OF_STEP"
+                         \/ step'[q] = "PRECOMMIT_OF_STEP"
+                         \/ step'[q] = "DECIDED_OF_STEP"
+                         \/ \A mv \in msgs_prevote'[round'[q]] : q # mv.src
+                      /\ \/ step'[q] = "PRECOMMIT_OF_STEP"
+                         \/ step'[q] = "DECIDED_OF_STEP"
+                         \/ \A mc \in msgs_precommit'[round'[q]] : q # mc.src
+                      /\ \A rr \in {r \in (0)..(MaxRound) : r > round'[q]} :
+                           /\ \A mp \in msgs_propose'[rr] : q # mp.src
+                           /\ \A mv \in msgs_prevote'[rr] : q # mv.src
+                           /\ \A mc \in msgs_precommit'[rr] : q # mc.src
+      BY DEF AllNoFutureMessagesSent
+  <1>sel. \/ FaultyStep
+           \/ \E p \in Corr : InsertProposal(p)
+           \/ \E p \in Corr : UponProposalInPropose(p)
+           \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
+           \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+           \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+           \/ \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+           \/ \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+           \/ \E p \in Corr : OnTimeoutPropose(p)
+           \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
+           \/ \E p \in Corr : OnRoundCatchup(p)
+      BY DEF Step
+  <1>faulty. CASE FaultyStep
+      <2>frame. round' = round /\ step' = step
+            BY <1>faulty DEF Step
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>faulty, <2>frame, <2>old, DisjointCF, SMT DEF FaultyStep
+  <1>insert. CASE \E p \in Corr : InsertProposal(p)
+      <2> PICK p \in Corr : InsertProposal(p) BY <1>insert
+      <2>frame. /\ round' = round
+                /\ step' = step
+                /\ msgs_prevote' = msgs_prevote
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>insert DEF Step
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>insert, <2>frame, <2>old, SMT DEF InsertProposal
+  <1>proposal. CASE \E p \in Corr : UponProposalInPropose(p)
+      <2> PICK p \in Corr : UponProposalInPropose(p) BY <1>proposal
+      <2> QED BY <1>proposal, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         UponProposalInPropose
+  <1>proposalPrevote. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
+      <2> PICK p \in Corr : UponProposalInProposeAndPrevote(p) BY <1>proposalPrevote
+      <2> QED BY <1>proposalPrevote, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         UponProposalInProposeAndPrevote
+  <1>quorumPrevotes. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+      <2> PICK p \in Corr : UponQuorumOfPrevotesAny(p) BY <1>quorumPrevotes
+      <2> QED BY <1>quorumPrevotes, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         UponQuorumOfPrevotesAny
+  <1>proposalPrevoteCommit. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+      <2> PICK p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p) BY <1>proposalPrevoteCommit
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+            BY <1>proposalPrevoteCommit DEF Step
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>proposalPrevoteCommit, <2>frame, <2>old, DisjointCF, SMT
+         DEF UponProposalInPrevoteOrCommitAndPrevote
+  <1>quorumPrecommits. CASE \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+      <2> PICK p \in Corr : UponQuorumOfPrecommitsAny(p) BY <1>quorumPrecommits
+      <2> QED BY <1>quorumPrecommits, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         UponQuorumOfPrecommitsAny
+  <1>decide. CASE \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+      <2> PICK p \in Corr : UponProposalInPrecommitNoDecision(p) BY <1>decide
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>decide DEF Step
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>decide, <2>frame, <2>old, SMT
+         DEF UponProposalInPrecommitNoDecision
+  <1>timeoutPropose. CASE \E p \in Corr : OnTimeoutPropose(p)
+      <2> PICK p \in Corr : OnTimeoutPropose(p) BY <1>timeoutPropose
+      <2> QED BY <1>timeoutPropose, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         OnTimeoutPropose
+  <1>nilPrevotes. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+      <2> PICK p \in Corr : OnQuorumOfNilPrevotes(p) BY <1>nilPrevotes
+      <2> QED BY <1>nilPrevotes, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         OnQuorumOfNilPrevotes
+  <1>roundCatchup. CASE \E p \in Corr : OnRoundCatchup(p)
+      <2> PICK p \in Corr : OnRoundCatchup(p) BY <1>roundCatchup
+      <2> QED BY <1>roundCatchup, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+         OnRoundCatchup
+  <1> QED BY <1>sel, <1>faulty, <1>insert, <1>proposal, <1>proposalPrevote,
+     <1>quorumPrevotes, <1>proposalPrevoteCommit, <1>quorumPrecommits,
+     <1>decide, <1>timeoutPropose, <1>nilPrevotes, <1>roundCatchup
 
 THEOREM Pres_AllIfInPrevoteThenSentPrevote ==
   ASSUME TypedIndInvMin, Step PROVE AllIfInPrevoteThenSentPrevote'
@@ -1704,7 +1847,249 @@ THEOREM Pres_AllLatestPrecommitHasLockedRound ==
 
 THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
   ASSUME TypedIndInvMin, Step PROVE AllIfSentPrevoteThenReceivedProposalOrTwoThirds'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
+                       NEW m \in msgs_prevote'[r]
+               PROVE  \/ m.src \in Faulty
+                      \/ m.id = -1
+                      \/ /\ m.id # -1
+                         /\ \/ \E prop \in msgs_propose'[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = m.id
+                                  /\ prop.valid_round = -1
+                            \/ \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                                  /\ \E prop \in msgs_propose'[r] :
+                                       /\ prop.src = Proposer[r]
+                                       /\ prop.proposal = m.id
+                                       /\ rr = prop.valid_round
+                                  /\ Cardinality({s \in (Corr \union Faulty) :
+                                       \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
+                                         s = pv.src}) >= ((2 * T) + 1)
+      BY DEF AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+  <1>split. \/ m \in msgs_prevote[r]
+             \/ m.src \in Faulty
+             \/ (\E p \in Corr, v \in (ValidValues \union InvalidValues) :
+                  /\ r = round[p]
+                  /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> -1]
+                       \in msgs_propose[round[p]]
+                  /\ m = [id |-> (IF /\ v \in ValidValues
+                                      /\ \/ locked_round[p] = -1
+                                         \/ locked_value[p] = v
+                                    THEN v ELSE -1),
+                          kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p])
+             \/ (\E p \in Corr, v \in (ValidValues \union InvalidValues), vr \in (0)..(MaxRound) :
+                  /\ r = round[p]
+                  /\ vr < round[p]
+                  /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr]
+                       \in msgs_propose[round[p]]
+                  /\ Cardinality({pv \in msgs_prevote[vr] : v = pv.id}) >= ((2 * T) + 1)
+                  /\ m = [id |-> (IF /\ v \in ValidValues
+                                      /\ \/ locked_round[p] <= vr
+                                         \/ locked_value[p] = v
+                                    THEN v ELSE -1),
+                          kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p])
+             \/ (\E p \in Corr :
+                  /\ r = round[p]
+                  /\ m = [id |-> -1, kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p])
+      BY DisjointCF, SMT DEF Step, FaultyStep, UponProposalInPropose,
+         UponProposalInProposeAndPrevote, OnTimeoutPropose
+  <1>1. CASE m \in msgs_prevote[r]
+      <2>old. \/ m.src \in Faulty
+                \/ m.id = -1
+                \/ /\ m.id # -1
+                   /\ \/ \E prop \in msgs_propose[r] :
+                            /\ prop.src = Proposer[r]
+                            /\ prop.proposal = m.id
+                            /\ prop.valid_round = -1
+                      \/ \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                            /\ \E prop \in msgs_propose[r] :
+                                 /\ prop.src = Proposer[r]
+                                 /\ prop.proposal = m.id
+                                 /\ rr = prop.valid_round
+                            /\ Cardinality({s \in (Corr \union Faulty) :
+                                 \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                                   s = pv.src}) >= ((2 * T) + 1)
+            BY <1>1 DEF AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+      <2>f. CASE m.src \in Faulty
+          <3> QED BY <2>f
+      <2>nil. CASE m.id = -1
+          <3> QED BY <2>nil
+      <2>good. CASE /\ m.id # -1
+                    /\ \/ \E prop \in msgs_propose[r] :
+                             /\ prop.src = Proposer[r]
+                             /\ prop.proposal = m.id
+                             /\ prop.valid_round = -1
+                       \/ \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                             /\ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = m.id
+                                  /\ rr = prop.valid_round
+                             /\ Cardinality({s \in (Corr \union Faulty) :
+                                  \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                                    s = pv.src}) >= ((2 * T) + 1)
+          <3>propCase. CASE \E prop \in msgs_propose[r] :
+                             /\ prop.src = Proposer[r]
+                             /\ prop.proposal = m.id
+                             /\ prop.valid_round = -1
+              <4> PICK prop \in msgs_propose[r] :
+                             /\ prop.src = Proposer[r]
+                             /\ prop.proposal = m.id
+                             /\ prop.valid_round = -1
+                    BY <3>propCase
+              <4>pnew. prop \in msgs_propose'[r]
+                    BY ProposeMonotone
+              <4> QED BY <2>good, <4>pnew
+          <3>quorumCase. CASE \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                             /\ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = m.id
+                                  /\ rr = prop.valid_round
+                             /\ Cardinality({s \in (Corr \union Faulty) :
+                                  \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                                    s = pv.src}) >= ((2 * T) + 1)
+              <4>oldQ. PICK rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                             /\ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = m.id
+                                  /\ rr = prop.valid_round
+                             /\ Cardinality({s \in (Corr \union Faulty) :
+                                  \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                                    s = pv.src}) >= ((2 * T) + 1)
+                    BY <3>quorumCase
+              <4>oldProp. PICK prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = m.id
+                                  /\ rr = prop.valid_round
+                    BY <4>oldQ
+              <4>rty. rr \in (0)..(MaxRound)
+                    BY <4>oldQ
+              <4>idty. m.id \in ((ValidValues \union InvalidValues) \union {-1})
+                    BY SMT DEF IndTypeOk
+              <4>mono. Cardinality({s \in (Corr \union Faulty) :
+                            \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                              s = pv.src})
+                        <=
+                        Cardinality({s \in (Corr \union Faulty) :
+                            \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
+                              s = pv.src})
+                    BY <4>rty, <4>idty, PrevoteSenderSetCardinalityMonotone
+              <4>types. /\ Cardinality({s \in (Corr \union Faulty) :
+                               \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
+                                 s = pv.src}) \in Int
+                          /\ Cardinality({s \in (Corr \union Faulty) :
+                               \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
+                                 s = pv.src}) \in Int
+                          /\ ((2 * T) + 1) \in Int
+                    BY FiniteCF, FS_Union, FS_Subset, FS_CardinalityType, ConstNat, SMT
+              <4>newq. Cardinality({s \in (Corr \union Faulty) :
+                            \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
+                              s = pv.src}) >= ((2 * T) + 1)
+                    BY <4>oldQ, <4>mono, <4>types, IntLeGeTrans1
+              <4>pnew. prop \in msgs_propose'[r]
+                    BY ProposeMonotone
+              <4> QED BY <2>good, <4>oldQ, <4>oldProp, <4>pnew, <4>newq
+          <3> QED BY <2>good, <3>propCase, <3>quorumCase
+      <2> QED BY <2>old, <2>f, <2>nil, <2>good
+  <1>2. CASE m.src \in Faulty
+      <2> QED BY <1>2
+  <1>3. CASE \E p \in Corr, v \in (ValidValues \union InvalidValues) :
+                  /\ r = round[p]
+                  /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> -1]
+                       \in msgs_propose[round[p]]
+                  /\ m = [id |-> (IF /\ v \in ValidValues
+                                      /\ \/ locked_round[p] = -1
+                                         \/ locked_value[p] = v
+                                    THEN v ELSE -1),
+                          kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]
+      <2> QED BY <1>3, ProposeMonotone, SMT
+  <1>4. CASE \E p \in Corr, v \in (ValidValues \union InvalidValues), vr \in (0)..(MaxRound) :
+                  /\ r = round[p]
+                  /\ vr < round[p]
+                  /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr]
+                       \in msgs_propose[round[p]]
+                  /\ Cardinality({pv \in msgs_prevote[vr] : v = pv.id}) >= ((2 * T) + 1)
+                  /\ m = [id |-> (IF /\ v \in ValidValues
+                                      /\ \/ locked_round[p] <= vr
+                                         \/ locked_value[p] = v
+                                    THEN v ELSE -1),
+                          kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]
+      <2>wit. PICK p \in Corr, v \in (ValidValues \union InvalidValues), vr \in (0)..(MaxRound) :
+                  /\ r = round[p]
+                  /\ vr < round[p]
+                  /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr]
+                       \in msgs_propose[round[p]]
+                  /\ Cardinality({pv \in msgs_prevote[vr] : v = pv.id}) >= ((2 * T) + 1)
+                  /\ m = [id |-> (IF /\ v \in ValidValues
+                                      /\ \/ locked_round[p] <= vr
+                                         \/ locked_value[p] = v
+                                    THEN v ELSE -1),
+                          kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]
+            BY <1>4
+      <2>nil. CASE m.id = -1
+          <3> QED BY <2>nil
+      <2>nonnull. CASE m.id # -1
+          <3>mid. m.id = v
+                BY <2>wit, <2>nonnull, SMT
+          <3>msgLeSenders. Cardinality({pv \in msgs_prevote[vr] : pv.id = v})
+                  <=
+                  Cardinality({s \in (Corr \union Faulty) :
+                    \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
+                BY PrevoteValueMessagesCardinalityLeSenders
+          <3>mono. Cardinality({s \in (Corr \union Faulty) :
+                    \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
+                  <=
+                  Cardinality({s \in (Corr \union Faulty) :
+                    \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src})
+                BY PrevoteSenderSetCardinalityMonotone
+          <3>types. /\ Cardinality({pv \in msgs_prevote[vr] : pv.id = v}) \in Int
+                      /\ Cardinality({s \in (Corr \union Faulty) :
+                           \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src}) \in Int
+                      /\ Cardinality({s \in (Corr \union Faulty) :
+                           \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src}) \in Int
+                      /\ ((2 * T) + 1) \in Int
+                BY PrevoteValueMessagesFinite, FiniteCF, FS_Union, FS_Subset,
+                   FS_CardinalityType, ConstNat, SMT
+          <3>oldSenders. Cardinality({s \in (Corr \union Faulty) :
+                    \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
+                  >= ((2 * T) + 1)
+                BY <2>wit, <3>msgLeSenders, <3>types, IntLeGeTrans1
+          <3>newSenders. Cardinality({s \in (Corr \union Faulty) :
+                    \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src})
+                  >= ((2 * T) + 1)
+                BY <3>oldSenders, <3>mono, <3>types, IntLeGeTrans1
+          <3>pnew. [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr]
+                    \in msgs_propose'[r]
+                BY <2>wit, ProposeMonotone
+          <3>qpost. \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                      /\ \E prop \in msgs_propose'[r] :
+                           /\ prop.src = Proposer[r]
+                           /\ prop.proposal = m.id
+                           /\ rr = prop.valid_round
+                      /\ Cardinality({s \in (Corr \union Faulty) :
+                           \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
+                             s = pv.src}) >= ((2 * T) + 1)
+              <4>rrIn. vr \in {rrr \in (0)..(MaxRound) : rrr < r}
+                    BY <2>wit
+              <4>propOk. /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr]
+                              \in msgs_propose'[r]
+                          /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr].src
+                              = Proposer[r]
+                          /\ [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr].proposal
+                              = m.id
+                          /\ vr = [proposal |-> v, round |-> round[p], src |-> Proposer[round[p]], valid_round |-> vr].valid_round
+                    BY <2>wit, <3>mid, <3>pnew, SMT
+              <4>card. Cardinality({s \in (Corr \union Faulty) :
+                            \E pv \in {pp \in msgs_prevote'[vr] : pp.id = m.id} :
+                              s = pv.src}) >= ((2 * T) + 1)
+                    BY <3>mid, <3>newSenders
+              <4> QED BY <4>rrIn, <4>propOk, <4>card
+          <3> QED BY <2>nonnull, <3>qpost
+      <2> QED BY <2>nil, <2>nonnull
+  <1>5. CASE \E p \in Corr :
+                  /\ r = round[p]
+                  /\ m = [id |-> -1, kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]
+      <2> QED BY <1>5
+  <1> QED BY <1>split, <1>1, <1>2, <1>3, <1>4, <1>5
 
 THEOREM Pres_IfSentPrecommitThenSentPrevote ==
   ASSUME TypedIndInvMin, Step PROVE IfSentPrecommitThenSentPrevote'
@@ -2039,7 +2424,229 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
 
 THEOREM Pres_AllNoEquivocationByCorrect ==
   ASSUME TypedIndInvMin, Step PROVE AllNoEquivocationByCorrect'
-OMITTED
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound)
+               PROVE  /\ \E pv \in ValidValues :
+                           \E pvr \in ((0)..(MaxRound) \union {-1}) :
+                             \A mp \in msgs_propose'[r] :
+                               \/ mp.src \in Faulty
+                               \/ /\ /\ mp.src = Proposer[r]
+                                     /\ pv = mp.proposal
+                                  /\ pvr = mp.valid_round
+                      /\ \A q \in Corr :
+                           \E vv \in (ValidValues \union {-1}) :
+                             \A mv \in msgs_prevote'[r] :
+                               q = mv.src => vv = mv.id
+                      /\ \A q \in Corr :
+                           \E cv \in (ValidValues \union {-1}) :
+                             \A mc \in msgs_precommit'[r] :
+                               q = mc.src => cv = mc.id
+      BY DEF AllNoEquivocationByCorrect
+  <1>prop. \E pv \in ValidValues :
+               \E pvr \in ((0)..(MaxRound) \union {-1}) :
+                 \A mp \in msgs_propose'[r] :
+                   \/ mp.src \in Faulty
+                   \/ /\ /\ mp.src = Proposer[r]
+                         /\ pv = mp.proposal
+                      /\ pvr = mp.valid_round
+      <2>old. PICK oldv \in ValidValues, oldvr \in ((0)..(MaxRound) \union {-1}) :
+                    \A mp \in msgs_propose[r] :
+                      \/ mp.src \in Faulty
+                      \/ /\ /\ mp.src = Proposer[r]
+                            /\ oldv = mp.proposal
+                         /\ oldvr = mp.valid_round
+            BY DEF AllNoEquivocationByCorrect
+      <2>sel. \/ msgs_propose' = msgs_propose
+               \/ FaultyStep
+               \/ \E p \in Corr : InsertProposal(p)
+            BY DEF Step
+      <2>same. CASE msgs_propose' = msgs_propose
+          <3> QED BY <2>same, <2>old
+      <2>faulty. CASE FaultyStep
+          <3> QED BY <2>faulty, <2>old, DisjointCF, SMT DEF FaultyStep
+      <2>insert. CASE \E p \in Corr : InsertProposal(p)
+          <3> PICK p \in Corr : InsertProposal(p) BY <2>insert
+          <3> PICK v \in ValidValues :
+                msgs_propose' = [msgs_propose EXCEPT ![round[p]] =
+                  (msgs_propose[round[p]] \union {[proposal |-> (IF valid_value[p] # -1 THEN valid_value[p] ELSE v),
+                     round |-> round[p], src |-> p, valid_round |-> valid_round[p]]})]
+              BY <2>insert DEF InsertProposal
+          <3>pty. /\ p = Proposer[round[p]]
+                  /\ \A mp \in msgs_propose[round[p]] : p # mp.src
+                  /\ valid_value[p] \in (ValidValues \union {-1})
+                  /\ valid_round[p] \in ((0)..(MaxRound) \union {-1})
+                BY <2>insert DEF InsertProposal, IndTypeOk
+          <3>newVal. (IF valid_value[p] # -1 THEN valid_value[p] ELSE v) \in ValidValues
+                BY <3>pty, NilNotValid, SMT
+          <3>1. CASE r = round[p]
+              <4>oldFaulty. \A mp \in msgs_propose[r] : mp.src \in Faulty
+                    BY <2>old, <3>pty, <3>1, SMT
+              <4> QED BY <3>1, <3>pty, <3>newVal, <4>oldFaulty, SMT
+          <3>2. CASE r # round[p]
+              <4> QED BY <2>old, <3>2, SMT
+          <3> QED BY <3>1, <3>2
+      <2> QED BY <2>sel, <2>same, <2>faulty, <2>insert
+  <1>prevote. \A q \in Corr :
+                 \E vv \in (ValidValues \union {-1}) :
+                   \A mv \in msgs_prevote'[r] :
+                     q = mv.src => vv = mv.id
+      <2> SUFFICES ASSUME NEW q \in Corr
+                   PROVE  \E vv \in (ValidValues \union {-1}) :
+                            \A mv \in msgs_prevote'[r] :
+                              q = mv.src => vv = mv.id
+          OBVIOUS
+      <2>old. PICK oldv \in (ValidValues \union {-1}) :
+                    \A mv \in msgs_prevote[r] : q = mv.src => oldv = mv.id
+            BY DEF AllNoEquivocationByCorrect
+      <2>sel. \/ msgs_prevote' = msgs_prevote
+               \/ FaultyStep
+               \/ \E p \in Corr : UponProposalInPropose(p)
+               \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
+               \/ \E p \in Corr : OnTimeoutPropose(p)
+            BY DEF Step
+      <2>same. CASE msgs_prevote' = msgs_prevote
+          <3> QED BY <2>same, <2>old
+      <2>faulty. CASE FaultyStep
+          <3> QED BY <2>faulty, <2>old, DisjointCF, SMT DEF FaultyStep
+      <2>corr. ASSUME NEW p \in Corr,
+                       NEW idv \in (ValidValues \union {-1}),
+                       step[p] = "PROPOSE_OF_STEP",
+                       msgs_prevote' =
+                         [msgs_prevote EXCEPT ![round[p]] =
+                           (msgs_prevote[round[p]] \union {[id |-> idv,
+                             kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                PROVE  \E vv \in (ValidValues \union {-1}) :
+                         \A mv \in msgs_prevote'[r] :
+                           q = mv.src => vv = mv.id
+          <3>1. CASE q = p /\ r = round[p]
+              <4>none. \A mv \in msgs_prevote[r] : q # mv.src
+                    BY <2>corr, <3>1 DEF AllNoFutureMessagesSent
+              <4> QED BY <2>corr, <3>1, <4>none, SMT
+          <3>2. CASE ~(q = p /\ r = round[p])
+              <4> QED BY <2>corr, <2>old, <3>2, SMT
+          <3> QED BY <3>1, <3>2
+      <2>proposal. CASE \E p \in Corr : UponProposalInPropose(p)
+          <3> PICK p \in Corr : UponProposalInPropose(p) BY <2>proposal
+          <3>wit. \E idv \in (ValidValues \union {-1}) :
+                    /\ step[p] = "PROPOSE_OF_STEP"
+                    /\ msgs_prevote' =
+                         [msgs_prevote EXCEPT ![round[p]] =
+                           (msgs_prevote[round[p]] \union {[id |-> idv,
+                             kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>proposal, SMT DEF UponProposalInPropose
+          <3> QED BY <3>wit, <2>corr
+      <2>proposalPrevote. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
+          <3> PICK p \in Corr : UponProposalInProposeAndPrevote(p) BY <2>proposalPrevote
+          <3>wit. \E idv \in (ValidValues \union {-1}) :
+                    /\ step[p] = "PROPOSE_OF_STEP"
+                    /\ msgs_prevote' =
+                         [msgs_prevote EXCEPT ![round[p]] =
+                           (msgs_prevote[round[p]] \union {[id |-> idv,
+                             kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>proposalPrevote, SMT DEF UponProposalInProposeAndPrevote
+          <3> QED BY <3>wit, <2>corr
+      <2>timeout. CASE \E p \in Corr : OnTimeoutPropose(p)
+          <3> PICK p \in Corr : OnTimeoutPropose(p) BY <2>timeout
+          <3>wit. /\ step[p] = "PROPOSE_OF_STEP"
+                  /\ msgs_prevote' =
+                       [msgs_prevote EXCEPT ![round[p]] =
+                         (msgs_prevote[round[p]] \union {[id |-> -1,
+                           kind |-> "PREVOTE_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>timeout DEF OnTimeoutPropose
+          <3>nil. -1 \in (ValidValues \union {-1}) BY SMT
+          <3> QED BY <3>wit, <3>nil, <2>corr
+      <2> QED BY <2>sel, <2>same, <2>faulty, <2>proposal, <2>proposalPrevote,
+         <2>timeout
+  <1>precommit. \A q \in Corr :
+                   \E cv \in (ValidValues \union {-1}) :
+                     \A mc \in msgs_precommit'[r] :
+                       q = mc.src => cv = mc.id
+      <2> SUFFICES ASSUME NEW q \in Corr
+                   PROVE  \E cv \in (ValidValues \union {-1}) :
+                            \A mc \in msgs_precommit'[r] :
+                              q = mc.src => cv = mc.id
+          OBVIOUS
+      <2>old. PICK oldv \in (ValidValues \union {-1}) :
+                    \A mc \in msgs_precommit[r] : q = mc.src => oldv = mc.id
+            BY DEF AllNoEquivocationByCorrect
+      <2>sel. \/ msgs_precommit' = msgs_precommit
+               \/ FaultyStep
+               \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+               \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+               \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
+            BY DEF Step
+      <2>same. CASE msgs_precommit' = msgs_precommit
+          <3> QED BY <2>same, <2>old
+      <2>faulty. CASE FaultyStep
+          <3> QED BY <2>faulty, <2>old, DisjointCF, SMT DEF FaultyStep
+      <2>corr. ASSUME NEW p \in Corr,
+                       NEW idv \in (ValidValues \union {-1}),
+                       step[p] = "PREVOTE_OF_STEP",
+                       msgs_precommit' =
+                         [msgs_precommit EXCEPT ![round[p]] =
+                           (msgs_precommit[round[p]] \union {[id |-> idv,
+                             kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                PROVE  \E cv \in (ValidValues \union {-1}) :
+                         \A mc \in msgs_precommit'[r] :
+                           q = mc.src => cv = mc.id
+          <3>1. CASE q = p /\ r = round[p]
+              <4>none. \A mc \in msgs_precommit[r] : q # mc.src
+                    BY <2>corr, <3>1 DEF AllNoFutureMessagesSent
+              <4> QED BY <2>corr, <3>1, <4>none, SMT
+          <3>2. CASE ~(q = p /\ r = round[p])
+              <4> QED BY <2>corr, <2>old, <3>2, SMT
+          <3> QED BY <3>1, <3>2
+      <2>quorumPrevotes. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+          <3> PICK p \in Corr : UponQuorumOfPrevotesAny(p) BY <2>quorumPrevotes
+          <3>wit. /\ step[p] = "PREVOTE_OF_STEP"
+                  /\ msgs_precommit' =
+                       [msgs_precommit EXCEPT ![round[p]] =
+                         (msgs_precommit[round[p]] \union {[id |-> -1,
+                           kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>quorumPrevotes DEF UponQuorumOfPrevotesAny
+          <3>nil. -1 \in (ValidValues \union {-1}) BY SMT
+          <3> QED BY <3>wit, <3>nil, <2>corr
+      <2>proposalPrevoteCommit. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+          <3> PICK p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p) BY <2>proposalPrevoteCommit
+          <3>wit. \/ msgs_precommit' = msgs_precommit
+                  \/ \E idv \in ValidValues :
+                       /\ step[p] = "PREVOTE_OF_STEP"
+                       /\ msgs_precommit' =
+                            [msgs_precommit EXCEPT ![round[p]] =
+                              (msgs_precommit[round[p]] \union {[id |-> idv,
+                                kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>proposalPrevoteCommit, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+          <3>same. CASE msgs_precommit' = msgs_precommit
+              <4> QED BY <3>same, <2>old
+          <3>send. CASE \E idv \in ValidValues :
+                       /\ step[p] = "PREVOTE_OF_STEP"
+                       /\ msgs_precommit' =
+                            [msgs_precommit EXCEPT ![round[p]] =
+                              (msgs_precommit[round[p]] \union {[id |-> idv,
+                                kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+              <4> PICK idv \in ValidValues :
+                       /\ step[p] = "PREVOTE_OF_STEP"
+                       /\ msgs_precommit' =
+                            [msgs_precommit EXCEPT ![round[p]] =
+                              (msgs_precommit[round[p]] \union {[id |-> idv,
+                                kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                    BY <3>send
+              <4>idty. idv \in (ValidValues \union {-1}) OBVIOUS
+              <4> QED BY <3>send, <4>idty, <2>corr
+          <3> QED BY <3>wit, <3>same, <3>send
+      <2>nilPrevotes. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+          <3> PICK p \in Corr : OnQuorumOfNilPrevotes(p) BY <2>nilPrevotes
+          <3>wit. /\ step[p] = "PREVOTE_OF_STEP"
+                  /\ msgs_precommit' =
+                       [msgs_precommit EXCEPT ![round[p]] =
+                         (msgs_precommit[round[p]] \union {[id |-> -1,
+                           kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]})]
+                BY <2>nilPrevotes DEF OnQuorumOfNilPrevotes
+          <3>nil. -1 \in (ValidValues \union {-1}) BY SMT
+          <3> QED BY <3>wit, <3>nil, <2>corr
+      <2> QED BY <2>sel, <2>same, <2>faulty, <2>quorumPrevotes,
+         <2>proposalPrevoteCommit, <2>nilPrevotes
+  <1> QED BY <1>prop, <1>prevote, <1>precommit
 
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInvMin, Step PROVE PrecommitsLockValue'
