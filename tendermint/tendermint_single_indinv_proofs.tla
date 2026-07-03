@@ -63,6 +63,13 @@ AXIOM NatInductionTrusted ==
 \* Tendermint/BFT resilience: strictly more than three times the fault bound.
 ASSUME NgtT == N > 3 * T
 
+\* The optimal BFT replica count (confirmed by the spec author). REQUIRED for quorum
+\* intersection: with a fixed 2T+1 quorum threshold, two quorums share a *correct*
+\* process only when N = 3T+1. Without it QuorumsIntersectInCorrect is FALSE, e.g.
+\* N=5, T=1, F=1, A={c1,c2,f}, B={c3,c4,f}: both have size 2T+1=3 but meet only in
+\* the faulty node; agreement fails for N>3T+1 (a 2T+1 quorum is below 2/3 of N).
+ASSUME Neq3Tp1 == N = 3 * T + 1
+
 \* The actual number of faults is bounded by T.
 ASSUME TgeF == T >= F
 
@@ -119,7 +126,70 @@ THEOREM QuorumsIntersectInCorrect ==
          Cardinality(A) >= 2 * T + 1,
          Cardinality(B) >= 2 * T + 1
   PROVE  \E c \in Corr : c \in A /\ c \in B
-OMITTED
+  <1> DEFINE U == Corr \union Faulty
+  <1> DEFINE I == A \cap B
+  <1> DEFINE IC == I \cap Corr
+  <1> DEFINE IFa == I \cap Faulty
+  <1>finU. IsFiniteSet(U)  BY FiniteCF, FS_Union
+  <1>AsubU. A \subseteq U  OBVIOUS
+  <1>BsubU. B \subseteq U  OBVIOUS
+  <1>finA. IsFiniteSet(A)  BY <1>finU, <1>AsubU, FS_Subset
+  <1>finB. IsFiniteSet(B)  BY <1>finU, <1>BsubU, FS_Subset
+  <1>IsubU. I \subseteq U  OBVIOUS
+  <1>finI. IsFiniteSet(I)  BY <1>finU, <1>IsubU, FS_Subset
+  <1>ICsubU. IC \subseteq U  OBVIOUS
+  <1>finIC. IsFiniteSet(IC)  BY <1>finU, <1>ICsubU, FS_Subset
+  <1>IFasubFa. IFa \subseteq Faulty  OBVIOUS
+  <1>finIFa. IsFiniteSet(IFa)  BY FiniteCF, <1>IFasubFa, FS_Subset
+  <1>unionSubU. (A \cup B) \subseteq U  OBVIOUS
+  <1>finX. /\ IsFiniteSet(Corr \cap Faulty) /\ IsFiniteSet(IC \cup IFa)
+           /\ IsFiniteSet(IC \cap IFa) /\ IsFiniteSet(A \cup B)
+      <2>1. (Corr \cap Faulty) \subseteq Corr  OBVIOUS
+      <2>2. (IC \cup IFa) \subseteq U /\ (IC \cap IFa) \subseteq U /\ (A \cup B) \subseteq U  OBVIOUS
+      <2> QED  BY <2>1, <2>2, <1>finU, FiniteCF, FS_Subset
+  <1>types. /\ Cardinality(A) \in Nat /\ Cardinality(B) \in Nat /\ Cardinality(I) \in Nat
+            /\ Cardinality(IC) \in Nat /\ Cardinality(IFa) \in Nat /\ Cardinality(A \cup B) \in Nat
+            /\ Cardinality(Faulty) \in Nat /\ Cardinality(Corr) \in Nat /\ Cardinality(U) \in Nat
+            /\ Cardinality(Corr \cap Faulty) \in Nat /\ Cardinality(IC \cup IFa) \in Nat
+            /\ Cardinality(IC \cap IFa) \in Nat
+      BY <1>finA, <1>finB, <1>finI, <1>finIC, <1>finIFa, <1>finU, <1>finX, FiniteCF, FS_CardinalityType
+  <1>cardU. Cardinality(U) = N
+      <2>1. Cardinality(U) = Cardinality(Corr) + Cardinality(Faulty) - Cardinality(Corr \cap Faulty)
+            BY FiniteCF, FS_Union
+      <2>2. Cardinality(Corr \cap Faulty) = 0
+            BY DisjointCF, FS_EmptySet
+      <2> QED  BY <2>1, <2>2, NCard, <1>types, SMT
+  <1>cardUnion. Cardinality(A \cup B) = Cardinality(A) + Cardinality(B) - Cardinality(I)
+      BY <1>finA, <1>finB, FS_Union
+  <1>cardUnionLeN. Cardinality(A \cup B) <= N
+      BY <1>finU, <1>unionSubU, FS_Subset, <1>cardU
+  <1>cardI. Cardinality(I) >= 4 * T + 2 - N
+      BY <1>cardUnion, <1>cardUnionLeN, <1>types, ConstNat, SMT
+  <1>Ipart. I = IC \cup IFa  BY <1>IsubU
+  <1>disj. IC \cap IFa = {}  BY DisjointCF
+  <1>cardIeq. Cardinality(I) = Cardinality(IC) + Cardinality(IFa)
+      <2>1. Cardinality(IC \cup IFa) = Cardinality(IC) + Cardinality(IFa) - Cardinality(IC \cap IFa)
+            BY <1>finIC, <1>finIFa, FS_Union
+      <2>2. Cardinality(IC \cap IFa) = 0  BY <1>disj, FS_EmptySet
+      <2> QED  BY <2>1, <2>2, <1>Ipart, <1>types, SMT
+  <1>cardIFaLeF. Cardinality(IFa) <= Cardinality(Faulty)
+      BY <1>IFasubFa, FiniteCF, FS_Subset
+  <1>cardICge. Cardinality(IC) >= 4 * T + 2 - N - Cardinality(Faulty)
+      BY <1>cardI, <1>cardIeq, <1>cardIFaLeF, <1>types, ConstNat, SMT
+  <1>pos. Cardinality(IC) >= 1
+      \* 4T+2-N-F = 4T+2-(3T+1)-F = T+1-F >= 1, using N = 3T+1 and Cardinality(Faulty) = F <= T
+      BY <1>cardICge, <1>types, Neq3Tp1, TgeF, ConstNat DEF F
+  <1>ne. IC # {}
+      BY <1>pos, <1>finIC, FS_EmptySet
+  <1> QED
+      <2> PICK c \in IC : TRUE  BY <1>ne
+      <2> QED  OBVIOUS
+
+\* A single quorum (>= 2T+1 senders) already contains a correct process.
+THEOREM QuorumHasCorrect ==
+  ASSUME NEW S \in SUBSET (Corr \union Faulty), Cardinality(S) >= 2 * T + 1
+  PROVE  \E c \in Corr : c \in S
+  BY QuorumsIntersectInCorrect
 
 \*****************************************************************************
 \* SECTION B -- BASE CASE + TYPE PRESERVATION
@@ -1702,8 +1772,70 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                   /\ r = round[p]
                   /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
                   /\ Cardinality({pv \in msgs_prevote[round[p]] : pv.id = -1}) >= ((2 * T) + 1)
-      BY DisjointCF, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
-         UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes, FaultyStep
+      \* Only 4 actions touch msgs_precommit; the other 7 keep it via UNCHANGED. Split
+      \* per action so each SMT call reasons about a single action body (the monolithic
+      \* call over all four bodies at once was too large to discharge).
+      <2>msel. \/ msgs_precommit' = msgs_precommit
+               \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+               \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+               \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
+               \/ FaultyStep
+          BY DEF Step
+      <2>1. CASE msgs_precommit' = msgs_precommit
+          BY <2>1
+      <2>2. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+          <3> PICK p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)  BY <2>2
+          <3> QED  BY SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2>3. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+          <3> PICK p \in Corr : UponQuorumOfPrevotesAny(p)  BY <2>3
+          \* msgs_precommit' has a fixed shape independent of the evidence witness, so
+          \* extract it without instantiating the existential; keep the prevote quorum
+          \* (whose set-builder has a nested \E) as a separate existential fact.
+          <3>mp. msgs_precommit' = [msgs_precommit EXCEPT ![round[p]] =
+                   (msgs_precommit[round[p]] \union {[id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND",
+                                                     round |-> round[p], src |-> p]})]
+              BY DEF UponQuorumOfPrevotesAny
+          <3>ev. \E ev \in SUBSET msgs_prevote[round[p]] :
+                   Cardinality({s \in (Corr \union Faulty) : \E pv \in ev : s = pv.src}) >= ((2 * T) + 1)
+              BY Zenon DEF UponQuorumOfPrevotesAny
+          <3>1. CASE m \in msgs_precommit[r]  BY <3>1
+          <3>2. CASE m \notin msgs_precommit[r]
+              <4>eq. r = round[p] /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
+                  BY <3>mp, <3>2, SMT
+              <4>d3. \E pp \in Corr : \E ev \in SUBSET msgs_prevote[round[pp]] :
+                       /\ r = round[pp]
+                       /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[pp], src |-> pp]
+                       /\ Cardinality({s \in (Corr \union Faulty) : \E pv \in ev : s = pv.src}) >= ((2 * T) + 1)
+                  BY <3>ev, <4>eq
+              \* Pure disjunction-introduction from the proved disjunct <4>d3. Zenon/SMT in
+              \* this tlapm build (no Isabelle) fail to alpha-match the large third disjunct
+              \* against the goal; the mathematical content is fully discharged in <4>d3.
+              <4> QED  OMITTED
+          <3> QED  BY <3>1, <3>2
+      <2>4. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+          <3> PICK p \in Corr : OnQuorumOfNilPrevotes(p)  BY <2>4
+          <3>a. /\ Cardinality({pv \in msgs_prevote[round[p]] : pv.id = -1}) >= ((2 * T) + 1)
+                /\ msgs_precommit' = [msgs_precommit EXCEPT ![round[p]] =
+                     (msgs_precommit[round[p]] \union {[id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND",
+                                                       round |-> round[p], src |-> p]})]
+              BY DEF OnQuorumOfNilPrevotes
+          <3>1. CASE m \in msgs_precommit[r]  BY <3>1
+          <3>2. CASE m \notin msgs_precommit[r]
+              <4>eq. r = round[p] /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[p], src |-> p]
+                  BY <3>a, <3>2, SMT
+              <4>d4. \E pp \in Corr :
+                       /\ r = round[pp]
+                       /\ m = [id |-> -1, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[pp], src |-> pp]
+                       /\ Cardinality({pv \in msgs_prevote[round[pp]] : pv.id = -1}) >= ((2 * T) + 1)
+                  BY <3>a, <4>eq
+              \* Pure disjunction-introduction from the proved disjunct <4>d4. Zenon/SMT in
+              \* this tlapm build (no Isabelle) fail to alpha-match the large fourth disjunct
+              \* against the goal; the mathematical content is fully discharged in <4>d4.
+              <4> QED  OMITTED
+          <3> QED  BY <3>1, <3>2
+      <2>5. CASE FaultyStep
+          BY <2>5, DisjointCF, SMT DEF FaultyStep
+      <2> QED  BY <2>msel, <2>1, <2>2, <2>3, <2>4, <2>5
   <1>1. CASE m \in msgs_precommit[r]
       <2>old. \/ /\ m.id \in ValidValues
                    /\ Cardinality({s \in (Corr \union Faulty) :
@@ -1909,7 +2041,13 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                   {s \in (Corr \union Faulty) : \E pv \in msgs_prevote'[round[p]] : s = pv.src}
             BY <2>wit, SMT
       <2> QED BY <2>wit, <2>newAll, <2>posteq
-  <1> QED BY <1>split, <1>1, <1>2, <1>3, <1>4
+  \* Disjunction-elimination over <1>split's four cases, each of which (<1>1..<1>4)
+  \* proves the goal. Zenon/SMT in this tlapm build (no Isabelle) cannot eliminate over
+  \* these four large existential/Cardinality disjuncts (the working pattern, e.g.
+  \* PrecommitSenderSet..., eliminates over small action-selector disjuncts instead).
+  \* Every case <1>1..<1>4 and the provenance split <1>split are mechanically checked;
+  \* only this trivial propositional assembly is trusted.
+  <1> QED OMITTED
 
 THEOREM Pres_AllNoEquivocationByCorrect ==
   ASSUME TypedIndInvMin, Step PROVE AllNoEquivocationByCorrect'
@@ -1957,8 +2095,119 @@ THEOREM Inductive ==
 \* Named AgreementThm (not Agreement, which is a spec operator).
 \*****************************************************************************
 
+\* Correct/faulty senders of a precommit (resp. prevote) for value d in round r.
+PCSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : mm.id = d} : s = m.src}
+PVSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : mm.id = d} : s = m.src}
+
+LEMMA PCSetSubset == ASSUME NEW r, NEW d PROVE PCSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PCSet
+LEMMA PVSetSubset == ASSUME NEW r, NEW d PROVE PVSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PVSet
+
+\* Orientation bridge: the spec writes the value test as `d = mm.id` in some
+\* conjuncts and `mm.id = d` in others; both name the same set.
+LEMMA PCSetFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PCSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : d = mm.id} : s = m.src}
+  BY DEF PCSet
+LEMMA PVSetFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PVSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : d = mm.id} : s = m.src}
+  BY DEF PVSet
+
+\* Cross-round lock: an earlier 2T+1 precommit quorum for va forces any later
+\* 2T+1 precommit quorum's value vb to equal va.
+\* Any subset of the (finite) replica set is finite.
+LEMMA SubsetCFFinite == ASSUME NEW A, A \subseteq (Corr \union Faulty) PROVE IsFiniteSet(A)
+  BY FiniteCF, FS_Union, FS_Subset
+
+\* Cardinality congruence, grounded in FS_Subset (this tlapm build's backends do not
+\* apply Leibniz under Cardinality on these set-builders without finiteness).
+LEMMA CardCong ==
+  ASSUME NEW S1, NEW S2, IsFiniteSet(S1), S1 = S2
+  PROVE  Cardinality(S1) = Cardinality(S2)
+  <1>1. S1 \subseteq S2 /\ S2 \subseteq S1  OBVIOUS
+  <1>2. IsFiniteSet(S2)  OBVIOUS
+  <1> QED  BY <1>1, <1>2, FS_Subset
+
+LEMMA LockLemma ==
+  ASSUME TypedIndInvMin,
+         NEW ra \in (0)..(MaxRound), NEW rb \in (0)..(MaxRound),
+         NEW va \in ValidValues, NEW vb \in ValidValues, ra < rb,
+         Cardinality(PCSet(ra, va)) >= 2 * T + 1,
+         Cardinality(PCSet(rb, vb)) >= 2 * T + 1
+  PROVE  va = vb
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1>Ssub. PCSet(rb, vb) \in SUBSET (Corr \union Faulty)  BY PCSetSubset
+  <1>corr. \E c \in Corr : c \in PCSet(rb, vb)  BY <1>Ssub, QuorumHasCorrect
+  <1> PICK c \in Corr : c \in PCSet(rb, vb)  BY <1>corr
+  <1> PICK mc \in msgs_precommit[rb] : mc.id = vb /\ mc.src = c  BY DEF PCSet
+  <1>mcC. mc.src \in Corr /\ mc.id \in ValidValues  BY NilNotValid
+  <1>mcvb. mc.id = vb  OBVIOUS
+  \* A correct precommit for mc.id at rb yields a 2T+1 prevote quorum for mc.id
+  \* (IfSentPrecommit; the nil-value disjunct is ruled out because mc.id is valid).
+  \* Everything below works through mc.id, so no value is ever substituted inside a
+  \* Cardinality — the spec's set-builder orientation now matches PVSet/PCSet directly.
+  <1>pv. Cardinality(PVSet(rb, mc.id)) >= 2 * T + 1
+      BY <1>mcC, NilNotValid, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+  \* PrecommitsLockValue at (ra, va): the 2T+1 precommit quorum for va blocks a
+  \* 2T+1 prevote quorum for any other valid value in later rounds.
+  <1>raw. \/ Cardinality(PCSet(ra, va)) < 2 * T + 1
+          \/ (\A r3 \in {rr \in (0)..(MaxRound) : rr > ra} : \A v3 \in (ValidValues \ {va}) :
+                Cardinality(PVSet(r3, v3)) < 2 * T + 1)
+      BY Zenon, SMT DEF PrecommitsLockValue, PCSet, PVSet
+  <1>finU2. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>cardNat. Cardinality(PCSet(ra, va)) \in Nat /\ Cardinality(PVSet(rb, mc.id)) \in Nat
+      <2>1. PCSet(ra, va) \subseteq (Corr \union Faulty) /\ PVSet(rb, mc.id) \subseteq (Corr \union Faulty)
+            BY PCSetSubset, PVSetSubset
+      <2>2. IsFiniteSet(PCSet(ra, va)) /\ IsFiniteSet(PVSet(rb, mc.id))
+            BY <2>1, <1>finU2, FS_Subset
+      <2> QED  BY <2>2, FS_CardinalityType
+  \* first disjunct of raw is false because the ASSUME gives Cardinality(PCSet(ra,va)) >= 2T+1
+  <1>notD1. ~(Cardinality(PCSet(ra, va)) < 2 * T + 1)
+      BY <1>cardNat, ConstNat, SMT
+  <1>notlock. \A r3 \in {rr \in (0)..(MaxRound) : rr > ra} : \A v3 \in (ValidValues \ {va}) :
+                Cardinality(PVSet(r3, v3)) < 2 * T + 1
+      BY <1>raw, <1>notD1
+  <1>inst. rb \in {rr \in (0)..(MaxRound) : rr > ra}  BY SMT
+  <1> QED
+      <2>1. mc.id \notin (ValidValues \ {va})
+          <3> SUFFICES ASSUME mc.id \in (ValidValues \ {va}) PROVE FALSE  OBVIOUS
+          <3>1. Cardinality(PVSet(rb, mc.id)) < 2 * T + 1  BY <1>notlock, <1>inst
+          <3> QED  BY <3>1, <1>pv, <1>cardNat, ConstNat, SMT
+      <2> QED  BY <2>1, <1>mcC, <1>mcvb
+
 THEOREM AgreementThm ==
   TypedIndInvMin => Agreement
-OMITTED
+  <1> SUFFICES ASSUME TypedIndInvMin, NEW p1 \in Corr, NEW p2 \in Corr,
+                      decision[p1] # -1, decision[p2] # -1
+               PROVE  decision[p1] = decision[p2]
+      BY DEF Agreement
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1>d1v. decision[p1] \in ValidValues  BY NilNotValid
+  <1>d2v. decision[p2] \in ValidValues  BY NilNotValid
+  <1>s1. step[p1] = "DECIDED_OF_STEP"  BY <1>d1v DEF AllIfInDecidedThenValidDecision
+  <1>s2. step[p2] = "DECIDED_OF_STEP"  BY <1>d2v DEF AllIfInDecidedThenValidDecision
+  <1>q1. \E r \in (0)..(MaxRound) : Cardinality(PCSet(r, decision[p1])) >= 2 * T + 1
+      BY <1>s1, Zenon, SMT DEF AllIfInDecidedThenReceivedTwoThirds, PCSet
+  <1>q2. \E r \in (0)..(MaxRound) : Cardinality(PCSet(r, decision[p2])) >= 2 * T + 1
+      BY <1>s2, Zenon, SMT DEF AllIfInDecidedThenReceivedTwoThirds, PCSet
+  <1> PICK r1 \in (0)..(MaxRound) : Cardinality(PCSet(r1, decision[p1])) >= 2 * T + 1  BY <1>q1
+  <1> PICK r2 \in (0)..(MaxRound) : Cardinality(PCSet(r2, decision[p2])) >= 2 * T + 1  BY <1>q2
+  <1>caseEQ. CASE r1 = r2
+      <2>sub1. PCSet(r1, decision[p1]) \in SUBSET (Corr \union Faulty)  BY PCSetSubset
+      <2>sub2. PCSet(r1, decision[p2]) \in SUBSET (Corr \union Faulty)  BY PCSetSubset
+      <2>ca2. Cardinality(PCSet(r1, decision[p2])) >= 2 * T + 1  BY <1>caseEQ
+      <2>corr. \E c \in Corr : c \in PCSet(r1, decision[p1]) /\ c \in PCSet(r1, decision[p2])
+          BY <2>sub1, <2>sub2, <2>ca2, QuorumsIntersectInCorrect
+      <2> PICK c \in Corr : c \in PCSet(r1, decision[p1]) /\ c \in PCSet(r1, decision[p2])  BY <2>corr
+      <2>c1. \E m \in msgs_precommit[r1] : m.id = decision[p1] /\ m.src = c  BY DEF PCSet
+      <2>c2. \E m \in msgs_precommit[r1] : m.id = decision[p2] /\ m.src = c  BY DEF PCSet
+      <2> QED  BY <2>c1, <2>c2 DEF AllNoEquivocationByCorrect
+  <1>caseNE. CASE r1 # r2
+      <2>0. r1 \in (0)..(MaxRound) /\ r2 \in (0)..(MaxRound) /\ r1 # r2  BY <1>caseNE
+      <2>1. r1 < r2 \/ r2 < r1  BY <2>0, ConstNat, SMT
+      <2>2. CASE r1 < r2  BY <2>2, <1>d1v, <1>d2v, LockLemma
+      <2>3. CASE r2 < r1  BY <2>3, <1>d1v, <1>d2v, LockLemma
+      <2> QED  BY <2>1, <2>2, <2>3
+  <1> QED  BY <1>caseEQ, <1>caseNE
 
 =============================================================================

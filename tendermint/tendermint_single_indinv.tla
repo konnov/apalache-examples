@@ -799,8 +799,8 @@ AllNoEquivocationByCorrect ==
 
 PrecommitsLockValue ==
   PrecommitsLockValue ::
-  \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues: \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit[v_v708]: (v_v709 = v_v710.id)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
-                                                         \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote[v_v714]: (v_v715 = v_v716.id)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)))
+  \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues: \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit[v_v708]: (v_v710.id = v_v709)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
+                                                         \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote[v_v714]: (v_v716.id = v_v715)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)))
 
 IndInvMin ==
   IndInvMin ::
@@ -841,7 +841,7 @@ PrecommitLocksLaterPrevotes ==
                                                                                                                                                  /\ (v_v721 /= v_v723.id))
                                                                                                        /\ (\E v_v724 \in msgs_prevote[v_v722]: /\ (v_v719 = v_v724.src)
                                                                                                                                                /\ (v_v721 = v_v724.id))) => (\E v_v726 \in {v_v725 \in (0)..(MaxRound): /\ (v_v725 >= v_v720)
-                                                                                                                                                                                                                        /\ (v_v725 < v_v722)}: (Cardinality({v_v728 \in (Corr \union Faulty): (\E v_v729 \in {v_v727 \in msgs_prevote[v_v726]: (v_v721 = v_v727.id)}: (v_v728 = v_v729.src))}) >= ((2 * T) + 1)))
+                                                                                                                                                                                                                        /\ (v_v725 < v_v722)}: (Cardinality({v_v728 \in (Corr \union Faulty): (\E v_v729 \in {v_v727 \in msgs_prevote[v_v726]: (v_v727.id = v_v721)}: (v_v728 = v_v729.src))}) >= ((2 * T) + 1)))
 
 \* A correct proposer that already locked (precommitted a non-NIL value in an
 \* earlier round) never sends a fresh proposal (valid_round == NIL): a non-NIL
