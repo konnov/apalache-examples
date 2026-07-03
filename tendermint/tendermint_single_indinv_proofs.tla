@@ -2715,33 +2715,37 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
 \* This is the core research obligation; it needs PrecommitLocksLaterPrevotes and the
 \* valid-round conjuncts, hence the hypothesis is the full TypedIndInv.
 \*
-\* NOTE: this build's backends will not match the goal PrecommitsLockValue' (a doubly-
-\* quantified disjunction whose atoms are Cardinality of nested set-builders) against an
-\* explicit primed unfolding, so even the SUFFICES reduction to the counterexample form
-\* does not go through yet -- resolving that plumbing is a prerequisite to mechanizing
-\* the argument above.
+\* NOTE: this build's backends will not match the primed goal PrecommitsLockValue' by
+\* unfolding it in place inside a SUFFICES; route through the explicit unfold equivalence
+\* <1>unfold below, then reduce. Work through the operator abbreviations PCSetP / PVSetP so
+\* Cardinality atoms are operator applications (the backends do the < / >= conversions on
+\* those, but not on raw set-builders).
+\* Post-state (primed) precommit / prevote sender sets for value d in round r.
+PCSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit'[r] : mm.id = d} : s = m.src}
+PVSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote'[r] : mm.id = d} : s = m.src}
+
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
   <1> USE DEF TypedIndInv, IndTypeOk
-  \* Reduce the primed goal to its explicit unfolded form via an equivalence step; the
-  \* backends match the doubly-quantified Cardinality-disjunction goal only through this
-  \* detour, not by unfolding it in place inside a SUFFICES.
+  \* Reduce the primed goal to its explicit unfolded form (in terms of the operators
+  \* PCSetP / PVSetP) via an equivalence step; the backends match the doubly-quantified
+  \* Cardinality-disjunction goal only through this detour, not by unfolding in place.
   <1>unfold. PrecommitsLockValue' <=>
                (\A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
-                  \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[v_v708]: (v_v710.id = v_v709)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
-                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[v_v714]: (v_v716.id = v_v715)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1))))
-      BY DEF PrecommitsLockValue
+                  \/ (Cardinality(PCSetP(v_v708, v_v709)) < ((2 * T) + 1))
+                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality(PVSetP(v_v714, v_v715)) < ((2 * T) + 1))))
+      BY DEF PrecommitsLockValue, PCSetP, PVSetP
   <1> SUFFICES \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
-                  \/ (Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[v_v708]: (v_v710.id = v_v709)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1))
-                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[v_v714]: (v_v716.id = v_v715)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)))
+                  \/ (Cardinality(PCSetP(v_v708, v_v709)) < ((2 * T) + 1))
+                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality(PVSetP(v_v714, v_v715)) < ((2 * T) + 1)))
       BY <1>unfold
   <1> TAKE r0 \in (0)..(MaxRound), w \in ValidValues
   \* Counterexample form: a post-state precommit quorum for w at r0 forces every other
   \* valid value w2 to lack a post-state prevote quorum in each later round r.
-  <1> SUFFICES ASSUME ~(Cardinality({v_v711 \in (Corr \union Faulty): (\E v_v712 \in {v_v710 \in msgs_precommit'[r0]: (v_v710.id = w)}: (v_v711 = v_v712.src))}) < ((2 * T) + 1)),
+  <1> SUFFICES ASSUME ~(Cardinality(PCSetP(r0, w)) < ((2 * T) + 1)),
                       NEW r \in {v_v713 \in (0)..(MaxRound): (v_v713 > r0)},
                       NEW w2 \in (ValidValues \ {w})
-               PROVE  Cardinality({v_v717 \in (Corr \union Faulty): (\E v_v718 \in {v_v716 \in msgs_prevote'[r]: (v_v716.id = w2)}: (v_v717 = v_v718.src))}) < ((2 * T) + 1)
+               PROVE  Cardinality(PVSetP(r, w2)) < ((2 * T) + 1)
       OBVIOUS
   \* Pre-state lock (PrecommitsLockValue at (r0, w)): either w has no pre-state precommit
   \* quorum at r0, or no other valid value has a pre-state prevote quorum above r0.
@@ -2751,22 +2755,33 @@ THEOREM Pres_PrecommitsLockValue ==
                 Cardinality({s \in (Corr \union Faulty) :
                   \E m \in {mm \in msgs_prevote[rr] : mm.id = ww} : s = m.src}) < 2 * T + 1)
       BY Zenon, SMT DEF TypedIndInv, IndInv, PrecommitsLockValue
-  \* ---- remaining mathematical core (OMITTED) --------------------------------------
-  \* A single correct Step changes at most one of msgs_precommit / msgs_prevote (only
-  \* FaultyStep touches both, and it adds only faulty senders, which cannot form the
-  \* >= T+1 correct part of a 2T+1 quorum). So one of the two quorums is entirely
-  \* pre-state. Using PrevoteSenderSetCardinalityMonotone / PrecommitSenderSetCardinality-
-  \* Monotone, the fresh vote adds one correct sender, so the pre-state count was exactly
-  \* 2T. The >= T+1 correct precommitters of w at r0 and the >= T+1 correct prevoters of
-  \* w2 at r intersect (N = 3T+1); the shared correct process c either (a) prevoted w2 at
-  \* r pre-state -> PrecommitLocksLaterPrevotes gives a 2T+1 prevote quorum for w2 at some
-  \* r1 in [r0, r), contradicting <1>pre [r1 = r0: same-round quorum uniqueness +
-  \* AllNoEquivocationByCorrect]; or (b) c is the acting process, whose prevote guard
-  \* (locked on w) forces a valid_round vr in [r0, r) with a 2T+1 prevote quorum for w2
-  \* (AllIfValidRoundThenTwoThirdsPrevotes / AllCorrectProposalValidRoundBelowRound),
-  \* again contradicting <1>pre.
+  \* rNat / rGt: unpack r's constrained domain.
+  <1>rDom. r \in (0)..(MaxRound) /\ r > r0  BY SMT
   <1> QED
-    OMITTED
+    <2>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+    <2>pcSub. PCSetP(r0, w) \subseteq (Corr \union Faulty)  BY DEF PCSetP
+    <2>pvSub. PVSetP(r, w2) \subseteq (Corr \union Faulty)  BY DEF PVSetP
+    <2>pcNat. Cardinality(PCSetP(r0, w)) \in Nat  BY <2>pcSub, <2>finU, FS_Subset, FS_CardinalityType
+    <2>pvNat. Cardinality(PVSetP(r, w2)) \in Nat  BY <2>pvSub, <2>finU, FS_Subset, FS_CardinalityType
+    \* The precommit quorum for w at r0 is >= 2T+1 (negated first disjunct + Nat typing).
+    <2>pcQ. Cardinality(PCSetP(r0, w)) >= 2 * T + 1  BY <2>pcNat, ConstNat, SMT
+    \* Prove the goal (post prevote quorum for w2 < 2T+1) by contradiction.
+    <2> SUFFICES ASSUME Cardinality(PVSetP(r, w2)) >= 2 * T + 1  PROVE  FALSE
+        BY <2>pvNat, ConstNat, SMT
+    \* Quorum intersection (N = 3T+1): a correct process c is in both post-state quorums.
+    <2>int. \E cc \in Corr : cc \in PCSetP(r0, w) /\ cc \in PVSetP(r, w2)
+        BY <2>pcSub, <2>pvSub, <2>pcQ, QuorumsIntersectInCorrect
+    <2> PICK c \in Corr : c \in PCSetP(r0, w) /\ c \in PVSetP(r, w2)  BY <2>int
+    \* c precommitted w at r0 and prevoted w2 at r, both in the post-state.
+    <2>cPC. \E mc \in msgs_precommit'[r0] : mc.src = c /\ mc.id = w  BY DEF PCSetP
+    <2>cPV. \E mv \in msgs_prevote'[r] : mv.src = c /\ mv.id = w2  BY DEF PVSetP
+    \* ---- remaining core (OMITTED): from correct c holding a post-state precommit for w
+    \* at r0 and a post-state prevote for w2 (# w) at r > r0, derive FALSE. A correct step
+    \* adds at most one message by one process and FaultyStep adds only faulty ones, so at
+    \* least one of mc, mv is pre-state; PrecommitLocksLaterPrevotes (both pre-state) or the
+    \* acting process's prevote guard (one fresh) yields a 2T+1 prevote quorum for w2 in
+    \* [r0, r), contradicting <1>pre (with same-round uniqueness for the r1 = r0 boundary).
+    <2> QED  OMITTED
 
 \* ---------------------------------------------------------------------------
 \* TOP-LEVEL INDUCTIVE STEP: assemble type preservation + all 17 conjuncts.
