@@ -1169,21 +1169,32 @@ THEOREM Pres_AllNoFutureMessagesSent ==
                            /\ \A mv \in msgs_prevote'[rr] : q # mv.src
                            /\ \A mc \in msgs_precommit'[rr] : q # mc.src
       BY DEF AllNoFutureMessagesSent
-  <1>sel. \/ FaultyStep
-           \/ \E p \in Corr : InsertProposal(p)
+  \* The selector carries, for each case that needs it, the frame equalities from that
+  \* Step branch's UNCHANGED tuple. The bare action alone does NOT determine the frame
+  \* (e.g. FaultyStep with an empty faulty injection can co-occur with OnRoundCatchup,
+  \* which changes round), so the frame must come from the branch, not the action.
+  <1>sel. \/ (FaultyStep /\ round' = round /\ step' = step)
+           \/ ((\E p \in Corr : InsertProposal(p))
+                 /\ round' = round /\ step' = step
+                 /\ msgs_prevote' = msgs_prevote /\ msgs_precommit' = msgs_precommit)
            \/ \E p \in Corr : UponProposalInPropose(p)
            \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
            \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
-           \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+           \/ ((\E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote)
            \/ \E p \in Corr : UponQuorumOfPrecommitsAny(p)
-           \/ \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+           \/ ((\E p \in Corr : UponProposalInPrecommitNoDecision(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                 /\ msgs_precommit' = msgs_precommit)
            \/ \E p \in Corr : OnTimeoutPropose(p)
            \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
            \/ \E p \in Corr : OnRoundCatchup(p)
       BY DEF Step
-  <1>faulty. CASE FaultyStep
+  <1>faulty. CASE FaultyStep /\ round' = round /\ step' = step
       <2>frame. round' = round /\ step' = step
-            BY <1>faulty DEF Step
+            BY <1>faulty
       <2>old. /\ /\ \/ q = Proposer[round[q]]
                     \/ \A mp \in msgs_propose[round[q]] : q # mp.src
                  /\ \/ step[q] = "PREVOTE_OF_STEP"
@@ -1199,13 +1210,15 @@ THEOREM Pres_AllNoFutureMessagesSent ==
                       /\ \A mc \in msgs_precommit[rr] : q # mc.src
             BY DEF AllNoFutureMessagesSent
       <2> QED BY <1>faulty, <2>frame, <2>old, DisjointCF, SMT DEF FaultyStep
-  <1>insert. CASE \E p \in Corr : InsertProposal(p)
+  <1>insert. CASE (\E p \in Corr : InsertProposal(p))
+                  /\ round' = round /\ step' = step
+                  /\ msgs_prevote' = msgs_prevote /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : InsertProposal(p) BY <1>insert
       <2>frame. /\ round' = round
                 /\ step' = step
                 /\ msgs_prevote' = msgs_prevote
                 /\ msgs_precommit' = msgs_precommit
-            BY <1>insert DEF Step
+            BY <1>insert
       <2>old. /\ /\ \/ q = Proposer[round[q]]
                     \/ \A mp \in msgs_propose[round[q]] : q # mp.src
                  /\ \/ step[q] = "PREVOTE_OF_STEP"
@@ -1233,12 +1246,14 @@ THEOREM Pres_AllNoFutureMessagesSent ==
       <2> PICK p \in Corr : UponQuorumOfPrevotesAny(p) BY <1>quorumPrevotes
       <2> QED BY <1>quorumPrevotes, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
          UponQuorumOfPrevotesAny
-  <1>proposalPrevoteCommit. CASE \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
+  <1>proposalPrevoteCommit. CASE (\E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p))
+                                 /\ round' = round
+                                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
       <2> PICK p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p) BY <1>proposalPrevoteCommit
       <2>frame. /\ round' = round
                 /\ msgs_propose' = msgs_propose
                 /\ msgs_prevote' = msgs_prevote
-            BY <1>proposalPrevoteCommit DEF Step
+            BY <1>proposalPrevoteCommit
       <2>old. /\ /\ \/ q = Proposer[round[q]]
                     \/ \A mp \in msgs_propose[round[q]] : q # mp.src
                  /\ \/ step[q] = "PREVOTE_OF_STEP"
@@ -1259,13 +1274,16 @@ THEOREM Pres_AllNoFutureMessagesSent ==
       <2> PICK p \in Corr : UponQuorumOfPrecommitsAny(p) BY <1>quorumPrecommits
       <2> QED BY <1>quorumPrecommits, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
          UponQuorumOfPrecommitsAny
-  <1>decide. CASE \E p \in Corr : UponProposalInPrecommitNoDecision(p)
+  <1>decide. CASE (\E p \in Corr : UponProposalInPrecommitNoDecision(p))
+                  /\ round' = round
+                  /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                  /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : UponProposalInPrecommitNoDecision(p) BY <1>decide
       <2>frame. /\ round' = round
                 /\ msgs_propose' = msgs_propose
                 /\ msgs_prevote' = msgs_prevote
                 /\ msgs_precommit' = msgs_precommit
-            BY <1>decide DEF Step
+            BY <1>decide
       <2>old. /\ /\ \/ q = Proposer[round[q]]
                     \/ \A mp \in msgs_propose[round[q]] : q # mp.src
                  /\ \/ step[q] = "PREVOTE_OF_STEP"
@@ -1964,7 +1982,16 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
               <4>rty. rr \in (0)..(MaxRound)
                     BY <4>oldQ
               <4>idty. m.id \in ((ValidValues \union InvalidValues) \union {-1})
-                    BY SMT DEF IndTypeOk
+                    \* Extract the id-field type from IndTypeOk's prevote record-set typing:
+                    \* SMT cannot project the field out of the set-builder monolithically.
+                    <5>1. m \in {[id |-> t[3], kind |-> "PREVOTE_OF_VOTEKIND", round |-> t[2], src |-> t[1]] :
+                                   t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1}))}
+                          BY <1>1 DEF IndTypeOk
+                    <5>2. PICK t \in ((Corr \union Faulty)) \X ((0)..(MaxRound)) \X (((ValidValues \union InvalidValues) \union {-1})) :
+                             m = [id |-> t[3], kind |-> "PREVOTE_OF_VOTEKIND", round |-> t[2], src |-> t[1]]
+                          BY <5>1
+                    <5>3. m.id = t[3]  BY <5>2
+                    <5> QED  BY <5>2, <5>3
               <4>mono. Cardinality({s \in (Corr \union Faulty) :
                             \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
                               s = pv.src})
@@ -2041,13 +2068,26 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
                   Cardinality({s \in (Corr \union Faulty) :
                     \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src})
                 BY PrevoteSenderSetCardinalityMonotone
+          <3>finCF. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+          <3>fin1. IsFiniteSet({pv \in msgs_prevote[vr] : pv.id = v})
+                BY PrevoteValueMessagesFinite
+          <3>fin2. IsFiniteSet({s \in (Corr \union Faulty) :
+                     \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
+                <4>sub. {s \in (Corr \union Faulty) : \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src}
+                          \subseteq (Corr \union Faulty)  OBVIOUS
+                <4> QED  BY <4>sub, <3>finCF, FS_Subset
+          <3>fin3. IsFiniteSet({s \in (Corr \union Faulty) :
+                     \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src})
+                <4>sub. {s \in (Corr \union Faulty) : \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src}
+                          \subseteq (Corr \union Faulty)  OBVIOUS
+                <4> QED  BY <4>sub, <3>finCF, FS_Subset
           <3>types. /\ Cardinality({pv \in msgs_prevote[vr] : pv.id = v}) \in Int
                       /\ Cardinality({s \in (Corr \union Faulty) :
                            \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src}) \in Int
                       /\ Cardinality({s \in (Corr \union Faulty) :
                            \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src}) \in Int
                       /\ ((2 * T) + 1) \in Int
-                BY PrevoteValueMessagesFinite, FiniteCF, FS_Union, FS_Subset,
+                BY <3>fin1, <3>fin2, <3>fin3, FiniteCF, FS_Union, FS_Subset,
                    FS_CardinalityType, ConstNat, SMT
           <3>oldSenders. Cardinality({s \in (Corr \union Faulty) :
                     \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
