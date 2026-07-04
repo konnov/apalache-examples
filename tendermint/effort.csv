@@ -1,0 +1,3 @@
+step,wall_clock,tokens,notes
+fix LockedValueGivesPostQuorum + close FreshPrevoteGivesQuorum case-3 OMITTED,2026-07-04T16:17:54,,edits applied; verification running
+verified: All 2673 obligations proved,2026-07-04T16:40:31,,exit 0; 3 failures fixed + FreshPrevoteGivesQuorum case-3 OMITTED closed

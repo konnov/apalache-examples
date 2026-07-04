@@ -31,9 +31,15 @@
  * higher-order operator argument trips the frontend), so a minimal parse-time
  * shim `Apalache.tla` sits in this directory (see its header). Verify with:
  *   tlapm --stretch 2 --threads 4 -I . tendermint_single_indinv_proofs.tla
- *   => "All 633 obligations proved"; every OMITTED stub contributes no
- *      obligation, exit 0.
- * Syntax/semantic checks while editing: SANY via tla2tools.jar.
+ *   => "All 2673 obligations proved"; every OMITTED stub contributes no
+ *      obligation, exit 0. Only three OMITTED proof-body stubs remain: the
+ *      `Pres_PrecommitsLockValue` fresh-vote bridge (caseChanged), and the two
+ *      research/fold obligations `Pres_AllPastStartRound` and
+ *      `Pres_AllRoundsBelowHavePrecommitQuorum` (the latter awaits a real fold
+ *      theory to replace the unsound `Apalache.tla` ApaFoldSet shim).
+ * Syntax/semantic checks while editing: SANY via tla2tools.jar (note: this build
+ * flags 12 spurious "multiply-defined 'p'" errors on the `<1>sel` selectors that
+ * tlapm's own frontend accepts -- they are pre-existing and not a real defect).
  *
  * Igor Konnov, Claude Opus 4.8, July 2026
  *)
@@ -2753,6 +2759,19 @@ PVSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote'[r] 
 LEMMA PCSetSubset == ASSUME NEW r, NEW d PROVE PCSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PCSet
 LEMMA PVSetSubset == ASSUME NEW r, NEW d PROVE PVSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PVSet
 
+\* A precommit for a valid value (id = m.id) by a correct process at round r forces a 2T+1
+\* prevote-sender quorum for m.id at r (IfSentPrecommitThenReceivedTwoThirds; the nil disjunct is
+\* excluded since m.id is valid). Kept standalone so the instantiation runs in a CLEAN context:
+\* the identical citation fails amid the heavy hypotheses of LockedValueGivesPostQuorum. Target the
+\* message's own .id (never a substituted value) so PVSet stays folded -- cf. LockLemma's <1>pv.
+LEMMA PrecommitByCorrectGivesPrevoteQuorum ==
+  ASSUME TypedIndInv, NEW r \in (0)..(MaxRound),
+         NEW m \in msgs_precommit[r], m.src \in Corr, m.id \in ValidValues
+  PROVE  Cardinality(PVSet(r, m.id)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>ne. m.id # -1  BY NilNotValid
+  <1> QED  BY <1>ne, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+
 LEMMA PVSetQuorumMonotone ==
   ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound),
          NEW d \in ((ValidValues \union InvalidValues) \union {-1}),
@@ -2939,7 +2958,31 @@ LEMMA FreshPrevoteGivesQuorum ==
       <2>dom. vr \in {x \in (0)..(MaxRound) : /\ (x >= r0) /\ (x < round[c])}  BY <1>lr, <1>2, SMT
       <2> QED  BY <2>dom, <1>quorum
   <1>3. CASE locked_value[c] = w2
-      OMITTED
+      \* c is locked on w2 (# -1), so locked_round[c] # -1, and c's latest precommit sits at
+      \* locked_round[c] with id = locked_value[c] = w2 (AllLatestPrecommitHasLockedRound). That
+      \* precommit lp (correct, valid id) yields a 2T+1 prevote quorum for w2 at locked_round[c]
+      \* (IfSentPrecommitThenReceivedTwoThirds; keep PVSet folded, substitute lp.id = w2 only at
+      \* the operator-argument level). locked_round[c] \in [r0, round[c]): >= r0 by <1>lr; and
+      \* < round[c] because step[c] = PROPOSE (the action guard) means c sent no precommit at
+      \* round[c], while lp is c's precommit at locked_round[c] and AllNoFutureMessagesSent bounds
+      \* locked_round[c] <= round[c].
+      <2>lv. locked_value[c] = w2  BY <1>3
+      <2>step. step[c] = "PROPOSE_OF_STEP"  BY SMT DEF UponProposalInProposeAndPrevote
+      <2>lrNonNil. locked_round[c] # -1  BY <2>lv, <1>wne, SMT DEF AllLockedRoundIffLockedValue
+      <2>lrDom. locked_round[c] \in (0)..(MaxRound)  BY <2>lrNonNil DEF IndTypeOk
+      <2> PICK lp \in msgs_precommit[locked_round[c]] : c = lp.src /\ lp.id = w2
+          BY <2>lrNonNil, <2>lv, SMT DEF AllLatestPrecommitHasLockedRound
+      <2>lpRound. lp.round = locked_round[c]  BY <2>lrDom DEF IndTypeOk
+      <2>lrLe. locked_round[c] <= round[c]  BY <2>lrDom, SMT DEF AllNoFutureMessagesSent
+      <2>lrNe. locked_round[c] # round[c]  BY <2>step, SMT DEF AllNoFutureMessagesSent
+      <2>lrLt. locked_round[c] < round[c]  BY <2>lrLe, <2>lrNe, <2>lrDom, SMT
+      <2>dom. locked_round[c] \in {x \in (0)..(MaxRound) : /\ (x >= r0) /\ (x < round[c])}
+          BY <2>lrDom, <2>lrLt, <1>lr, SMT
+      <2>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+      <2>qId. Cardinality(PVSet(locked_round[c], lp.id)) >= 2 * T + 1
+          BY <2>lpC, <2>lrDom, NilNotValid, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+      <2>quorumL. Cardinality(PVSet(locked_round[c], w2)) >= 2 * T + 1  BY <2>qId
+      <2> QED  BY <2>dom, <2>quorumL
   <1> QED  BY <1>vval, <1>2, <1>3
 
 LEMMA LockedValueGivesPostQuorum ==
@@ -2958,21 +3001,36 @@ LEMMA LockedValueGivesPostQuorum ==
            Cardinality(PVSetP(r, v)) >= 2 * T + 1
   <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>vne. v # -1  BY NilNotValid
+  \* The pre-state precommit by p at r1 (an r1-round message, since msgs are round-tagged).
+  <1> PICK pc \in msgs_precommit[r1] : /\ p = pc.src /\ pc.id /= -1 /\ v /= pc.id  OBVIOUS
+  <1>pcRound. pc.round = r1  BY DEF IndTypeOk
   <1>lrNonNil. locked_round[p] # -1
       BY <1>vne, SMT DEF AllLockedRoundIffLockedValue
   <1>lrDom. locked_round[p] \in (0)..(MaxRound)
       BY <1>lrNonNil, SMT DEF IndTypeOk
+  \* p's latest precommit lives at locked_round[p] and carries locked_value[p] = v; every other
+  \* precommit by p has round <= locked_round[p] (AllLatestPrecommitHasLockedRound, locked case).
+  <1> PICK lp \in msgs_precommit[locked_round[p]] : p = lp.src /\ lp.id = v
+      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lpRound. lp.round = locked_round[p]  BY <1>lrDom DEF IndTypeOk
+  \* pc (round r1) is one of p's precommits, so r1 = pc.round <= locked_round[p].
   <1>lrGe. locked_round[p] >= r1
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+      BY <1>lrNonNil, <1>pcRound, SMT DEF AllLatestPrecommitHasLockedRound
+  \* locked_round[p] <= round[p] = r2 (no future messages by p); and step[p] = PROPOSE means p
+  \* sent no precommit at round[p], while lp is p's precommit at locked_round[p], so they differ.
+  <1>lrLe. locked_round[p] <= r2
+      BY <1>lrDom, SMT DEF AllNoFutureMessagesSent
+  <1>lrNe. locked_round[p] # r2
+      BY SMT DEF AllNoFutureMessagesSent
   <1>lrLt. locked_round[p] < r2
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound,
-         AllNoFutureMessagesSent
-  <1>pcv. \E pcv \in msgs_precommit[locked_round[p]]:
-             /\ p = pcv.src
-             /\ pcv.id = v
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+      BY <1>lrLe, <1>lrNe, <1>lrDom, SMT
+  \* lp (correct, valid id) forces a 2T+1 prevote quorum for lp.id at locked_round[p]; keep PVSet
+  \* folded and only substitute lp.id = v at the operator-argument level (never under Cardinality).
+  <1>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+  <1>qId. Cardinality(PVSet(locked_round[p], lp.id)) >= 2 * T + 1
+      BY <1>lpC, <1>lrDom, PrecommitByCorrectGivesPrevoteQuorum
   <1>preQ. Cardinality(PVSet(locked_round[p], v)) >= 2 * T + 1
-      BY <1>pcv, <1>vne, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+      BY <1>qId
   <1>postQ. Cardinality(PVSetP(locked_round[p], v)) >= 2 * T + 1
       BY <1>preQ, <1>lrDom, PVSetQuorumMonotone
   <1> QED BY <1>lrDom, <1>lrGe, <1>lrLt, <1>postQ
@@ -3217,32 +3275,43 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
       BY DEF TypedIndInv, IndInv
   <1>pcOld. CASE pc \in msgs_precommit[r1]
       <2>pvOld. CASE pv \in msgs_prevote[r2]
+          \* Apply the PRE-state invariant PrecommitLocksLaterPrevotes at (p, r1, v, r2): pc (from
+          \* pcOld) and pv (from pvOld) are its precommit/prevote witnesses. Restate the consequent
+          \* via the operator PVSet before instantiating -- a raw Cardinality set-builder under the
+          \* invariant's \A does not instantiate in place (cf. tendermint-cardinality-orientation).
+          <3>viaPV. \A pp1 \in Corr, rr1 \in (0)..(MaxRound), vv1 \in ValidValues,
+                      rr2 \in (0)..(MaxRound) :
+                      (/\ rr2 > rr1
+                       /\ \E pcx \in msgs_precommit[rr1] : pp1 = pcx.src /\ pcx.id # -1 /\ vv1 # pcx.id
+                       /\ \E pvx \in msgs_prevote[rr2] : pp1 = pvx.src /\ vv1 = pvx.id)
+                      => \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2}:
+                           Cardinality(PVSet(r, vv1)) >= 2 * T + 1
+              BY <1>oldInv, Zenon DEF PrecommitLocksLaterPrevotes, PVSet
+          <3>ante. /\ r2 > r1
+                   /\ \E pcx \in msgs_precommit[r1] : p = pcx.src /\ pcx.id # -1 /\ v # pcx.id
+                   /\ \E pvx \in msgs_prevote[r2] : p = pvx.src /\ v = pvx.id
+              BY <1>pcOld, <2>pvOld
           <3>oldQ. \E r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}:
-                     Cardinality({s \in (Corr \union Faulty) :
-                       \E pv0 \in {pp \in msgs_prevote[r] : pp.id = v} :
-                         s = pv0.src}) >= 2 * T + 1
-              BY <1>oldInv, <1>pcOld, <2>pvOld, Zenon, SMT
-                 DEF PrecommitLocksLaterPrevotes
+                     Cardinality(PVSet(r, v)) >= 2 * T + 1
+              BY <3>viaPV, <3>ante
           <3> PICK r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}:
-                    Cardinality({s \in (Corr \union Faulty) :
-                      \E pv0 \in {pp \in msgs_prevote[r] : pp.id = v} :
-                        s = pv0.src}) >= 2 * T + 1
+                    Cardinality(PVSet(r, v)) >= 2 * T + 1
               BY <3>oldQ
-          <3>rdom. r \in (0)..(MaxRound)  BY <3>oldQ
-          <3>preQ. Cardinality(PVSet(r, v)) >= 2 * T + 1
-              BY <3>oldQ DEF PVSet
+          <3>rdom. r \in (0)..(MaxRound)  OBVIOUS
           <3>postQ. Cardinality(PVSetP(r, v)) >= 2 * T + 1
-              BY <3>preQ, <3>rdom, <1>vty, PVSetQuorumMonotone
-          <3> QED BY <3>oldQ, <3>postQ DEF PVSetP
+              BY <3>rdom, <1>vty, PVSetQuorumMonotone
+          <3> QED BY <3>postQ, <3>rdom DEF PVSetP
       <2>pvFresh. CASE pv \notin msgs_prevote[r2]
+          \* pv is a fresh valid (id = v # -1) prevote by the correct process p at r2. Only the two
+          \* value-prevote actions add such a message: the other correct actions leave msgs_prevote
+          \* unchanged (ruled out by DEF Step's frame, so their DEFs are unneeded -- unfolding all
+          \* eleven overwhelms SMT), OnTimeoutPropose adds only a nil prevote (id = -1 # v), and
+          \* FaultyStep adds only faulty senders (p \notin Faulty by DisjointCF).
           <3>split. \/ UponProposalInPropose(p)
                      \/ UponProposalInProposeAndPrevote(p)
               BY <2>pvFresh, DisjointCF, NilNotValid, SMT
                  DEF Step, FaultyStep, UponProposalInPropose,
-                     UponProposalInProposeAndPrevote, InsertProposal,
-                     UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
-                     UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
-                     OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
+                     UponProposalInProposeAndPrevote, OnTimeoutPropose
           <3>proposal. CASE UponProposalInPropose(p)
               <4>rd. round[p] = r2
                   BY <2>pvFresh, <3>proposal, SMT DEF UponProposalInPropose
