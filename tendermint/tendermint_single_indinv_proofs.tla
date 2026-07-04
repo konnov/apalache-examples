@@ -2720,9 +2720,87 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
 \* <1>unfold below, then reduce. Work through the operator abbreviations PCSetP / PVSetP so
 \* Cardinality atoms are operator applications (the backends do the < / >= conversions on
 \* those, but not on raw set-builders).
-\* Post-state (primed) precommit / prevote sender sets for value d in round r.
+\* Correct/faulty senders of a precommit (resp. prevote) for value d in round r --
+\* pre-state (PCSet / PVSet) and post-state / primed (PCSetP / PVSetP).
+PCSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : mm.id = d} : s = m.src}
+PVSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : mm.id = d} : s = m.src}
 PCSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit'[r] : mm.id = d} : s = m.src}
 PVSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote'[r] : mm.id = d} : s = m.src}
+
+LEMMA PCSetSubset == ASSUME NEW r, NEW d PROVE PCSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PCSet
+LEMMA PVSetSubset == ASSUME NEW r, NEW d PROVE PVSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PVSet
+
+\* Mathematical heart of PrecommitsLockValue preservation. If a correct process c holds a
+\* PRE-state precommit for w at r0 and a later PRE-state prevote for w2 (# w) at r > r0, and
+\* w already has a 2T+1 precommit quorum at r0, then FALSE. PrecommitLocksLaterPrevotes gives
+\* a 2T+1 prevote quorum for w2 in some r1 in [r0, r); that contradicts the pre-state lock
+\* PrecommitsLockValue for r1 > r0, and for r1 = r0 the 2T+1 precommit quorum for w forces a
+\* 2T+1 prevote quorum for w at r0 (IfSentPrecommitThenReceivedTwoThirds), so a correct
+\* process prevotes both w and w2 at r0 -- ruled out by AllNoEquivocationByCorrect.
+LEMMA PrecommitLockContra ==
+  ASSUME TypedIndInv,
+         NEW c \in Corr, NEW r0 \in (0)..(MaxRound), NEW r \in (0)..(MaxRound), r > r0,
+         NEW w \in ValidValues, NEW w2 \in (ValidValues \ {w}),
+         \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w,
+         \E pv \in msgs_prevote[r] : pv.src = c /\ pv.id = w2,
+         Cardinality(PCSet(r0, w)) >= 2 * T + 1
+  PROVE  FALSE
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>wne. w # -1 /\ w2 # -1 /\ w2 # w  BY NilNotValid
+  \* PrecommitLocksLaterPrevotes: a 2T+1 prevote quorum for w2 in some r1 in [r0, r).
+  <1>pcw. \E pc \in msgs_precommit[r0] : c = pc.src /\ pc.id # -1 /\ w2 # pc.id  BY <1>wne
+  <1>pvw2a. \E pv \in msgs_prevote[r] : c = pv.src /\ w2 = pv.id  BY <1>wne
+  <1>ante. /\ (r > r0)
+           /\ (\E v_v723 \in msgs_precommit[r0]: /\ /\ (c = v_v723.src)
+                                                       /\ (v_v723.id /= -1)
+                                                    /\ (w2 /= v_v723.id))
+           /\ (\E v_v724 \in msgs_prevote[r]: /\ (c = v_v724.src)
+                                              /\ (w2 = v_v724.id))
+      BY <1>pcw, <1>pvw2a
+  <1>w2v. w2 \in ValidValues  BY <1>wne
+  \* Restate PrecommitLocksLaterPrevotes with the consequent expressed via PVSet, so the
+  \* subsequent instantiation is over a small operator term (the backends will not
+  \* instantiate the \A through the raw Cardinality set-builder in the spec's consequent).
+  <1>plpPV. \A cc \in Corr, rr0 \in (0)..(MaxRound), ww \in ValidValues, rr2 \in (0)..(MaxRound):
+              (/\ (rr2 > rr0)
+               /\ (\E pc \in msgs_precommit[rr0]: /\ /\ (cc = pc.src) /\ (pc.id /= -1) /\ (ww /= pc.id))
+               /\ (\E pv \in msgs_prevote[rr2]: /\ (cc = pv.src) /\ (ww = pv.id)))
+              => (\E r1 \in {x \in (0)..(MaxRound): /\ (x >= rr0) /\ (x < rr2)}: Cardinality(PVSet(r1, ww)) >= ((2 * T) + 1))
+      BY Zenon DEF PrecommitLocksLaterPrevotes, PVSet
+  <1>plp. \E r1 \in {rr \in (0)..(MaxRound) : rr >= r0 /\ rr < r} : Cardinality(PVSet(r1, w2)) >= 2 * T + 1
+      BY <1>ante, <1>w2v, <1>plpPV
+  <1> PICK r1 \in {rr \in (0)..(MaxRound) : rr >= r0 /\ rr < r} : Cardinality(PVSet(r1, w2)) >= 2 * T + 1  BY <1>plp
+  <1>r1dom. r1 \in (0)..(MaxRound) /\ r1 >= r0 /\ r1 < r  BY SMT
+  <1>pvNatR1. Cardinality(PVSet(r1, w2)) \in Nat  BY PVSetSubset, <1>finU, FS_Subset, FS_CardinalityType
+  \* Second disjunct of the pre-state lock holds (first is false: w has a 2T+1 quorum at r0).
+  <1>lock. \A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) : Cardinality(PVSet(rr, ww)) < 2 * T + 1
+      <2>0. \/ Cardinality(PCSet(r0, w)) < 2 * T + 1
+            \/ (\A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) : Cardinality(PVSet(rr, ww)) < 2 * T + 1)
+          BY Zenon, SMT DEF PrecommitsLockValue, PCSet, PVSet
+      <2>1. Cardinality(PCSet(r0, w)) \in Nat  BY PCSetSubset, <1>finU, FS_Subset, FS_CardinalityType
+      <2> QED  BY <2>0, <2>1, ConstNat, SMT
+  <1>2. CASE r1 > r0
+      <2>1. Cardinality(PVSet(r1, w2)) < 2 * T + 1  BY <1>lock, <1>r1dom, <1>2, <1>wne
+      <2> QED  BY <2>1, <1>pvNatR1, ConstNat, SMT
+  <1>3. CASE r1 = r0
+      <2>pvw2. Cardinality(PVSet(r0, w2)) >= 2 * T + 1  BY <1>3
+      <2> PICK q \in Corr : q \in PCSet(r0, w)  BY PCSetSubset, QuorumHasCorrect
+      <2> PICK mq \in msgs_precommit[r0] : mq.src = q /\ mq.id = w  BY DEF PCSet
+      <2>mqC. mq.src \in Corr /\ mq.id \in ValidValues  BY NilNotValid
+      <2>midne. mq.id # w2  BY <1>wne
+      \* q's precommit for mq.id (= w) yields a 2T+1 prevote quorum for mq.id at r0.
+      \* Work through mq.id (never substitute w inside Cardinality).
+      <2>pvw. Cardinality(PVSet(r0, mq.id)) >= 2 * T + 1
+          BY <2>mqC, NilNotValid, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+      <2>int. \E d \in Corr : d \in PVSet(r0, mq.id) /\ d \in PVSet(r0, w2)
+          BY <2>pvw, <2>pvw2, PVSetSubset, QuorumsIntersectInCorrect
+      <2> PICK d \in Corr : d \in PVSet(r0, mq.id) /\ d \in PVSet(r0, w2)  BY <2>int
+      <2>dw. \E m \in msgs_prevote[r0] : m.src = d /\ m.id = mq.id  BY DEF PVSet
+      <2>dw2. \E m \in msgs_prevote[r0] : m.src = d /\ m.id = w2  BY DEF PVSet
+      \* d prevotes both mq.id and w2 (# mq.id) at r0 -- forbidden.
+      <2> QED  BY <2>dw, <2>dw2, <2>midne, Zenon, SMT DEF AllNoEquivocationByCorrect
+  <1> QED  BY <1>2, <1>3, <1>r1dom
 
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
@@ -2775,12 +2853,15 @@ THEOREM Pres_PrecommitsLockValue ==
     \* c precommitted w at r0 and prevoted w2 at r, both in the post-state.
     <2>cPC. \E mc \in msgs_precommit'[r0] : mc.src = c /\ mc.id = w  BY DEF PCSetP
     <2>cPV. \E mv \in msgs_prevote'[r] : mv.src = c /\ mv.id = w2  BY DEF PVSetP
-    \* ---- remaining core (OMITTED): from correct c holding a post-state precommit for w
-    \* at r0 and a post-state prevote for w2 (# w) at r > r0, derive FALSE. A correct step
-    \* adds at most one message by one process and FaultyStep adds only faulty ones, so at
-    \* least one of mc, mv is pre-state; PrecommitLocksLaterPrevotes (both pre-state) or the
-    \* acting process's prevote guard (one fresh) yields a 2T+1 prevote quorum for w2 in
-    \* [r0, r), contradicting <1>pre (with same-round uniqueness for the r1 = r0 boundary).
+    \* ---- remaining bridge (OMITTED): the mathematical heart is discharged by the lemma
+    \* PrecommitLockContra -- given a PRE-state precommit for w at r0 by c, a PRE-state
+    \* prevote for w2 at r by c, and a >= 2T+1 PRE-state precommit quorum for w at r0, it
+    \* derives FALSE (PrecommitLocksLaterPrevotes + same-round uniqueness). What remains is
+    \* the case analysis lifting the POST-state facts (cPC, cPV, and the >= 2T+1 post
+    \* precommit quorum for w) to those PRE-state hypotheses: a correct Step changes at most
+    \* one of msgs_precommit / msgs_prevote and FaultyStep adds only faulty senders, and a
+    \* fresh vote adds a single correct sender (Prevote/PrecommitSenderSetCardinalityMonotone),
+    \* with the acting process's prevote guard handling the one-fresh-vote case.
     <2> QED  OMITTED
 
 \* ---------------------------------------------------------------------------
@@ -2825,12 +2906,6 @@ THEOREM Inductive ==
 \* Named AgreementThm (not Agreement, which is a spec operator).
 \*****************************************************************************
 
-\* Correct/faulty senders of a precommit (resp. prevote) for value d in round r.
-PCSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : mm.id = d} : s = m.src}
-PVSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : mm.id = d} : s = m.src}
-
-LEMMA PCSetSubset == ASSUME NEW r, NEW d PROVE PCSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PCSet
-LEMMA PVSetSubset == ASSUME NEW r, NEW d PROVE PVSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PVSet
 
 \* Orientation bridge: the spec writes the value test as `d = mm.id` in some
 \* conjuncts and `mm.id = d` in others; both name the same set.
