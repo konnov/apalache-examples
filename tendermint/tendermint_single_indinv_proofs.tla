@@ -3015,21 +3015,75 @@ THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
   ASSUME TypedIndInv, Step PROVE AllRoundsBelowHavePrecommitQuorum'
 OMITTED
 
+\* If valid_round[q]' = round[q]' then the acting process's step guard (for the step-changing
+\* actions the actor was in PROPOSE/PREVOTE, so by the pre-invariant valid_round[q] # round[q],
+\* making the premise vacuous for it) or the round-advance bound (valid_round <= round) forces the
+\* premise vacuous, and the locking action sets step to PRECOMMIT.
 THEOREM Pres_AllValidInCurrentRoundPrecommitted ==
   ASSUME TypedIndInv, Step PROVE AllValidInCurrentRoundPrecommitted'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] = round'[q]
+               PROVE  step'[q] = "PRECOMMIT_OF_STEP" \/ step'[q] = "DECIDED_OF_STEP"
+      BY DEF AllValidInCurrentRoundPrecommitted
+  <1> QED
+      BY SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
+         UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny,
+         UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision, OnTimeoutPropose,
+         OnQuorumOfNilPrevotes, OnRoundCatchup,
+         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded
 
+\* locked_round and valid_round change only in UponProposalInPrevoteOrCommitAndPrevote, which
+\* sets both to round[p] (lab_then) or leaves locked_round and sets valid_round = round[p]
+\* (lab_else, where locked_round <= round by AllValidAndLockedRoundBounded).
 THEOREM Pres_AllLockedRoundBelowValidRound ==
   ASSUME TypedIndInv, Step PROVE AllLockedRoundBelowValidRound'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW q \in Corr PROVE locked_round'[q] <= valid_round'[q]
+      BY DEF AllLockedRoundBelowValidRound
+  <1> QED
+      BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+         AllLockedRoundBelowValidRound, AllValidAndLockedRoundBounded
 
+\* valid_round changes only in UponProposalInPrevoteOrCommitAndPrevote (to round[p]); lab_then
+\* adds a precommit by p at round[p], lab_else has step[p] = PRECOMMIT so a precommit by p at
+\* round[p] already exists (AllIfInPrecommitThenSentPrecommit). Otherwise valid_round[q] is
+\* unchanged and its old precommit persists (PrecommitMonotone).
 THEOREM Pres_AllIfValidRoundThenPrecommitted ==
   ASSUME TypedIndInv, Step PROVE AllIfValidRoundThenPrecommitted'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> USE DEF AllIfValidRoundThenPrecommitted
+  <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] # -1
+               PROVE  \E m \in msgs_precommit'[valid_round'[q]] : q = m.src
+      OBVIOUS
+  <1>vrq. valid_round'[q] \in (0)..(MaxRound)
+      BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
+  <1>1. CASE valid_round'[q] = valid_round[q]
+      \* valid_round unchanged: the old precommit at valid_round[q] persists.
+      <2>a. \E m \in msgs_precommit[valid_round[q]] : q = m.src  BY <1>1
+      <2> PICK m \in msgs_precommit[valid_round[q]] : q = m.src  BY <2>a
+      <2> QED  BY <2>a, <1>1, <1>vrq, PrecommitMonotone
+  <1>2. CASE valid_round'[q] # valid_round[q]
+      \* only UponProposalInPrevoteOrCommitAndPrevote(q) changes valid_round[q], to round[q];
+      \* lab_then adds q's precommit at round[q], lab_else has step[q] = PRECOMMIT.
+      <2> QED
+          BY <1>vrq, PrecommitMonotone, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+             AllIfInPrecommitThenSentPrecommit, AllValidAndLockedRoundBounded
+  <1> QED  BY <1>1, <1>2
 
+\* Proposals are added only by InsertProposal (correct proposer, step PROPOSE), which sets the
+\* proposal's valid_round = valid_round[p]. step[p] = PROPOSE gives valid_round[p] # round[p]
+\* (AllValidInCurrentRoundPrecommitted contrapositive), and valid_round[p] <= round[p]
+\* (AllValidAndLockedRoundBounded), so valid_round[p] < round[p].
 THEOREM Pres_AllCorrectProposalValidRoundBelowRound ==
   ASSUME TypedIndInv, Step PROVE AllCorrectProposalValidRoundBelowRound'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW mp \in msgs_propose'[r], mp.src \in Corr
+               PROVE  r > mp.valid_round
+      BY DEF AllCorrectProposalValidRoundBelowRound
+  <1> QED
+      BY DisjointCF, SMT DEF Step, InsertProposal, FaultyStep,
+         AllCorrectProposalValidRoundBelowRound,
+         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded
 
 \* The per-process lock-survival invariant. Its preservation is a research obligation of the
 \* same character as Pres_PrecommitsLockValue (it is exactly the hypothesis that proof relies on).
