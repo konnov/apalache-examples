@@ -3001,10 +3001,53 @@ THEOREM Pres_PrecommitsLockValue ==
 \* ---------------------------------------------------------------------------
 \* Preservation of the 8 extra IndInv support conjuncts (beyond IndInvMin).
 \* ---------------------------------------------------------------------------
+\* A correct proposer pr = Proposer[r] that reproposes fresh (valid_round = -1) at r never
+\* precommitted a non-nil value below r. Assume a counterexample: a fresh proposal pp by pr at r
+\* and a non-nil precommit mm by pr at r2 < r. Case on whether mm / pp are pre-state or fresh:
+\* mm pre + pp pre contradicts the pre-invariant; mm pre + pp fresh gives valid_round[pr] = -1 so
+\* locked_round[pr] = -1, contradicting mm's lock; mm fresh forces round[pr] = r2 with pp pre-state,
+\* so AllNoFutureMessagesSent gives r <= round[pr] = r2 < r.
 THEOREM Pres_AllLockedProposerReproposes ==
   ASSUME TypedIndInv, Step PROVE AllLockedProposerReproposes'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound), Proposer[r] \in Corr,
+                      NEW pp \in msgs_propose'[r], pp.src = Proposer[r], pp.valid_round = -1,
+                      NEW r2 \in {x \in (0)..(MaxRound) : x < r},
+                      NEW mm \in msgs_precommit'[r2], mm.src = Proposer[r], mm.id # -1
+               PROVE  FALSE
+      BY DEF AllLockedProposerReproposes
+  <1>r2dom. r2 \in (0)..(MaxRound) /\ r2 < r  BY SMT
+  <1>mmCase. CASE mm \in msgs_precommit[r2]
+      \* pr precommitted non-nil at r2 (pre-state) => locked_round[pr] # -1.
+      <2>lr. locked_round[Proposer[r]] # -1
+          BY <1>mmCase, <1>r2dom, SMT DEF AllLatestPrecommitHasLockedRound
+      <2>ppCase. CASE pp \in msgs_propose[r]
+          \* pre AllLockedProposerReproposes: no non-nil precommit by pr at r2 < r. Contradicts mm.
+          <3> QED BY <1>mmCase, <2>ppCase, <1>r2dom, SMT DEF AllLockedProposerReproposes
+      <2>ppNew. CASE pp \notin msgs_propose[r]
+          \* pp added by InsertProposal(pr) with valid_round[pr] = pp.valid_round = -1.
+          <3>vr. valid_round[Proposer[r]] = -1
+              BY <2>ppNew, DisjointCF, SMT DEF Step, InsertProposal, FaultyStep
+          <3> QED BY <2>lr, <3>vr, SMT DEF AllLockedRoundBelowValidRound
+      <2> QED BY <2>ppCase, <2>ppNew
+  <1>mmNew. CASE mm \notin msgs_precommit[r2]
+      \* mm (non-nil, correct) is added only by UponProposalInPrevoteOrCommitAndPrevote(pr) at
+      \* round[pr] = r2 (round unchanged, msgs_propose unchanged so pp is pre-state).
+      <2>rd. round[Proposer[r]] = r2 /\ pp \in msgs_propose[r]
+          BY <1>mmNew, <1>r2dom, DisjointCF, SMT DEF Step, FaultyStep, UponQuorumOfPrevotesAny,
+             UponProposalInPrevoteOrCommitAndPrevote, OnQuorumOfNilPrevotes
+      <2> QED
+          BY <2>rd, <1>r2dom, SMT DEF AllNoFutureMessagesSent
+  <1> QED BY <1>mmCase, <1>mmNew
 
+\* Harder than a per-process medium. The quorum disjuncts Q3 (T+1 prevote+precommit senders at r)
+\* and Q4 (2T+1 precommit senders at r-1) are monotone, so preservation reduces to: when round[p]
+\* advances past r, some Q holds at r. UponQuorumOfPrecommitsAny (round[p]+1) supplies Q4 at r-1
+\* directly (its 2T+1 precommit trigger). OnRoundCatchup can jump many rounds to rnd on a T+1
+\* propose+prevote+precommit quorum -- which does NOT match Q3 -- so it needs an indirect argument:
+\* the T+1 evidence at rnd has a correct sender c, which by AllNoFutureMessagesSent already had
+\* round[c] >= rnd pre-state, so AllPastStartRound(c, .) pre already gives Q3(r) \/ Q4(r) for every
+\* r <= rnd. Mechanizing this (plus union-Cardinality monotonicity) is left as follow-up.
 THEOREM Pres_AllPastStartRound ==
   ASSUME TypedIndInv, Step PROVE AllPastStartRound'
 OMITTED
