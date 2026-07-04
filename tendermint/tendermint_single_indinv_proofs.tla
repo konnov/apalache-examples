@@ -2853,16 +2853,23 @@ THEOREM Pres_PrecommitsLockValue ==
     \* c precommitted w at r0 and prevoted w2 at r, both in the post-state.
     <2>cPC. \E mc \in msgs_precommit'[r0] : mc.src = c /\ mc.id = w  BY DEF PCSetP
     <2>cPV. \E mv \in msgs_prevote'[r] : mv.src = c /\ mv.id = w2  BY DEF PVSetP
-    \* ---- remaining bridge (OMITTED): the mathematical heart is discharged by the lemma
-    \* PrecommitLockContra -- given a PRE-state precommit for w at r0 by c, a PRE-state
-    \* prevote for w2 at r by c, and a >= 2T+1 PRE-state precommit quorum for w at r0, it
-    \* derives FALSE (PrecommitLocksLaterPrevotes + same-round uniqueness). What remains is
-    \* the case analysis lifting the POST-state facts (cPC, cPV, and the >= 2T+1 post
-    \* precommit quorum for w) to those PRE-state hypotheses: a correct Step changes at most
-    \* one of msgs_precommit / msgs_prevote and FaultyStep adds only faulty senders, and a
-    \* fresh vote adds a single correct sender (Prevote/PrecommitSenderSetCardinalityMonotone),
-    \* with the acting process's prevote guard handling the one-fresh-vote case.
-    <2> QED  OMITTED
+    \* Bridge to the pre-state via a case split on whether the relevant message slices
+    \* (precommits at r0, prevotes at r) changed in this Step.
+    <2>caseClean. CASE msgs_precommit'[r0] = msgs_precommit[r0] /\ msgs_prevote'[r] = msgs_prevote[r]
+        \* Both quorums / c's votes are pre-state, so PrecommitLockContra's hypotheses hold.
+        <3>mcPre. \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w  BY <2>cPC, <2>caseClean
+        <3>mvPre. \E pv \in msgs_prevote[r] : pv.src = c /\ pv.id = w2  BY <2>cPV, <2>caseClean
+        <3>pcQpre. Cardinality(PCSet(r0, w)) >= 2 * T + 1  BY <2>pcQ, <2>caseClean DEF PCSet, PCSetP
+        <3> QED  BY <3>mcPre, <3>mvPre, <3>pcQpre, <1>rDom, PrecommitLockContra
+    <2>caseChanged. CASE ~(msgs_precommit'[r0] = msgs_precommit[r0] /\ msgs_prevote'[r] = msgs_prevote[r])
+        \* ---- remaining bridge (OMITTED): the acting correct process added, in this Step, a
+        \* precommit for w at r0 or a prevote for w2 at r (only one message, by one process;
+        \* FaultyStep adds only faulty senders and so leaves the correct slices unchanged).
+        \* A fresh vote adds a single correct sender (Prevote/PrecommitSenderSetCardinality-
+        \* Monotone), so the pre-state count was exactly 2T; the acting process's prevote guard
+        \* (locked on w, via the valid-round conjuncts) then reduces this to PrecommitLockContra.
+        OMITTED
+    <2> QED  BY <2>caseClean, <2>caseChanged
 
 \* ---------------------------------------------------------------------------
 \* TOP-LEVEL INDUCTIVE STEP: assemble type preservation + all 17 conjuncts.
