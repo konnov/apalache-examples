@@ -201,8 +201,8 @@ THEOREM QuorumHasCorrect ==
 \* existential-witness conjuncts (AllNoEquivocationByCorrect, PrecommitsLockValue)
 \* close via ValidValuesNonEmpty and Cardinality({}) = 0.
 THEOREM InitInd ==
-  Init => TypedIndInvMin
-  <1> SUFFICES ASSUME Init PROVE TypedIndInvMin
+  Init => TypedIndInv
+  <1> SUFFICES ASSUME Init PROVE TypedIndInv
       OBVIOUS
   <1> USE ConstNat DEF Init
   \* the empty logs / nil flags, exposed for every conjunct below
@@ -265,10 +265,28 @@ THEOREM InitInd ==
     <2>5. 0 < 2 * T + 1
           BY ConstNat, SMT
     <2> QED BY <2>4, <2>5
+  \* The 8 extra IndInv support conjuncts -- all vacuous or trivial at Init.
+  <1>18. PrecommitLocksLaterPrevotes
+        BY <1>e DEF PrecommitLocksLaterPrevotes
+  <1>19. AllLockedProposerReproposes
+        BY <1>e DEF AllLockedProposerReproposes
+  <1>20. AllPastStartRound
+        BY <1>e, SMT DEF AllPastStartRound
+  <1>21. AllRoundsBelowHavePrecommitQuorum
+        BY <1>e, SMT DEF AllRoundsBelowHavePrecommitQuorum, ApaFoldSet
+  <1>22. AllValidInCurrentRoundPrecommitted
+        BY <1>e, SMT DEF AllValidInCurrentRoundPrecommitted
+  <1>23. AllLockedRoundBelowValidRound
+        BY <1>e, SMT DEF AllLockedRoundBelowValidRound
+  <1>24. AllIfValidRoundThenPrecommitted
+        BY <1>e DEF AllIfValidRoundThenPrecommitted
+  <1>25. AllCorrectProposalValidRoundBelowRound
+        BY <1>e DEF AllCorrectProposalValidRoundBelowRound
   <1> QED
       BY <1>type, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9, <1>10,
-         <1>11, <1>12, <1>13, <1>14, <1>15, <1>16, <1>17
-      DEF TypedIndInvMin, IndInvMin
+         <1>11, <1>12, <1>13, <1>14, <1>15, <1>16, <1>17,
+         <1>18, <1>19, <1>20, <1>21, <1>22, <1>23, <1>24, <1>25
+      DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
 
 \* Record-typing helpers: a freshly built message record lies in the IndTypeOk
 \* element set. These supply the tuple witness that Zenon/SMT cannot guess for
@@ -2980,9 +2998,48 @@ THEOREM Pres_PrecommitsLockValue ==
 \* conjuncts (via Pres_PrecommitsLockValue), so the hypothesis is the full TypedIndInv;
 \* the other 16 preservations only use the TypedIndInvMin part. Extending the conclusion
 \* to the full TypedIndInv' requires preserving the remaining 7 support conjuncts.
+\* ---------------------------------------------------------------------------
+\* Preservation of the 8 extra IndInv support conjuncts (beyond IndInvMin).
+\* ---------------------------------------------------------------------------
+THEOREM Pres_AllLockedProposerReproposes ==
+  ASSUME TypedIndInv, Step PROVE AllLockedProposerReproposes'
+OMITTED
+
+THEOREM Pres_AllPastStartRound ==
+  ASSUME TypedIndInv, Step PROVE AllPastStartRound'
+OMITTED
+
+\* Uses ApaFoldSet (max round over correct processes), shimmed unsoundly in Apalache.tla;
+\* needs the CHOOSE-max replacement in the spec before it can be discharged.
+THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
+  ASSUME TypedIndInv, Step PROVE AllRoundsBelowHavePrecommitQuorum'
+OMITTED
+
+THEOREM Pres_AllValidInCurrentRoundPrecommitted ==
+  ASSUME TypedIndInv, Step PROVE AllValidInCurrentRoundPrecommitted'
+OMITTED
+
+THEOREM Pres_AllLockedRoundBelowValidRound ==
+  ASSUME TypedIndInv, Step PROVE AllLockedRoundBelowValidRound'
+OMITTED
+
+THEOREM Pres_AllIfValidRoundThenPrecommitted ==
+  ASSUME TypedIndInv, Step PROVE AllIfValidRoundThenPrecommitted'
+OMITTED
+
+THEOREM Pres_AllCorrectProposalValidRoundBelowRound ==
+  ASSUME TypedIndInv, Step PROVE AllCorrectProposalValidRoundBelowRound'
+OMITTED
+
+\* The per-process lock-survival invariant. Its preservation is a research obligation of the
+\* same character as Pres_PrecommitsLockValue (it is exactly the hypothesis that proof relies on).
+THEOREM Pres_PrecommitLocksLaterPrevotes ==
+  ASSUME TypedIndInv, Step PROVE PrecommitLocksLaterPrevotes'
+OMITTED
+
 THEOREM Inductive ==
   ASSUME TypedIndInv, Step
-  PROVE  TypedIndInvMin'
+  PROVE  TypedIndInv'
   BY TypePres,
      Pres_AllNoFutureMessagesSent,
      Pres_AllIfInPrevoteThenSentPrevote,
@@ -3000,7 +3057,15 @@ THEOREM Inductive ==
      Pres_IfSentPrecommitThenSentPrevote,
      Pres_IfSentPrecommitThenReceivedTwoThirds,
      Pres_AllNoEquivocationByCorrect,
-     Pres_PrecommitsLockValue
+     Pres_PrecommitsLockValue,
+     Pres_PrecommitLocksLaterPrevotes,
+     Pres_AllLockedProposerReproposes,
+     Pres_AllPastStartRound,
+     Pres_AllRoundsBelowHavePrecommitQuorum,
+     Pres_AllValidInCurrentRoundPrecommitted,
+     Pres_AllLockedRoundBelowValidRound,
+     Pres_AllIfValidRoundThenPrecommitted,
+     Pres_AllCorrectProposalValidRoundBelowRound
   DEF TypedIndInvMin, IndInvMin, TypedIndInv, IndInv
 
 \*****************************************************************************
