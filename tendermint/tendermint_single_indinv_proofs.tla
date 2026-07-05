@@ -31,9 +31,15 @@
  * higher-order operator argument trips the frontend), so a minimal parse-time
  * shim `Apalache.tla` sits in this directory (see its header). Verify with:
  *   tlapm --stretch 2 --threads 4 -I . tendermint_single_indinv_proofs.tla
- *   => "All 633 obligations proved"; every OMITTED stub contributes no
- *      obligation, exit 0.
- * Syntax/semantic checks while editing: SANY via tla2tools.jar.
+ *   => "All 2978 obligations proved"; every OMITTED stub contributes no
+ *      obligation, exit 0. Only two OMITTED proof-body stubs remain: the
+ *      `Pres_PrecommitsLockValue` fresh-vote bridge (caseChanged, a genuine
+ *      research obligation), and `Pres_AllRoundsBelowHavePrecommitQuorum`
+ *      (awaits a real fold theory to replace the unsound `Apalache.tla`
+ *      ApaFoldSet shim).
+ * Syntax/semantic checks while editing: SANY via tla2tools.jar (note: this build
+ * flags 12 spurious "multiply-defined 'p'" errors on the `<1>sel` selectors that
+ * tlapm's own frontend accepts -- they are pre-existing and not a real defect).
  *
  * Igor Konnov, Claude Opus 4.8, July 2026
  *)
@@ -273,7 +279,23 @@ THEOREM InitInd ==
   <1>20. AllPastStartRound
         BY <1>e, SMT DEF AllPastStartRound
   <1>21. AllRoundsBelowHavePrecommitQuorum
-        BY <1>e, SMT DEF AllRoundsBelowHavePrecommitQuorum, ApaFoldSet
+        \* At Init every round[k] = 0, so the CHOOSE-max of {round[k]} \union {0} is 0, and the
+        \* antecedent r < 0 is false for r \in (0)..(MaxRound).
+        <2> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
+                            r < (LET mc == ({round[k743] : k743 \in DOMAIN round} \union {0})
+                                 IN CHOOSE mx \in mc : \A o \in mc : mx >= o)
+                     PROVE  Cardinality({v_v747 \in (Corr \union Faulty) :
+                              \E v_v748 \in msgs_precommit[r] : v_v747 = v_v748.src}) >= 2 * T + 1
+            BY DEF AllRoundsBelowHavePrecommitQuorum
+        <2>dom. DOMAIN round = Corr  BY DEF Init
+        <2>cand. ({round[k743] : k743 \in DOMAIN round} \union {0}) = {0}  BY <1>e, <2>dom
+        <2>max. (CHOOSE mx \in ({round[k743] : k743 \in DOMAIN round} \union {0}) :
+                   \A o \in ({round[k743] : k743 \in DOMAIN round} \union {0}) : mx >= o) = 0
+            <3>1. (CHOOSE mx \in {0} : \A o \in {0} : mx >= o) = 0
+                <4>ex. \E mx \in {0} : \A o \in {0} : mx >= o  OBVIOUS
+                <4> QED  BY <4>ex
+            <3> QED  BY <3>1, <2>cand
+        <2> QED  BY <2>max, SMT
   <1>22. AllValidInCurrentRoundPrecommitted
         BY <1>e, SMT DEF AllValidInCurrentRoundPrecommitted
   <1>23. AllLockedRoundBelowValidRound
@@ -2749,9 +2771,27 @@ PCSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] 
 PVSet(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : mm.id = d} : s = m.src}
 PCSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit'[r] : mm.id = d} : s = m.src}
 PVSetP(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote'[r] : mm.id = d} : s = m.src}
+\* Flipped-orientation twins (d = mm.id) matching the regenerated spec's set-builders; used only to
+\* restate the spec conjuncts so the \A-instantiation is over an operator (Gotcha 5), then bridged
+\* to PCSet/PVSet (same set) by CardCong.
+PCSetF(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : d = mm.id} : s = m.src}
+PVSetF(r, d) == {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : d = mm.id} : s = m.src}
 
 LEMMA PCSetSubset == ASSUME NEW r, NEW d PROVE PCSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PCSet
 LEMMA PVSetSubset == ASSUME NEW r, NEW d PROVE PVSet(r, d) \in SUBSET (Corr \union Faulty)  BY DEF PVSet
+
+\* A precommit for a valid value (id = m.id) by a correct process at round r forces a 2T+1
+\* prevote-sender quorum for m.id at r (IfSentPrecommitThenReceivedTwoThirds; the nil disjunct is
+\* excluded since m.id is valid). Kept standalone so the instantiation runs in a CLEAN context:
+\* the identical citation fails amid the heavy hypotheses of LockedValueGivesPostQuorum. Target the
+\* message's own .id (never a substituted value) so PVSet stays folded -- cf. LockLemma's <1>pv.
+LEMMA PrecommitByCorrectGivesPrevoteQuorum ==
+  ASSUME TypedIndInv, NEW r \in (0)..(MaxRound),
+         NEW m \in msgs_precommit[r], m.src \in Corr, m.id \in ValidValues
+  PROVE  Cardinality(PVSet(r, m.id)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>ne. m.id # -1  BY NilNotValid
+  <1> QED  BY <1>ne, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
 
 LEMMA PVSetQuorumMonotone ==
   ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound),
@@ -2781,6 +2821,126 @@ LEMMA PVSetQuorumMonotone ==
 \* prevote quorum for w2 (# w) in some round r1 in [r0, r) is contradictory. For r1 > r0 it
 \* violates PrecommitsLockValue; for r1 = r0 the precommit quorum forces a prevote quorum for w
 \* at r0 too, so a correct process prevotes both w and w2 at r0 (AllNoEquivocationByCorrect).
+\* ===========================================================================
+\* ORIENTATION BRIDGE. The regenerated spec renders the value on the LEFT of the
+\* id-comparison (v = mm.id) in PrecommitsLockValue / PrecommitLocksLaterPrevotes,
+\* while the proof operators PCSet/PVSet use the canonical (mm.id = v) form. The two
+\* set-builders denote the same set (equality is symmetric), so PCSetFlip/PVSetFlip
+\* (set equality, BY DEF) + CardCong (equal finite sets have equal Cardinality, via
+\* FS_Subset) bridge the two. PrecommitsLockValueOp / PrecommitLocksLaterPrevotesOp
+\* restate the two flipped conjuncts in canonical operator form once, so the deep
+\* lock proofs cite them instead of unfolding the raw (flipped) conjuncts.
+\* ===========================================================================
+LEMMA PCSetFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PCSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : d = mm.id} : s = m.src}
+  BY DEF PCSet
+LEMMA PVSetFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PVSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : d = mm.id} : s = m.src}
+  BY DEF PVSet
+LEMMA PCSetPFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PCSetP(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit'[r] : d = mm.id} : s = m.src}
+  BY DEF PCSetP
+LEMMA PVSetPFlip ==
+  ASSUME NEW r, NEW d
+  PROVE  PVSetP(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote'[r] : d = mm.id} : s = m.src}
+  BY DEF PVSetP
+
+\* Any subset of the (finite) replica set is finite.
+LEMMA SubsetCFFinite == ASSUME NEW A, A \subseteq (Corr \union Faulty) PROVE IsFiniteSet(A)
+  BY FiniteCF, FS_Union, FS_Subset
+
+\* Cardinality congruence, grounded in FS_Subset (this tlapm build's backends do not
+\* apply Leibniz under Cardinality on these set-builders without finiteness).
+LEMMA CardCong ==
+  ASSUME NEW S1, NEW S2, IsFiniteSet(S1), S1 = S2
+  PROVE  Cardinality(S1) = Cardinality(S2)
+  <1>1. S1 \subseteq S2 /\ S2 \subseteq S1  OBVIOUS
+  <1>2. IsFiniteSet(S2)  OBVIOUS
+  <1> QED  BY <1>1, <1>2, FS_Subset
+
+\* Cardinality form of PVSetPFlip: the operator's Cardinality equals the flipped set-builder's.
+LEMMA PVSetPFlipCard ==
+  ASSUME NEW r, NEW d
+  PROVE  Cardinality(PVSetP(r, d)) =
+           Cardinality({s \in (Corr \union Faulty) :
+             \E pv0 \in {pp \in msgs_prevote'[r] : d = pp.id} : s = pv0.src})
+  <1>fin. IsFiniteSet(PVSetP(r, d))  BY SubsetCFFinite DEF PVSetP
+  <1> QED  BY <1>fin, PVSetPFlip, CardCong
+
+\* PrecommitsLockValue (spec-flipped) restated via PCSet/PVSet.
+LEMMA PrecommitsLockValueOp ==
+  ASSUME IndTypeOk, PrecommitsLockValue
+  PROVE  \A r0 \in (0)..(MaxRound), w \in ValidValues :
+           \/ Cardinality(PCSet(r0, w)) < 2 * T + 1
+           \/ \A r3 \in {x \in (0)..(MaxRound) : x > r0} : \A w2 \in (ValidValues \ {w}) :
+                Cardinality(PVSet(r3, w2)) < 2 * T + 1
+  <1> USE DEF IndTypeOk
+  \* Spec in flipped-operator form (PCSetF/PVSetF fold the spec's set-builders) so the \A
+  \* instantiations below are over operators (Gotcha 5), then bridged to PCSet/PVSet.
+  <1>specF. \A a \in (0)..(MaxRound), b \in ValidValues :
+              \/ Cardinality(PCSetF(a, b)) < 2 * T + 1
+              \/ \A r3 \in {x \in (0)..(MaxRound) : x > a} : \A w2 \in (ValidValues \ {b}) :
+                   Cardinality(PVSetF(r3, w2)) < 2 * T + 1
+      BY DEF PrecommitsLockValue, PCSetF, PVSetF
+  <1> TAKE r0 \in (0)..(MaxRound), w \in ValidValues
+  <1>inst. \/ Cardinality(PCSetF(r0, w)) < 2 * T + 1
+           \/ \A r3 \in {x \in (0)..(MaxRound) : x > r0} : \A w2 \in (ValidValues \ {w}) :
+                Cardinality(PVSetF(r3, w2)) < 2 * T + 1
+      BY <1>specF
+  <1>pcEq. Cardinality(PCSet(r0, w)) = Cardinality(PCSetF(r0, w))
+      <2>seteq. PCSet(r0, w) = PCSetF(r0, w)  BY DEF PCSet, PCSetF
+      <2>fin. IsFiniteSet(PCSet(r0, w))  BY SubsetCFFinite DEF PCSet
+      <2> QED  BY <2>seteq, <2>fin, CardCong
+  <1>1. CASE Cardinality(PCSetF(r0, w)) < 2 * T + 1
+      <2> QED  BY <1>1, <1>pcEq
+  <1>2. CASE \A r3 \in {x \in (0)..(MaxRound) : x > r0} : \A w2 \in (ValidValues \ {w}) :
+               Cardinality(PVSetF(r3, w2)) < 2 * T + 1
+      <2>right. \A r3 \in {x \in (0)..(MaxRound) : x > r0} : \A w2 \in (ValidValues \ {w}) :
+                  Cardinality(PVSet(r3, w2)) < 2 * T + 1
+          \* NB: a combined `TAKE rr \in D1, ww \in D2` trips this tlapm build on set-builder
+          \* domains; split into two TAKEs.
+          <3> TAKE rr \in {x \in (0)..(MaxRound) : x > r0}
+          <3> TAKE ww \in (ValidValues \ {w})
+          <3>pvEq. Cardinality(PVSet(rr, ww)) = Cardinality(PVSetF(rr, ww))
+              <4>seteq. PVSet(rr, ww) = PVSetF(rr, ww)  BY DEF PVSet, PVSetF
+              <4>fin. IsFiniteSet(PVSet(rr, ww))  BY SubsetCFFinite DEF PVSet
+              <4> QED  BY <4>seteq, <4>fin, CardCong
+          <3>inst. Cardinality(PVSetF(rr, ww)) < 2 * T + 1  BY <1>2
+          <3> QED  BY <3>inst, <3>pvEq
+      <2> QED  BY <2>right
+  <1> QED  BY <1>inst, <1>1, <1>2
+
+\* PrecommitLocksLaterPrevotes (spec-flipped consequent) restated via PVSet.
+LEMMA PrecommitLocksLaterPrevotesOp ==
+  ASSUME IndTypeOk, PrecommitLocksLaterPrevotes,
+         NEW p \in Corr, NEW r1 \in (0)..(MaxRound), NEW v \in ValidValues,
+         NEW r2 \in (0)..(MaxRound), r2 > r1,
+         \E pc \in msgs_precommit[r1] : p = pc.src /\ pc.id /= -1 /\ v /= pc.id,
+         \E pv \in msgs_prevote[r2] : p = pv.src /\ v = pv.id
+  PROVE  \E r \in {rr \in (0)..(MaxRound) : rr >= r1 /\ rr < r2} : Cardinality(PVSet(r, v)) >= 2 * T + 1
+  <1> USE DEF IndTypeOk
+  \* Restate the spec with the flipped consequent folded into PVSetF, so instantiation is over an
+  \* operator (Gotcha 5), then bridge PVSetF(r,v) = PVSet(r,v).
+  <1>plpF. \A cc \in Corr, rr0 \in (0)..(MaxRound), ww \in ValidValues, rr2 \in (0)..(MaxRound):
+             (/\ rr2 > rr0
+              /\ \E pc \in msgs_precommit[rr0] : cc = pc.src /\ pc.id /= -1 /\ ww /= pc.id
+              /\ \E pv \in msgs_prevote[rr2] : cc = pv.src /\ ww = pv.id)
+             => \E r \in {rr \in (0)..(MaxRound) : rr >= rr0 /\ rr < rr2} :
+                  Cardinality(PVSetF(r, ww)) >= 2 * T + 1
+      BY DEF PrecommitLocksLaterPrevotes, PVSetF
+  <1>specF. \E r \in {rr \in (0)..(MaxRound) : rr >= r1 /\ rr < r2} : Cardinality(PVSetF(r, v)) >= 2 * T + 1
+      BY <1>plpF
+  <1> PICK r \in {rr \in (0)..(MaxRound) : rr >= r1 /\ rr < r2} : Cardinality(PVSetF(r, v)) >= 2 * T + 1
+      BY <1>specF
+  <1>eq. Cardinality(PVSet(r, v)) = Cardinality(PVSetF(r, v))
+      <2>seteq. PVSet(r, v) = PVSetF(r, v)  BY DEF PVSet, PVSetF
+      <2>fin. IsFiniteSet(PVSet(r, v))  BY SubsetCFFinite DEF PVSet
+      <2> QED  BY <2>seteq, <2>fin, CardCong
+  <1> QED  BY <1>eq
+
 LEMMA LockContraFromPrevoteQuorum ==
   ASSUME TypedIndInv,
          NEW r0 \in (0)..(MaxRound), NEW r \in (0)..(MaxRound), r > r0,
@@ -2798,7 +2958,7 @@ LEMMA LockContraFromPrevoteQuorum ==
   <1>lock. \A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) : Cardinality(PVSet(rr, ww)) < 2 * T + 1
       <2>0. \/ Cardinality(PCSet(r0, w)) < 2 * T + 1
             \/ (\A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) : Cardinality(PVSet(rr, ww)) < 2 * T + 1)
-          BY Zenon, SMT DEF PrecommitsLockValue, PCSet, PVSet
+          BY PrecommitsLockValueOp DEF TypedIndInv, IndInv
       <2>1. Cardinality(PCSet(r0, w)) \in Nat  BY PCSetSubset, <1>finU, FS_Subset, FS_CardinalityType
       <2> QED  BY <2>0, <2>1, ConstNat, SMT
   <1>2. CASE r1 > r0
@@ -2840,23 +3000,9 @@ LEMMA PrecommitLockContra ==
   <1>w2v. w2 \in ValidValues  BY <1>wne
   <1>pcw. \E pc \in msgs_precommit[r0] : c = pc.src /\ pc.id # -1 /\ w2 # pc.id  BY <1>wne
   <1>pvw2a. \E pv \in msgs_prevote[r] : c = pv.src /\ w2 = pv.id  BY <1>wne
-  <1>ante. /\ (r > r0)
-           /\ (\E v_v723 \in msgs_precommit[r0]: /\ /\ (c = v_v723.src)
-                                                       /\ (v_v723.id /= -1)
-                                                    /\ (w2 /= v_v723.id))
-           /\ (\E v_v724 \in msgs_prevote[r]: /\ (c = v_v724.src)
-                                              /\ (w2 = v_v724.id))
-      BY <1>pcw, <1>pvw2a
-  \* Restate PrecommitLocksLaterPrevotes with the consequent via PVSet so the instantiation is
-  \* over a small operator term (the backends will not instantiate through the raw consequent).
-  <1>plpPV. \A cc \in Corr, rr0 \in (0)..(MaxRound), ww \in ValidValues, rr2 \in (0)..(MaxRound):
-              (/\ (rr2 > rr0)
-               /\ (\E pc \in msgs_precommit[rr0]: /\ /\ (cc = pc.src) /\ (pc.id /= -1) /\ (ww /= pc.id))
-               /\ (\E pv \in msgs_prevote[rr2]: /\ (cc = pv.src) /\ (ww = pv.id)))
-              => (\E r1 \in {x \in (0)..(MaxRound): /\ (x >= rr0) /\ (x < rr2)}: Cardinality(PVSet(r1, ww)) >= ((2 * T) + 1))
-      BY Zenon DEF PrecommitLocksLaterPrevotes, PVSet
+  \* PrecommitLocksLaterPrevotesOp already bridges the spec's flipped orientation to PVSet.
   <1>plp. \E r1 \in {rr \in (0)..(MaxRound) : rr >= r0 /\ rr < r} : Cardinality(PVSet(r1, w2)) >= 2 * T + 1
-      BY <1>ante, <1>w2v, <1>plpPV
+      BY <1>pcw, <1>pvw2a, <1>w2v, PrecommitLocksLaterPrevotesOp DEF TypedIndInv, IndInv
   <1> QED  BY <1>plp, LockContraFromPrevoteQuorum
 
 \* A correct process that precommitted a non-nil value w at round r0 has locked_round >= r0
@@ -2939,7 +3085,31 @@ LEMMA FreshPrevoteGivesQuorum ==
       <2>dom. vr \in {x \in (0)..(MaxRound) : /\ (x >= r0) /\ (x < round[c])}  BY <1>lr, <1>2, SMT
       <2> QED  BY <2>dom, <1>quorum
   <1>3. CASE locked_value[c] = w2
-      OMITTED
+      \* c is locked on w2 (# -1), so locked_round[c] # -1, and c's latest precommit sits at
+      \* locked_round[c] with id = locked_value[c] = w2 (AllLatestPrecommitHasLockedRound). That
+      \* precommit lp (correct, valid id) yields a 2T+1 prevote quorum for w2 at locked_round[c]
+      \* (IfSentPrecommitThenReceivedTwoThirds; keep PVSet folded, substitute lp.id = w2 only at
+      \* the operator-argument level). locked_round[c] \in [r0, round[c]): >= r0 by <1>lr; and
+      \* < round[c] because step[c] = PROPOSE (the action guard) means c sent no precommit at
+      \* round[c], while lp is c's precommit at locked_round[c] and AllNoFutureMessagesSent bounds
+      \* locked_round[c] <= round[c].
+      <2>lv. locked_value[c] = w2  BY <1>3
+      <2>step. step[c] = "PROPOSE_OF_STEP"  BY SMT DEF UponProposalInProposeAndPrevote
+      <2>lrNonNil. locked_round[c] # -1  BY <2>lv, <1>wne, SMT DEF AllLockedRoundIffLockedValue
+      <2>lrDom. locked_round[c] \in (0)..(MaxRound)  BY <2>lrNonNil DEF IndTypeOk
+      <2> PICK lp \in msgs_precommit[locked_round[c]] : c = lp.src /\ lp.id = w2
+          BY <2>lrNonNil, <2>lv, SMT DEF AllLatestPrecommitHasLockedRound
+      <2>lpRound. lp.round = locked_round[c]  BY <2>lrDom DEF IndTypeOk
+      <2>lrLe. locked_round[c] <= round[c]  BY <2>lrDom, SMT DEF AllNoFutureMessagesSent
+      <2>lrNe. locked_round[c] # round[c]  BY <2>step, SMT DEF AllNoFutureMessagesSent
+      <2>lrLt. locked_round[c] < round[c]  BY <2>lrLe, <2>lrNe, <2>lrDom, SMT
+      <2>dom. locked_round[c] \in {x \in (0)..(MaxRound) : /\ (x >= r0) /\ (x < round[c])}
+          BY <2>lrDom, <2>lrLt, <1>lr, SMT
+      <2>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+      <2>qId. Cardinality(PVSet(locked_round[c], lp.id)) >= 2 * T + 1
+          BY <2>lpC, <2>lrDom, NilNotValid, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+      <2>quorumL. Cardinality(PVSet(locked_round[c], w2)) >= 2 * T + 1  BY <2>qId
+      <2> QED  BY <2>dom, <2>quorumL
   <1> QED  BY <1>vval, <1>2, <1>3
 
 LEMMA LockedValueGivesPostQuorum ==
@@ -2958,24 +3128,136 @@ LEMMA LockedValueGivesPostQuorum ==
            Cardinality(PVSetP(r, v)) >= 2 * T + 1
   <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>vne. v # -1  BY NilNotValid
+  \* The pre-state precommit by p at r1 (an r1-round message, since msgs are round-tagged).
+  <1> PICK pc \in msgs_precommit[r1] : /\ p = pc.src /\ pc.id /= -1 /\ v /= pc.id  OBVIOUS
+  <1>pcRound. pc.round = r1  BY DEF IndTypeOk
   <1>lrNonNil. locked_round[p] # -1
       BY <1>vne, SMT DEF AllLockedRoundIffLockedValue
   <1>lrDom. locked_round[p] \in (0)..(MaxRound)
       BY <1>lrNonNil, SMT DEF IndTypeOk
+  \* p's latest precommit lives at locked_round[p] and carries locked_value[p] = v; every other
+  \* precommit by p has round <= locked_round[p] (AllLatestPrecommitHasLockedRound, locked case).
+  <1> PICK lp \in msgs_precommit[locked_round[p]] : p = lp.src /\ lp.id = v
+      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lpRound. lp.round = locked_round[p]  BY <1>lrDom DEF IndTypeOk
+  \* pc (round r1) is one of p's precommits, so r1 = pc.round <= locked_round[p].
   <1>lrGe. locked_round[p] >= r1
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+      BY <1>lrNonNil, <1>pcRound, SMT DEF AllLatestPrecommitHasLockedRound
+  \* locked_round[p] <= round[p] = r2 (no future messages by p); and step[p] = PROPOSE means p
+  \* sent no precommit at round[p], while lp is p's precommit at locked_round[p], so they differ.
+  <1>lrLe. locked_round[p] <= r2
+      BY <1>lrDom, SMT DEF AllNoFutureMessagesSent
+  <1>lrNe. locked_round[p] # r2
+      BY SMT DEF AllNoFutureMessagesSent
   <1>lrLt. locked_round[p] < r2
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound,
-         AllNoFutureMessagesSent
-  <1>pcv. \E pcv \in msgs_precommit[locked_round[p]]:
-             /\ p = pcv.src
-             /\ pcv.id = v
-      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+      BY <1>lrLe, <1>lrNe, <1>lrDom, SMT
+  \* lp (correct, valid id) forces a 2T+1 prevote quorum for lp.id at locked_round[p]; keep PVSet
+  \* folded and only substitute lp.id = v at the operator-argument level (never under Cardinality).
+  <1>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+  <1>qId. Cardinality(PVSet(locked_round[p], lp.id)) >= 2 * T + 1
+      BY <1>lpC, <1>lrDom, PrecommitByCorrectGivesPrevoteQuorum
   <1>preQ. Cardinality(PVSet(locked_round[p], v)) >= 2 * T + 1
-      BY <1>pcv, <1>vne, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSet
+      BY <1>qId
   <1>postQ. Cardinality(PVSetP(locked_round[p], v)) >= 2 * T + 1
       BY <1>preQ, <1>lrDom, PVSetQuorumMonotone
   <1> QED BY <1>lrDom, <1>lrGe, <1>lrLt, <1>postQ
+
+\* Pre-state variant of LockedValueGivesPostQuorum: a correct process locked on v (that also
+\* precommitted a different value at r1) has a 2T+1 PRE-state prevote quorum for v at locked_round
+\* in [r1, round). Used for the UponProposalInPropose branch of the caseChanged bridge.
+LEMMA LockedValueGivesPreQuorum ==
+  ASSUME TypedIndInv,
+         NEW p \in Corr, NEW r1 \in (0)..(MaxRound), NEW r2 \in (0)..(MaxRound),
+         NEW v \in ValidValues, r2 > r1,
+         \E pc \in msgs_precommit[r1] : p = pc.src /\ pc.id /= -1 /\ v /= pc.id,
+         round[p] = r2, step[p] = "PROPOSE_OF_STEP", locked_value[p] = v
+  PROVE  \E r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2} : Cardinality(PVSet(r, v)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>vne. v # -1  BY NilNotValid
+  <1> PICK pc \in msgs_precommit[r1] : /\ p = pc.src /\ pc.id /= -1 /\ v /= pc.id  OBVIOUS
+  <1>pcRound. pc.round = r1  BY DEF IndTypeOk
+  <1>lrNonNil. locked_round[p] # -1  BY <1>vne, SMT DEF AllLockedRoundIffLockedValue
+  <1>lrDom. locked_round[p] \in (0)..(MaxRound)  BY <1>lrNonNil, SMT DEF IndTypeOk
+  <1> PICK lp \in msgs_precommit[locked_round[p]] : p = lp.src /\ lp.id = v
+      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lpRound. lp.round = locked_round[p]  BY <1>lrDom DEF IndTypeOk
+  <1>lrGe. locked_round[p] >= r1  BY <1>lrNonNil, <1>pcRound, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lrLe. locked_round[p] <= r2  BY <1>lrDom, SMT DEF AllNoFutureMessagesSent
+  <1>lrNe. locked_round[p] # r2  BY SMT DEF AllNoFutureMessagesSent
+  <1>lrLt. locked_round[p] < r2  BY <1>lrLe, <1>lrNe, <1>lrDom, SMT
+  <1>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+  <1>qId. Cardinality(PVSet(locked_round[p], lp.id)) >= 2 * T + 1
+      BY <1>lpC, <1>lrDom, PrecommitByCorrectGivesPrevoteQuorum
+  <1>preQ. Cardinality(PVSet(locked_round[p], v)) >= 2 * T + 1  BY <1>qId
+  <1>dom. locked_round[p] \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}
+      BY <1>lrGe, <1>lrLt, <1>lrDom, SMT
+  <1> QED  BY <1>preQ, <1>dom
+
+\* A fresh valid (non-nil) prevote by a correct process c at round r is added only by the two
+\* value-prevote actions, acting at round[c] = r. Standalone (clean context; the monolithic split
+\* is defeated by the heavy hypotheses of the caseChanged bridge).
+LEMMA FreshValuePrevoteAction ==
+  ASSUME IndTypeOk, Step, NEW c \in Corr, NEW r \in (0)..(MaxRound),
+         NEW mv \in msgs_prevote'[r], mv \notin msgs_prevote[r], mv.src = c, mv.id # -1
+  PROVE  /\ round[c] = r
+         /\ (UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c))
+  <1> USE DEF IndTypeOk
+  <1>sel. \/ msgs_prevote' = msgs_prevote
+          \/ (\E q \in Corr : UponProposalInPropose(q))
+          \/ (\E q \in Corr : UponProposalInProposeAndPrevote(q))
+          \/ (\E q \in Corr : OnTimeoutPropose(q))
+          \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_prevote' = msgs_prevote  BY <1>1
+  <1>2. CASE \E q \in Corr : UponProposalInPropose(q)
+      <2> PICK q \in Corr : UponProposalInPropose(q)  BY <1>2
+      <2> QED  BY SMT DEF UponProposalInPropose
+  <1>3. CASE \E q \in Corr : UponProposalInProposeAndPrevote(q)
+      <2> PICK q \in Corr : UponProposalInProposeAndPrevote(q)  BY <1>3
+      <2> QED  BY SMT DEF UponProposalInProposeAndPrevote
+  <1>4. CASE \E q \in Corr : OnTimeoutPropose(q)
+      \* adds only a nil prevote, contradicting mv.id # -1.
+      <2> PICK q \in Corr : OnTimeoutPropose(q)  BY <1>4
+      <2> QED  BY SMT DEF OnTimeoutPropose
+  <1>5. CASE FaultyStep
+      \* adds only faulty senders, contradicting mv.src = c \in Corr.
+      <2> PICK rr \in (0)..(MaxRound), fps2 \in SUBSET Faulty, v2 \in (ValidValues \union InvalidValues) :
+             msgs_prevote' = [msgs_prevote EXCEPT ![rr] =
+               (msgs_prevote[rr] \union {[id |-> v2, kind |-> "PREVOTE_OF_VOTEKIND", round |-> rr, src |-> v_v54]: v_v54 \in fps2})]
+          BY <1>5 DEF FaultyStep
+      <2>added. mv \in {[id |-> v2, kind |-> "PREVOTE_OF_VOTEKIND", round |-> rr, src |-> v_v54]: v_v54 \in fps2}
+          BY SMT
+      <2>fsrc. mv.src \in Faulty  BY <2>added
+      <2> QED  BY <2>fsrc, DisjointCF
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
+\* A correct process c that precommitted w at r0 and, this Step, freshly prevotes w2 (# w) at
+\* round[c] > r0 (via a value-prevote action) has a pre-state 2T+1 prevote quorum for w2 in
+\* [r0, round[c]). UponProposalInProposeAndPrevote: FreshPrevoteGivesQuorum; UponProposalInPropose:
+\* c is locked, so the fresh w2-prevote forces locked_value[c] = w2, i.e. c precommitted w2 at
+\* locked_round[c] in (r0, round[c]) -> LockedValueGivesPreQuorum. Isolated (clean context).
+LEMMA FreshPrevoteLockedGivesPreQuorum ==
+  ASSUME TypedIndInv, Step, NEW c \in Corr, NEW r0 \in (0)..(MaxRound),
+         NEW w \in ValidValues, NEW w2 \in (ValidValues \ {w}),
+         \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w,
+         round[c] > r0,
+         \E mv \in msgs_prevote'[round[c]] : mv.src = c /\ mv.id = w2 /\ mv \notin msgs_prevote[round[c]],
+         UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c)
+  PROVE  \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < round[c]} : Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>wne. w # -1 /\ w2 # -1  BY NilNotValid
+  <1>preC. \E pc \in msgs_precommit[r0] : c = pc.src /\ pc.id # -1 /\ w2 # pc.id  BY <1>wne
+  <1>ppp. CASE UponProposalInProposeAndPrevote(c)
+      <2> QED  BY <1>ppp, FreshPrevoteGivesQuorum
+  <1>pp. CASE UponProposalInPropose(c)
+      <2>st. step[c] = "PROPOSE_OF_STEP"  BY <1>pp DEF UponProposalInPropose
+      <2>lrNonNil. locked_round[c] # -1
+          BY <1>wne, SMT DEF AllLatestPrecommitHasLockedRound
+      <2>lv. locked_value[c] = w2
+          BY <1>pp, <2>lrNonNil, <1>wne, SMT DEF UponProposalInPropose
+      <2>rdom. round[c] \in (0)..(MaxRound)  BY DEF IndTypeOk
+      <2> QED  BY <1>preC, <2>rdom, <2>st, <2>lv, LockedValueGivesPreQuorum
+  <1> QED  BY <1>ppp, <1>pp
 
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
@@ -2983,23 +3265,38 @@ THEOREM Pres_PrecommitsLockValue ==
   \* Reduce the primed goal to its explicit unfolded form (in terms of the operators
   \* PCSetP / PVSetP) via an equivalence step; the backends match the doubly-quantified
   \* Cardinality-disjunction goal only through this detour, not by unfolding in place.
-  <1>unfold. PrecommitsLockValue' <=>
-               (\A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
-                  \/ (Cardinality(PCSetP(v_v708, v_v709)) < ((2 * T) + 1))
-                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality(PVSetP(v_v714, v_v715)) < ((2 * T) + 1))))
-      BY DEF PrecommitsLockValue, PCSetP, PVSetP
+  \* Reduce the primed goal to its flipped raw form (identical to the spec), then bridge only the
+  \* two point instances (r0,w and r,w2) to PCSetP/PVSetP -- the only places the operators appear.
   <1> SUFFICES \A v_v708 \in (0)..(MaxRound), v_v709 \in ValidValues:
-                  \/ (Cardinality(PCSetP(v_v708, v_v709)) < ((2 * T) + 1))
-                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}): (Cardinality(PVSetP(v_v714, v_v715)) < ((2 * T) + 1)))
-      BY <1>unfold
+                  \/ (Cardinality({s \in (Corr \union Faulty) :
+                        \E m \in {mm \in msgs_precommit'[v_v708] : v_v709 = mm.id} : s = m.src}) < ((2 * T) + 1))
+                  \/ (\A v_v714 \in {v_v713 \in (0)..(MaxRound): (v_v713 > v_v708)}: \A v_v715 \in (ValidValues \ {v_v709}):
+                        (Cardinality({s \in (Corr \union Faulty) :
+                          \E m \in {mm \in msgs_prevote'[v_v714] : v_v715 = mm.id} : s = m.src}) < ((2 * T) + 1)))
+      BY DEF PrecommitsLockValue
   <1> TAKE r0 \in (0)..(MaxRound), w \in ValidValues
   \* Counterexample form: a post-state precommit quorum for w at r0 forces every other
   \* valid value w2 to lack a post-state prevote quorum in each later round r.
-  <1> SUFFICES ASSUME ~(Cardinality(PCSetP(r0, w)) < ((2 * T) + 1)),
+  <1> SUFFICES ASSUME ~(Cardinality({s \in (Corr \union Faulty) :
+                          \E m \in {mm \in msgs_precommit'[r0] : w = mm.id} : s = m.src}) < ((2 * T) + 1)),
                       NEW r \in {v_v713 \in (0)..(MaxRound): (v_v713 > r0)},
                       NEW w2 \in (ValidValues \ {w})
-               PROVE  Cardinality(PVSetP(r, w2)) < ((2 * T) + 1)
+               PROVE  Cardinality({s \in (Corr \union Faulty) :
+                        \E m \in {mm \in msgs_prevote'[r] : w2 = mm.id} : s = m.src}) < ((2 * T) + 1)
       OBVIOUS
+  \* Bridge the two instances to PCSetP/PVSetP.
+  <1>pcpFin. IsFiniteSet(PCSetP(r0, w))  BY SubsetCFFinite DEF PCSetP
+  <1>pcpEq. Cardinality(PCSetP(r0, w)) =
+              Cardinality({s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_precommit'[r0] : w = mm.id} : s = m.src})
+      BY <1>pcpFin, PCSetPFlip, CardCong
+  <1>pvpFin. IsFiniteSet(PVSetP(r, w2))  BY SubsetCFFinite DEF PVSetP
+  <1>pvpEq. Cardinality(PVSetP(r, w2)) =
+              Cardinality({s \in (Corr \union Faulty) :
+                \E m \in {mm \in msgs_prevote'[r] : w2 = mm.id} : s = m.src})
+      BY <1>pvpFin, PVSetPFlip, CardCong
+  <1>hyp. ~(Cardinality(PCSetP(r0, w)) < ((2 * T) + 1))  BY <1>pcpEq
+  <1> SUFFICES Cardinality(PVSetP(r, w2)) < ((2 * T) + 1)  BY <1>pvpEq
   \* Pre-state lock (PrecommitsLockValue at (r0, w)): either w has no pre-state precommit
   \* quorum at r0, or no other valid value has a pre-state prevote quorum above r0.
   <1>pre. \/ Cardinality({s \in (Corr \union Faulty) :
@@ -3007,7 +3304,7 @@ THEOREM Pres_PrecommitsLockValue ==
           \/ (\A rr \in {x \in (0)..(MaxRound) : x > r0} : \A ww \in (ValidValues \ {w}) :
                 Cardinality({s \in (Corr \union Faulty) :
                   \E m \in {mm \in msgs_prevote[rr] : mm.id = ww} : s = m.src}) < 2 * T + 1)
-      BY Zenon, SMT DEF TypedIndInv, IndInv, PrecommitsLockValue
+      BY PrecommitsLockValueOp DEF TypedIndInv, IndInv, PCSet, PVSet
   \* rNat / rGt: unpack r's constrained domain.
   <1>rDom. r \in (0)..(MaxRound) /\ r > r0  BY SMT
   <1> QED
@@ -3017,7 +3314,7 @@ THEOREM Pres_PrecommitsLockValue ==
     <2>pcNat. Cardinality(PCSetP(r0, w)) \in Nat  BY <2>pcSub, <2>finU, FS_Subset, FS_CardinalityType
     <2>pvNat. Cardinality(PVSetP(r, w2)) \in Nat  BY <2>pvSub, <2>finU, FS_Subset, FS_CardinalityType
     \* The precommit quorum for w at r0 is >= 2T+1 (negated first disjunct + Nat typing).
-    <2>pcQ. Cardinality(PCSetP(r0, w)) >= 2 * T + 1  BY <2>pcNat, ConstNat, SMT
+    <2>pcQ. Cardinality(PCSetP(r0, w)) >= 2 * T + 1  BY <1>hyp, <2>pcNat, ConstNat, SMT
     \* Prove the goal (post prevote quorum for w2 < 2T+1) by contradiction.
     <2> SUFFICES ASSUME Cardinality(PVSetP(r, w2)) >= 2 * T + 1  PROVE  FALSE
         BY <2>pvNat, ConstNat, SMT
@@ -3037,13 +3334,50 @@ THEOREM Pres_PrecommitsLockValue ==
         <3>pcQpre. Cardinality(PCSet(r0, w)) >= 2 * T + 1  BY <2>pcQ, <2>caseClean DEF PCSet, PCSetP
         <3> QED  BY <3>mcPre, <3>mvPre, <3>pcQpre, <1>rDom, PrecommitLockContra
     <2>caseChanged. CASE ~(msgs_precommit'[r0] = msgs_precommit[r0] /\ msgs_prevote'[r] = msgs_prevote[r])
-        \* ---- remaining bridge (OMITTED): the acting correct process added, in this Step, a
-        \* precommit for w at r0 or a prevote for w2 at r (only one message, by one process;
-        \* FaultyStep adds only faulty senders and so leaves the correct slices unchanged).
-        \* A fresh vote adds a single correct sender (Prevote/PrecommitSenderSetCardinality-
-        \* Monotone), so the pre-state count was exactly 2T; the acting process's prevote guard
-        \* (locked on w, via the valid-round conjuncts) then reduces this to PrecommitLockContra.
-        OMITTED
+        <3> PICK mc \in msgs_precommit'[r0] : mc.src = c /\ mc.id = w  BY <2>cPC
+        <3> PICK mv \in msgs_prevote'[r] : mv.src = c /\ mv.id = w2  BY <2>cPV
+        <3>caseA. CASE msgs_precommit'[r0] = msgs_precommit[r0]
+            \* Precommit slice at r0 unchanged: a real pre-state 2T+1 precommit quorum for w at r0,
+            \* and c's precommit for w at r0 is pre-state.
+            <4>pcQpre. Cardinality(PCSet(r0, w)) >= 2 * T + 1  BY <2>pcQ, <3>caseA DEF PCSet, PCSetP
+            <4>mcPre. \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w  BY <3>caseA
+            <4>mvPre. CASE mv \in msgs_prevote[r]
+                \* c's prevote for w2 at r is pre-state: PrecommitLockContra closes it.
+                <5>pvPre. \E pv \in msgs_prevote[r] : pv.src = c /\ pv.id = w2  BY <4>mvPre
+                <5> QED  BY <4>mcPre, <5>pvPre, <4>pcQpre, <1>rDom, PrecommitLockContra
+            <4>mvF. CASE mv \notin msgs_prevote[r]
+                \* c added a fresh prevote for w2 at r = round[c]. Being locked (it precommitted w at
+                \* r0), its prevote guard yields a pre-state 2T+1 prevote quorum for w2 in [r0, r),
+                \* which contradicts the r0 precommit lock (LockContraFromPrevoteQuorum).
+                <5>fr0. round[c] = r /\ (UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c))
+                    BY <4>mvF, NilNotValid, FreshValuePrevoteAction
+                <5>rd. round[c] = r  BY <5>fr0
+                <5>act. UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c)  BY <5>fr0
+                <5>rc. round[c] > r0  BY <5>rd, <1>rDom
+                <5>fresh. \E mvv \in msgs_prevote'[round[c]] :
+                             mvv.src = c /\ mvv.id = w2 /\ mvv \notin msgs_prevote[round[c]]
+                    BY <4>mvF, <5>rd
+                <5>preRC. \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < round[c]} :
+                            Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+                    BY <4>mcPre, <5>rc, <5>fresh, <5>act, FreshPrevoteLockedGivesPreQuorum
+                <5>preQ. \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < r} :
+                           Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+                    BY <5>preRC, <5>rd
+                <5> QED  BY <4>pcQpre, <5>preQ, <1>rDom, LockContraFromPrevoteQuorum
+            <4> QED  BY <4>mvPre, <4>mvF
+        <3>caseB. CASE msgs_precommit'[r0] # msgs_precommit[r0]
+            \* ---- RESIDUE (OMITTED). This Step *completed* the precommit quorum for w at r0 (a
+            \* fresh correct precommit at round[c']=r0, or a FaultyStep injection at r0), so the
+            \* PRE-state precommit quorum for w may be < 2T+1 and PrecommitLockContra no longer
+            \* applies. The prevote slice at r is unchanged here (precommit-adding actions and
+            \* FaultyStep-at-r0 leave msgs_prevote[r] fixed), so pre PVSet(r, w2) >= 2T+1, and via
+            \* PrecommitLocksLaterPrevotes on c a pre PVSet(r1, w2) >= 2T+1 for some r1 in [r0, r).
+            \* r1 = r0 equivocates against the pre PVSet(r0, w) quorum (from any correct precommitter
+            \* of w). r1 > r0 is NOT closed by the current 25 conjuncts: ruling it out requires a new
+            \* prevote-based cross-round lock invariant, proved by strong induction over rounds
+            \* through AllIfSentPrevoteThenReceivedProposalOrTwoThirds. See session notes.
+            OMITTED
+        <3> QED  BY <3>caseA, <3>caseB
     <2> QED  BY <2>caseClean, <2>caseChanged
 
 \* ---------------------------------------------------------------------------
@@ -3103,15 +3437,456 @@ THEOREM Pres_AllLockedProposerReproposes ==
 \* the T+1 evidence at rnd has a correct sender c, which by AllNoFutureMessagesSent already had
 \* round[c] >= rnd pre-state, so AllPastStartRound(c, .) pre already gives Q3(r) \/ Q4(r) for every
 \* r <= rnd. Mechanizing this (plus union-Cardinality monotonicity) is left as follow-up.
+\* All-sender sets (no id filter) for the AllPastStartRound quorums: Q3(R) is a T+1 quorum over
+\* prevote+precommit senders at R, Q4(R) a 2T+1 quorum over precommit senders at R-1.
+PVAll(r)  == {s \in (Corr \union Faulty) : \E m \in msgs_prevote[r]    : s = m.src}
+PCAll(r)  == {s \in (Corr \union Faulty) : \E m \in msgs_precommit[r]  : s = m.src}
+PVAllP(r) == {s \in (Corr \union Faulty) : \E m \in msgs_prevote'[r]   : s = m.src}
+PCAllP(r) == {s \in (Corr \union Faulty) : \E m \in msgs_precommit'[r] : s = m.src}
+
+\* A superset of a >= k set is >= k (subset-shaped so the instantiation unifies on the subset
+\* fact, unlike a bare arithmetic transitivity whose middle term is under-determined).
+LEMMA SubsetCardGeq ==
+  ASSUME NEW A, NEW B, A \subseteq B, IsFiniteSet(B), NEW k \in Nat, Cardinality(A) >= k
+  PROVE  Cardinality(B) >= k
+  <1>finA. IsFiniteSet(A)  BY FS_Subset
+  <1>le. Cardinality(A) <= Cardinality(B)  BY FS_Subset
+  <1>na. Cardinality(A) \in Nat  BY <1>finA, FS_CardinalityType
+  <1>nb. Cardinality(B) \in Nat  BY FS_CardinalityType
+  <1> QED  BY <1>le, <1>na, <1>nb, SMT
+
+\* A T+1 sender set already contains a correct process (there are at most F <= T faulty).
+LEMMA SmallQuorumHasCorrect ==
+  ASSUME NEW S \in SUBSET (Corr \union Faulty), Cardinality(S) >= T + 1
+  PROVE  \E c \in Corr : c \in S
+  <1> USE DEF F
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>finFa. IsFiniteSet(Faulty)  BY FiniteCF
+  <1>finS. IsFiniteSet(S)  BY <1>finU, FS_Subset
+  <1>natS. Cardinality(S) \in Nat  BY <1>finS, FS_CardinalityType
+  <1>natFa. Cardinality(Faulty) \in Nat  BY <1>finFa, FS_CardinalityType
+  <1> SUFFICES ASSUME \A c \in Corr : c \notin S PROVE FALSE  OBVIOUS
+  <1>ssub. S \subseteq Faulty  OBVIOUS
+  <1>le. Cardinality(S) <= Cardinality(Faulty)  BY <1>ssub, <1>finFa, FS_Subset
+  <1> QED  BY <1>le, <1>natS, <1>natFa, TgeF, ConstNat, SMT
+
+\* Senders of any message (propose/prevote/precommit) at round r.
+AllMsgSenders(r) == {s \in (Corr \union Faulty) :
+                       \/ (\E m \in msgs_propose[r]   : s = m.src)
+                       \/ (\E m \in msgs_prevote[r]   : s = m.src)
+                       \/ (\E m \in msgs_precommit[r] : s = m.src)}
+
+\* OnRoundCatchup(p) advances p to some rnd > round[p] on a T+1 combined-evidence quorum at rnd;
+\* those evidence senders are all message senders at rnd, so AllMsgSenders(rnd) has >= T+1 members
+\* and (at most F <= T faulty) contains a correct process. Isolated so the deep evidence peel runs
+\* in a clean context.
+LEMMA OnRoundCatchupGivesSender ==
+  ASSUME IndTypeOk, NEW p \in Corr, OnRoundCatchup(p)
+  PROVE  \E rr \in (0)..(MaxRound) :
+           /\ round' = [round EXCEPT ![p] = rr]
+           /\ rr > round[p]
+           /\ \E c \in Corr : c \in AllMsgSenders(rr)
+  <1> USE DEF IndTypeOk
+  <1> PICK rnd \in (0)..(MaxRound) :
+        \E ev_propose \in SUBSET msgs_propose[rnd] :
+        \E ev_prevote \in SUBSET msgs_prevote[rnd] :
+        \E ev_precommit \in SUBSET msgs_precommit[rnd] :
+          /\ rnd > round[p]
+          /\ Cardinality((({s \in (Corr \union Faulty) : \E m \in ev_propose : s = m.src}
+                            \union {s \in (Corr \union Faulty) : \E m \in ev_prevote : s = m.src})
+                           \union {s \in (Corr \union Faulty) : \E m \in ev_precommit : s = m.src})) >= T + 1
+          /\ step[p] # "DECIDED_OF_STEP"
+          /\ round' = [round EXCEPT ![p] = rnd]
+          /\ step' = [step EXCEPT ![p] = "PROPOSE_OF_STEP"]
+          /\ last_action' = "ON_ROUND_CATCHUP"
+      BY DEF OnRoundCatchup
+  <1> PICK ev_propose \in SUBSET msgs_propose[rnd] :
+        \E ev_prevote \in SUBSET msgs_prevote[rnd] :
+        \E ev_precommit \in SUBSET msgs_precommit[rnd] :
+          /\ Cardinality((({s \in (Corr \union Faulty) : \E m \in ev_propose : s = m.src}
+                            \union {s \in (Corr \union Faulty) : \E m \in ev_prevote : s = m.src})
+                           \union {s \in (Corr \union Faulty) : \E m \in ev_precommit : s = m.src})) >= T + 1
+      OBVIOUS
+  <1> PICK ev_prevote \in SUBSET msgs_prevote[rnd] :
+        \E ev_precommit \in SUBSET msgs_precommit[rnd] :
+          /\ Cardinality((({s \in (Corr \union Faulty) : \E m \in ev_propose : s = m.src}
+                            \union {s \in (Corr \union Faulty) : \E m \in ev_prevote : s = m.src})
+                           \union {s \in (Corr \union Faulty) : \E m \in ev_precommit : s = m.src})) >= T + 1
+      OBVIOUS
+  <1> PICK ev_precommit \in SUBSET msgs_precommit[rnd] :
+          Cardinality((({s \in (Corr \union Faulty) : \E m \in ev_propose : s = m.src}
+                        \union {s \in (Corr \union Faulty) : \E m \in ev_prevote : s = m.src})
+                       \union {s \in (Corr \union Faulty) : \E m \in ev_precommit : s = m.src})) >= T + 1
+      OBVIOUS
+  <1> DEFINE EV == (({s \in (Corr \union Faulty) : \E m \in ev_propose : s = m.src}
+                      \union {s \in (Corr \union Faulty) : \E m \in ev_prevote : s = m.src})
+                     \union {s \in (Corr \union Faulty) : \E m \in ev_precommit : s = m.src})
+  <1>evCard. Cardinality(EV) >= T + 1  BY DEF EV
+  <1>evSub. EV \subseteq AllMsgSenders(rnd)  BY DEF EV, AllMsgSenders
+  <1>amsSub. AllMsgSenders(rnd) \subseteq (Corr \union Faulty)  BY DEF AllMsgSenders
+  <1>evCF. EV \subseteq (Corr \union Faulty)  BY <1>evSub, <1>amsSub
+  \* The T+1 evidence set itself has a correct member; it lies in AllMsgSenders(rnd).
+  <1>corrEV. \E cc \in Corr : cc \in EV  BY <1>evCF, <1>evCard, SmallQuorumHasCorrect
+  <1> PICK c \in Corr : c \in EV  BY <1>corrEV
+  <1>cAMS. c \in AllMsgSenders(rnd)  BY <1>evSub
+  <1>rprops. round' = [round EXCEPT ![p] = rnd] /\ rnd > round[p]  OBVIOUS
+  <1> QED  BY <1>cAMS, <1>rprops
+
+\* The all-precommit and (prevote OR precommit) sender sets grow monotonically with the message log.
+LEMMA PCAllMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound)
+  PROVE  Cardinality(PCAll(r)) <= Cardinality(PCAllP(r))
+  <1>sub. PCAll(r) \subseteq PCAllP(r)  BY PrecommitMonotone DEF PCAll, PCAllP
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>subCF. PCAllP(r) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>finN. IsFiniteSet(PCAllP(r))  BY <1>subCF, <1>finU, FS_Subset
+  <1> QED  BY <1>sub, <1>finN, FS_Subset
+
+LEMMA Q3UnionMonotone ==
+  ASSUME IndTypeOk, Step, NEW r \in (0)..(MaxRound)
+  PROVE  Cardinality(PVAll(r) \union PCAll(r)) <= Cardinality(PVAllP(r) \union PCAllP(r))
+  <1>sub. (PVAll(r) \union PCAll(r)) \subseteq (PVAllP(r) \union PCAllP(r))
+      BY PrevoteMonotone, PrecommitMonotone DEF PVAll, PCAll, PVAllP, PCAllP
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>subCF. (PVAllP(r) \union PCAllP(r)) \subseteq (Corr \union Faulty)  BY DEF PVAllP, PCAllP
+  <1>finN. IsFiniteSet(PVAllP(r) \union PCAllP(r))  BY <1>subCF, <1>finU, FS_Subset
+  <1> QED  BY <1>sub, <1>finN, FS_Subset
+
+\* A pre-state Q3(R) \/ Q4(R) lifts to the post-state (both quorums are monotone). R >= 1 so R-1
+\* is a real round.
+LEMMA PastStartRoundQuorumMonotone ==
+  ASSUME IndTypeOk, Step, NEW R \in (0)..(MaxRound), R # 0,
+         \/ Cardinality(PVAll(R) \union PCAll(R)) >= T + 1
+         \/ Cardinality(PCAll(R - 1)) >= 2 * T + 1
+  PROVE  \/ Cardinality(PVAllP(R) \union PCAllP(R)) >= T + 1
+         \/ Cardinality(PCAllP(R - 1)) >= 2 * T + 1
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>1. CASE Cardinality(PVAll(R) \union PCAll(R)) >= T + 1
+      <2>mono. Cardinality(PVAll(R) \union PCAll(R)) <= Cardinality(PVAllP(R) \union PCAllP(R))
+          BY Q3UnionMonotone
+      <2>subOld. (PVAll(R) \union PCAll(R)) \subseteq (Corr \union Faulty)  BY DEF PVAll, PCAll
+      <2>natOld. Cardinality(PVAll(R) \union PCAll(R)) \in Nat
+          BY <2>subOld, <1>finU, FS_Subset, FS_CardinalityType
+      <2>sub. (PVAllP(R) \union PCAllP(R)) \subseteq (Corr \union Faulty)  BY DEF PVAllP, PCAllP
+      <2>nat. Cardinality(PVAllP(R) \union PCAllP(R)) \in Nat
+          BY <2>sub, <1>finU, FS_Subset, FS_CardinalityType
+      <2> QED  BY <1>1, <2>mono, <2>nat, <2>natOld, ConstNat, SMT
+  <1>2. CASE Cardinality(PCAll(R - 1)) >= 2 * T + 1
+      <2>rdom. R - 1 \in (0)..(MaxRound)  BY ConstNat, SMT
+      <2>mono. Cardinality(PCAll(R - 1)) <= Cardinality(PCAllP(R - 1))  BY <2>rdom, PCAllMonotone
+      <2>subOld. PCAll(R - 1) \subseteq (Corr \union Faulty)  BY DEF PCAll
+      <2>natOld. Cardinality(PCAll(R - 1)) \in Nat  BY <2>subOld, <1>finU, FS_Subset, FS_CardinalityType
+      <2>sub. PCAllP(R - 1) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+      <2>nat. Cardinality(PCAllP(R - 1)) \in Nat  BY <2>sub, <1>finU, FS_Subset, FS_CardinalityType
+      <2> QED  BY <1>2, <2>mono, <2>nat, <2>natOld, ConstNat, SMT
+  <1> QED  BY <1>1, <1>2
+
+\* The pre-invariant conjunct AllPastStartRound, re-expressed in operator form for a fixed (c, R).
+LEMMA PastStartRoundOperator ==
+  ASSUME IndTypeOk, AllPastStartRound, NEW c \in Corr, NEW R \in (0)..(MaxRound),
+         ~(R > round[c]), R # 0
+  PROVE  \/ Cardinality(PVAll(R) \union PCAll(R)) >= T + 1
+         \/ Cardinality(PCAll(R - 1)) >= 2 * T + 1
+  BY Zenon, SMT DEF AllPastStartRound, PVAll, PCAll, IndTypeOk
+
+\* If a correct process c is (pre-state) at round >= R >= 1, the post-state satisfies Q3(R) \/ Q4(R).
+LEMMA PastStartRoundFromCorrect ==
+  ASSUME IndTypeOk, Step, AllPastStartRound,
+         NEW c \in Corr, NEW R \in (0)..(MaxRound), R # 0, R <= round[c]
+  PROVE  \/ Cardinality(PVAllP(R) \union PCAllP(R)) >= T + 1
+         \/ Cardinality(PCAllP(R - 1)) >= 2 * T + 1
+  <1> USE DEF IndTypeOk
+  <1>ge. ~(R > round[c])  BY SMT
+  <1>op. \/ Cardinality(PVAll(R) \union PCAll(R)) >= T + 1
+         \/ Cardinality(PCAll(R - 1)) >= 2 * T + 1
+      BY <1>ge, PastStartRoundOperator
+  <1> QED  BY <1>op, PastStartRoundQuorumMonotone
+
+\* Harder than a per-process medium. The quorum disjuncts Q3 (T+1 prevote+precommit senders at r)
+\* and Q4 (2T+1 precommit senders at r-1) are monotone, so preservation reduces to: when round[p]
+\* advances past r, some Q holds at r. UponQuorumOfPrecommitsAny (round[p]+1) supplies Q4 at r-1
+\* directly (its 2T+1 precommit trigger). OnRoundCatchup can jump many rounds to rnd on a T+1
+\* propose+prevote+precommit quorum -- which does NOT match Q3 -- so it needs an indirect argument:
+\* the T+1 evidence at rnd has a correct sender c, which by AllNoFutureMessagesSent already had
+\* round[c] >= rnd pre-state, so AllPastStartRound(c, .) pre already gives Q3(r) \/ Q4(r) for every
+\* r <= rnd.
 THEOREM Pres_AllPastStartRound ==
   ASSUME TypedIndInv, Step PROVE AllPastStartRound'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>apsr. AllPastStartRound  BY DEF TypedIndInv, IndInv
+  \* Unfold the primed goal to operator form (the doubly-nested primed Cardinality set-builders
+  \* do not strip in place).
+  <1>unfold. AllPastStartRound' <=>
+               (\A pp \in Corr, RR \in (0)..(MaxRound):
+                  \/ RR > round'[pp]
+                  \/ RR = 0
+                  \/ Cardinality(PVAllP(RR) \union PCAllP(RR)) >= T + 1
+                  \/ Cardinality(PCAllP(RR - 1)) >= 2 * T + 1)
+      BY DEF AllPastStartRound, PVAllP, PCAllP
+  <1> SUFFICES \A pp \in Corr, RR \in (0)..(MaxRound):
+                  \/ RR > round'[pp]
+                  \/ RR = 0
+                  \/ Cardinality(PVAllP(RR) \union PCAllP(RR)) >= T + 1
+                  \/ Cardinality(PCAllP(RR - 1)) >= 2 * T + 1
+      BY <1>unfold
+  <1> TAKE p \in Corr, R \in (0)..(MaxRound)
+  <1> SUFFICES ASSUME ~(R > round'[p]), R # 0
+               PROVE  \/ Cardinality(PVAllP(R) \union PCAllP(R)) >= T + 1
+                      \/ Cardinality(PCAllP(R - 1)) >= 2 * T + 1
+      OBVIOUS
+  <1>main. CASE round'[p] = round[p]
+      \* No round advance: the pre-invariant on p applies directly (R <= round[p]).
+      <2>Rlep. R <= round[p]  BY <1>main, SMT
+      <2> QED  BY <1>apsr, <2>Rlep, PastStartRoundFromCorrect
+  <1>chg. CASE round'[p] # round[p]
+      \* Only UponQuorumOfPrecommitsAny and OnRoundCatchup change a round, and only for the acting
+      \* process; every other branch keeps round' = round (its UNCHANGED frame). So the actor is p.
+      <2>act. UponQuorumOfPrecommitsAny(p) \/ OnRoundCatchup(p)
+          <3>sel. \/ round' = round
+                  \/ \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+                  \/ \E q \in Corr : OnRoundCatchup(q)
+              BY DEF Step
+          <3>1. CASE round' = round  BY <3>1, <1>chg, SMT
+          <3>2. CASE \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+              <4> PICK q \in Corr : UponQuorumOfPrecommitsAny(q)  BY <3>2
+              <4>qr. round' = [round EXCEPT ![q] = round[q] + 1]
+                  BY Zenon DEF UponQuorumOfPrecommitsAny
+              <4>qp. q = p  BY <4>qr, <1>chg, SMT
+              <4> QED  BY <4>qp
+          <3>3. CASE \E q \in Corr : OnRoundCatchup(q)
+              <4> PICK q \in Corr : OnRoundCatchup(q)  BY <3>3
+              <4>qr. \E rr \in (0)..(MaxRound) : round' = [round EXCEPT ![q] = rr]
+                  BY Zenon DEF OnRoundCatchup
+              <4>qp. q = p  BY <4>qr, <1>chg, SMT
+              <4> QED  BY <4>qp
+          <3> QED  BY <3>sel, <3>1, <3>2, <3>3
+      <2>uqp. CASE UponQuorumOfPrecommitsAny(p)
+          <3>rp1. round' = [round EXCEPT ![p] = round[p] + 1]
+              BY <2>uqp, Zenon DEF UponQuorumOfPrecommitsAny
+          <3>rp. round'[p] = round[p] + 1  BY <3>rp1, SMT
+          <3>Rle2. R <= round[p] + 1  BY <3>rp, ConstNat, SMT
+          <3>a. CASE R <= round[p]
+              <4> QED  BY <1>apsr, <3>a, PastStartRoundFromCorrect
+          <3>b. CASE ~(R <= round[p])
+              <4>Req. R = round[p] + 1  BY <3>b, <3>Rle2, ConstNat, SMT
+              <4>rm1. R - 1 = round[p]  BY <4>Req, ConstNat, SMT
+              <4>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
+              \* The action fired on a 2T+1 precommit-sender quorum at round[p] = R-1; lift it.
+              <4> PICK ev \in SUBSET msgs_precommit[round[p]] :
+                     Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
+                  BY <2>uqp, Zenon DEF UponQuorumOfPrecommitsAny
+              <4>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
+                  OBVIOUS
+              <4>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+              <4>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])
+                  BY DEF PCAll
+              <4>evFin. IsFiniteSet({s \in (Corr \union Faulty) : \E m \in ev : s = m.src})
+                  BY <4>finU, FS_Subset
+              <4>evNat. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) \in Nat
+                  BY <4>evFin, FS_CardinalityType
+              <4>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
+              <4>finPC. IsFiniteSet(PCAll(round[p]))  BY <4>pcSub, <4>finU, FS_Subset
+              <4>le. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src})
+                     <= Cardinality(PCAll(round[p]))
+                  BY <4>evSub, <4>finPC, FS_Subset
+              <4>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <4>finPC, FS_CardinalityType
+              <4>pcAllQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
+                  BY <4>gev, <4>evSub, <4>finPC, ConstNat, SubsetCardGeq
+              <4>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))
+                  BY <4>rpDom, PCAllMonotone
+              <4>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+              <4>natPP. Cardinality(PCAllP(round[p])) \in Nat
+                  BY <4>ppSub, <4>finU, FS_Subset, FS_CardinalityType
+              <4>post. Cardinality(PCAllP(round[p])) >= 2 * T + 1
+                  BY <4>pcAllQ, <4>mono, <4>natPC, <4>natPP, ConstNat, SMT
+              \* R - 1 = round[p], so Q4'(R) holds.
+              <4> QED  BY <4>post, <4>rm1
+          <3> QED  BY <3>a, <3>b
+      <2>orc. CASE OnRoundCatchup(p)
+          \* Isolated lemma peels the evidence: p jumped to rnd on a T+1 quorum whose correct
+          \* sender c had round[c] >= rnd >= R (AllNoFutureMessagesSent), so the pre-invariant on c
+          \* supplies Q3(R) \/ Q4(R).
+          <3> PICK rnd \in (0)..(MaxRound) :
+                /\ round' = [round EXCEPT ![p] = rnd]
+                /\ rnd > round[p]
+                /\ \E c \in Corr : c \in AllMsgSenders(rnd)
+              BY <2>orc, OnRoundCatchupGivesSender
+          <3>rndEq. round'[p] = rnd  BY SMT
+          <3>Rle3. R <= rnd  BY <3>rndEq, SMT
+          <3> PICK c \in Corr : c \in AllMsgSenders(rnd)  OBVIOUS
+          <3>csent. \/ (\E m \in msgs_propose[rnd] : c = m.src)
+                    \/ (\E m \in msgs_prevote[rnd] : c = m.src)
+                    \/ (\E m \in msgs_precommit[rnd] : c = m.src)
+              BY DEF AllMsgSenders
+          <3>cround. rnd <= round[c]
+              BY <3>csent, SMT DEF AllNoFutureMessagesSent
+          <3>Rlec. R <= round[c]  BY <3>Rle3, <3>cround, SMT
+          <3> QED  BY <1>apsr, <3>Rlec, PastStartRoundFromCorrect
+      <2> QED  BY <2>act, <2>uqp, <2>orc
+  <1> QED  BY <1>main, <1>chg
 
-\* Uses ApaFoldSet (max round over correct processes), shimmed unsoundly in Apalache.tla;
-\* needs the CHOOSE-max replacement in the spec before it can be discharged.
+\* ---------------------------------------------------------------------------
+\* CHOOSE-max machinery for AllRoundsBelowHavePrecommitQuorum. The regenerated spec expresses the
+\* maximum round reached as CHOOSE m in ({round[k]} \union {0}): m >= every candidate.
+\* ---------------------------------------------------------------------------
+\* A nonempty subset of a bounded integer interval has a maximum (induction on the bound via
+\* NatInductionTrusted -- avoids the higher-order FS_Induction, which needs Isabelle here).
+LEMMA BoundedMaxExists ==
+  ASSUME NEW b \in Nat, NEW S \in SUBSET (0)..b, S # {}
+  PROVE  \E mx \in S : \A o \in S : mx >= o
+  <1> DEFINE Q[n \in Nat] == \A SS \in SUBSET (0)..n : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)
+  <1>0. Q[0]
+      <2> SUFFICES \A SS \in SUBSET (0)..0 : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> TAKE SS \in SUBSET (0)..0
+      <2> HAVE SS # {}
+      <2>1. \A o \in SS : 0 >= o  BY SMT
+      <2> QED  BY <2>1
+  <1>step. \A n \in Nat : Q[n] => Q[n+1]
+      <2> TAKE n \in Nat
+      <2> HAVE Q[n]
+      <2>Qn. \A SS \in SUBSET (0)..n : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> SUFFICES \A SS \in SUBSET (0)..(n+1) : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> TAKE SS \in SUBSET (0)..(n+1)
+      <2> HAVE SS # {}
+      <2>a. CASE (n+1) \in SS
+          <3>1. \A o \in SS : (n+1) >= o  BY SMT
+          <3> QED  BY <2>a, <3>1
+      <2>b. CASE (n+1) \notin SS
+          <3>sub. SS \in SUBSET (0)..n  BY <2>b, SMT
+          <3> QED  BY <3>sub, <2>Qn
+      <2> QED  BY <2>a, <2>b
+  <1>Qall. \A n \in Nat : Q[n]  BY <1>0, <1>step, NatInductionTrusted
+  <1>Qb. Q[b]  BY <1>Qall
+  <1> QED  BY <1>Qb DEF Q
+
+MaxCandOf(rd) == {rd[k] : k \in DOMAIN rd} \union {0}
+MaxReachedOf(rd) == CHOOSE mx \in MaxCandOf(rd) : \A o \in MaxCandOf(rd) : mx >= o
+
+\* The CHOOSE-max lands in the candidate set and dominates it (the max exists, by BoundedMaxExists).
+LEMMA MaxReachedProps ==
+  ASSUME NEW rd, \A k \in DOMAIN rd : rd[k] \in (0)..(MaxRound)
+  PROVE  /\ MaxReachedOf(rd) \in MaxCandOf(rd)
+         /\ \A o \in MaxCandOf(rd) : MaxReachedOf(rd) >= o
+  <1>sub. MaxCandOf(rd) \in SUBSET (0)..(MaxRound)  BY ConstNat, SMT DEF MaxCandOf
+  <1>ne. MaxCandOf(rd) # {}  BY DEF MaxCandOf
+  <1>ex. \E mx \in MaxCandOf(rd) : \A o \in MaxCandOf(rd) : mx >= o
+      BY <1>sub, <1>ne, ConstNat, BoundedMaxExists
+  <1> QED  BY <1>ex DEF MaxReachedOf
+
+\* UponQuorumOfPrecommitsAny(p) fires on a 2T+1 precommit-sender quorum at round[p], which lifts
+\* (monotone) to a 2T+1 post-state quorum PCAllP(round[p]).
+LEMMA UQPAGivesPostQuorum ==
+  ASSUME IndTypeOk, Step, NEW p \in Corr, UponQuorumOfPrecommitsAny(p)
+  PROVE  Cardinality(PCAllP(round[p])) >= 2 * T + 1
+  <1> USE DEF IndTypeOk
+  <1>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
+  <1> PICK ev \in SUBSET msgs_precommit[round[p]] :
+         Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
+      BY Zenon DEF UponQuorumOfPrecommitsAny
+  <1>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1  OBVIOUS
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])  BY DEF PCAll
+  <1>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
+  <1>finPC. IsFiniteSet(PCAll(round[p]))  BY <1>pcSub, <1>finU, FS_Subset
+  <1>pcQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
+      BY <1>gev, <1>evSub, <1>finPC, ConstNat, SubsetCardGeq
+  <1>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))  BY <1>rpDom, PCAllMonotone
+  <1>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <1>finPC, FS_CardinalityType
+  <1>natPP. Cardinality(PCAllP(round[p])) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
+  <1> QED  BY <1>pcQ, <1>mono, <1>natPC, <1>natPP, ConstNat, SMT
+
+\* A correct process reaches round R (R < max reached) only after every earlier round collected a
+\* 2T+1 precommit quorum. The global max advances only via UponQuorumOfPrecommitsAny (+1, whose
+\* 2T+1 precommit trigger IS the quorum at the round left); OnRoundCatchup cannot advance the max
+\* (its evidence has a correct sender c with round[c] >= its target, so the target was already
+\* reached). Below the pre-max, the pre-invariant + PCAll monotonicity suffice.
 THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
   ASSUME TypedIndInv, Step PROVE AllRoundsBelowHavePrecommitQuorum'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>arb. AllRoundsBelowHavePrecommitQuorum  BY DEF TypedIndInv, IndInv
+  <1>tp. IndTypeOk'  BY TypePres DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+  <1>rBoundsU. \A k \in Corr : round[k] \in (0)..(MaxRound)  BY DEF IndTypeOk
+  <1>rBoundsP. \A k \in Corr : round'[k] \in (0)..(MaxRound)  BY <1>tp DEF IndTypeOk
+  <1>domU. DOMAIN round = Corr  BY DEF IndTypeOk
+  <1>domP. DOMAIN round' = Corr  BY <1>tp DEF IndTypeOk
+  \* Pre-invariant in operator form.
+  <1>arbOp. \A RR \in (0)..(MaxRound) : (RR < MaxReachedOf(round)) => Cardinality(PCAll(RR)) >= 2 * T + 1
+      BY <1>arb, Zenon DEF AllRoundsBelowHavePrecommitQuorum, MaxReachedOf, MaxCandOf, PCAll
+  <1>propsU. MaxReachedOf(round) \in MaxCandOf(round) /\ \A o \in MaxCandOf(round) : MaxReachedOf(round) >= o
+      BY <1>rBoundsU, <1>domU, MaxReachedProps
+  <1>mrU. MaxReachedOf(round) \in (0)..(MaxRound)
+      BY <1>propsU, <1>rBoundsU, <1>domU, ConstNat, SMT DEF MaxCandOf
+  \* Unfold the primed goal to operator form.
+  <1> SUFFICES \A R \in (0)..(MaxRound) : (R < MaxReachedOf(round')) => Cardinality(PCAllP(R)) >= 2 * T + 1
+      BY DEF AllRoundsBelowHavePrecommitQuorum, MaxReachedOf, MaxCandOf, PCAllP
+  <1> TAKE R \in (0)..(MaxRound)
+  <1> HAVE R < MaxReachedOf(round')
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  \* MaxReachedOf(round') is a candidate >= all; being > R >= 0 it equals round'[pp] for some pp.
+  <1>propsP. MaxReachedOf(round') \in MaxCandOf(round') /\ \A o \in MaxCandOf(round') : MaxReachedOf(round') >= o
+      BY <1>rBoundsP, <1>domP, MaxReachedProps
+  <1>mp. \E pp \in Corr : round'[pp] > R
+      <2>inCand. MaxReachedOf(round') \in ({round'[k] : k \in Corr} \union {0})
+          BY <1>propsP, <1>domP DEF MaxCandOf
+      <2> QED  BY <2>inCand, SMT
+  <1> PICK pp \in Corr : round'[pp] > R  BY <1>mp
+  \* Post-state quorum typing (shared).
+  <1>ppSub. PCAllP(R) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>natPP. Cardinality(PCAllP(R)) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
+  <1>main. CASE R < MaxReachedOf(round)
+      <2>preQ. Cardinality(PCAll(R)) >= 2 * T + 1  BY <1>arbOp, <1>main
+      <2>mono. Cardinality(PCAll(R)) <= Cardinality(PCAllP(R))  BY PCAllMonotone
+      <2>pcSub. PCAll(R) \subseteq (Corr \union Faulty)  BY DEF PCAll
+      <2>finPC. IsFiniteSet(PCAll(R))  BY <2>pcSub, <1>finU, FS_Subset
+      <2>natPC. Cardinality(PCAll(R)) \in Nat  BY <2>finPC, FS_CardinalityType
+      <2> QED  BY <2>preQ, <2>mono, <2>natPC, <1>natPP, ConstNat, SMT
+  <1>chg. CASE ~(R < MaxReachedOf(round))
+      <2>geRoundPP. MaxReachedOf(round) >= round[pp]
+          <3>cand. round[pp] \in MaxCandOf(round)  BY <1>domU DEF MaxCandOf
+          <3> QED  BY <3>cand, <1>propsU
+      <2>advanced. round'[pp] # round[pp]  BY <2>geRoundPP, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, SMT
+      <2>act. UponQuorumOfPrecommitsAny(pp) \/ OnRoundCatchup(pp)
+          <3>sel. \/ round' = round
+                  \/ \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+                  \/ \E q \in Corr : OnRoundCatchup(q)
+              BY DEF Step
+          <3>1. CASE round' = round  BY <3>1, <2>advanced, SMT
+          <3>2. CASE \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+              <4> PICK q \in Corr : UponQuorumOfPrecommitsAny(q)  BY <3>2
+              <4>qr. round' = [round EXCEPT ![q] = round[q] + 1]  BY Zenon DEF UponQuorumOfPrecommitsAny
+              <4>qp. q = pp  BY <4>qr, <2>advanced, SMT
+              <4> QED  BY <4>qp
+          <3>3. CASE \E q \in Corr : OnRoundCatchup(q)
+              <4> PICK q \in Corr : OnRoundCatchup(q)  BY <3>3
+              <4>qr. \E rr \in (0)..(MaxRound) : round' = [round EXCEPT ![q] = rr]  BY Zenon DEF OnRoundCatchup
+              <4>qp. q = pp  BY <4>qr, <2>advanced, SMT
+              <4> QED  BY <4>qp
+          <3> QED  BY <3>sel, <3>1, <3>2, <3>3
+      <2>uqp. CASE UponQuorumOfPrecommitsAny(pp)
+          <3>rp1. round' = [round EXCEPT ![pp] = round[pp] + 1]  BY <2>uqp, Zenon DEF UponQuorumOfPrecommitsAny
+          <3>rp. round'[pp] = round[pp] + 1  BY <3>rp1, SMT
+          <3>Req. R = round[pp]  BY <3>rp, <2>geRoundPP, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, ConstNat, SMT
+          <3>post. Cardinality(PCAllP(round[pp])) >= 2 * T + 1  BY <2>uqp, UQPAGivesPostQuorum
+          <3> QED  BY <3>post, <3>Req
+      <2>orc. CASE OnRoundCatchup(pp)
+          <3> PICK rnd \in (0)..(MaxRound) :
+                /\ round' = [round EXCEPT ![pp] = rnd]
+                /\ rnd > round[pp]
+                /\ \E c \in Corr : c \in AllMsgSenders(rnd)
+              BY <2>orc, OnRoundCatchupGivesSender
+          <3>rndEq. round'[pp] = rnd  BY SMT
+          <3> PICK c \in Corr : c \in AllMsgSenders(rnd)  OBVIOUS
+          <3>csent. \/ (\E m \in msgs_propose[rnd] : c = m.src)
+                    \/ (\E m \in msgs_prevote[rnd] : c = m.src)
+                    \/ (\E m \in msgs_precommit[rnd] : c = m.src)
+              BY DEF AllMsgSenders
+          <3>cround. rnd <= round[c]  BY <3>csent, SMT DEF AllNoFutureMessagesSent
+          <3>cCand. round[c] \in MaxCandOf(round)  BY <1>domU DEF MaxCandOf
+          <3>geC. MaxReachedOf(round) >= round[c]  BY <3>cCand, <1>propsU
+          <3> QED  BY <3>rndEq, <3>cround, <3>geC, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, SMT
+      <2> QED  BY <2>act, <2>uqp, <2>orc
+  <1> QED  BY <1>main, <1>chg
 
 \* If valid_round[q]' = round[q]' then the acting process's step guard (for the step-changing
 \* actions the actor was in PROPOSE/PREVOTE, so by the pre-invariant valid_round[q] # round[q],
@@ -3183,10 +3958,113 @@ THEOREM Pres_AllCorrectProposalValidRoundBelowRound ==
          AllCorrectProposalValidRoundBelowRound,
          AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded
 
+\* A fresh non-nil precommit by a correct process p at r1 is added only by
+\* UponProposalInPrevoteOrCommitAndPrevote(p) (the only action adding a non-nil correct precommit),
+\* which acts in round[p] = r1 at step PREVOTE and leaves msgs_prevote unchanged. Standalone so the
+\* heavy Step case analysis runs in a clean context (Gotcha 6).
+LEMMA FreshPrecommitShape ==
+  ASSUME IndTypeOk, Step, NEW p \in Corr, NEW r1 \in (0)..(MaxRound),
+         NEW pc \in msgs_precommit'[r1], pc \notin msgs_precommit[r1],
+         p = pc.src, pc.id # -1
+  PROVE  /\ round[p] = r1
+         /\ step[p] = "PREVOTE_OF_STEP"
+         /\ msgs_prevote' = msgs_prevote
+  <1> USE DEF IndTypeOk
+  \* Only these actions add a precommit; each disjunct carries the msgs_prevote frame it needs
+  \* (FaultyStep is the only one that changes msgs_prevote and is ruled out separately).
+  <1>sel. \/ msgs_precommit' = msgs_precommit
+          \/ (\E q \in Corr : UponProposalInPrevoteOrCommitAndPrevote(q) /\ msgs_prevote' = msgs_prevote)
+          \/ (\E q \in Corr : UponQuorumOfPrevotesAny(q) /\ msgs_prevote' = msgs_prevote)
+          \/ (\E q \in Corr : OnQuorumOfNilPrevotes(q) /\ msgs_prevote' = msgs_prevote)
+          \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_precommit' = msgs_precommit
+      <2> QED  BY <1>1
+  <1>2. CASE \E q \in Corr : UponProposalInPrevoteOrCommitAndPrevote(q) /\ msgs_prevote' = msgs_prevote
+      \* the fresh non-nil pc forces lab_then (adds precommit src=q at round[q]); q = p, round[p] = r1.
+      <2> PICK q \in Corr : UponProposalInPrevoteOrCommitAndPrevote(q) /\ msgs_prevote' = msgs_prevote
+          BY <1>2
+      <2> QED  BY SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+  <1>3. CASE \E q \in Corr : UponQuorumOfPrevotesAny(q) /\ msgs_prevote' = msgs_prevote
+      \* adds only a nil precommit, contradicting pc.id # -1.
+      <2> PICK q \in Corr : UponQuorumOfPrevotesAny(q) /\ msgs_prevote' = msgs_prevote  BY <1>3
+      <2> QED  BY SMT DEF UponQuorumOfPrevotesAny
+  <1>4. CASE \E q \in Corr : OnQuorumOfNilPrevotes(q) /\ msgs_prevote' = msgs_prevote
+      <2> PICK q \in Corr : OnQuorumOfNilPrevotes(q) /\ msgs_prevote' = msgs_prevote  BY <1>4
+      <2> QED  BY SMT DEF OnQuorumOfNilPrevotes
+  <1>5. CASE FaultyStep
+      \* adds only faulty senders, contradicting pc.src = p \in Corr.
+      <2>ex. \E r \in (0)..(MaxRound) : \E fps3 \in SUBSET Faulty : \E v3 \in (ValidValues \union InvalidValues) :
+               msgs_precommit' = [msgs_precommit EXCEPT ![r] =
+                 (msgs_precommit[r] \union {[id |-> v3, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> r, src |-> v_v55]: v_v55 \in fps3})]
+          BY <1>5 DEF FaultyStep
+      <2> PICK r \in (0)..(MaxRound) : \E fps3 \in SUBSET Faulty : \E v3 \in (ValidValues \union InvalidValues) :
+               msgs_precommit' = [msgs_precommit EXCEPT ![r] =
+                 (msgs_precommit[r] \union {[id |-> v3, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> r, src |-> v_v55]: v_v55 \in fps3})]
+          BY <2>ex
+      <2> PICK fps3 \in SUBSET Faulty : \E v3 \in (ValidValues \union InvalidValues) :
+               msgs_precommit' = [msgs_precommit EXCEPT ![r] =
+                 (msgs_precommit[r] \union {[id |-> v3, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> r, src |-> v_v55]: v_v55 \in fps3})]
+          OBVIOUS
+      <2> PICK v3 \in (ValidValues \union InvalidValues) :
+               msgs_precommit' = [msgs_precommit EXCEPT ![r] =
+                 (msgs_precommit[r] \union {[id |-> v3, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> r, src |-> v_v55]: v_v55 \in fps3})]
+          OBVIOUS
+      \* pc is fresh, so it lies in the added faulty set; its src is in fps3 \subseteq Faulty.
+      <2>added. pc \in {[id |-> v3, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> r, src |-> v_v55]: v_v55 \in fps3}
+          BY SMT
+      <2>fsrc. pc.src \in Faulty  BY <2>added
+      <2> QED  BY <2>fsrc, DisjointCF
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
 \* The per-process lock-survival invariant. Its preservation is a research obligation of the
 \* same character as Pres_PrecommitsLockValue (it is exactly the hypothesis that proof relies on).
 THEOREM Pres_PrecommitLocksLaterPrevotes ==
   ASSUME TypedIndInv, Step PROVE PrecommitLocksLaterPrevotes'
+  \* It suffices to prove the \A form whose consequent is a PVSetP quorum: that implies
+  \* PrecommitLocksLaterPrevotes' because PVSetPFlipCard bridges each PVSetP quorum back to the
+  \* spec's flipped (vv = pp.id) set-builder.
+  <1>bridge. (\A pp \in Corr, rr1 \in (0)..(MaxRound), vv \in ValidValues, rr2 \in (0)..(MaxRound):
+                (/\ rr2 > rr1
+                 /\ \E pc \in msgs_precommit'[rr1] : pp = pc.src /\ pc.id /= -1 /\ vv /= pc.id
+                 /\ \E pv \in msgs_prevote'[rr2] : pp = pv.src /\ vv = pv.id)
+                => \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2} :
+                     Cardinality(PVSetP(r, vv)) >= 2 * T + 1)
+             => PrecommitLocksLaterPrevotes'
+      <2> SUFFICES ASSUME \A pp \in Corr, rr1 \in (0)..(MaxRound), vv \in ValidValues, rr2 \in (0)..(MaxRound):
+                            (/\ rr2 > rr1
+                             /\ \E pc \in msgs_precommit'[rr1] : pp = pc.src /\ pc.id /= -1 /\ vv /= pc.id
+                             /\ \E pv \in msgs_prevote'[rr2] : pp = pv.src /\ vv = pv.id)
+                            => \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2} :
+                                 Cardinality(PVSetP(r, vv)) >= 2 * T + 1,
+                          NEW pp \in Corr, NEW rr1 \in (0)..(MaxRound), NEW vv \in ValidValues,
+                          NEW rr2 \in (0)..(MaxRound),
+                          /\ rr2 > rr1
+                          /\ \E pc \in msgs_precommit'[rr1] : pp = pc.src /\ pc.id /= -1 /\ vv /= pc.id
+                          /\ \E pv \in msgs_prevote'[rr2] : pp = pv.src /\ vv = pv.id
+                   PROVE  \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2}:
+                            Cardinality({s \in (Corr \union Faulty) :
+                              \E pv0 \in {pp2 \in msgs_prevote'[r] : vv = pp2.id} : s = pv0.src}) >= 2 * T + 1
+          BY DEF PrecommitLocksLaterPrevotes
+      <2>inst. \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2} :
+                 Cardinality(PVSetP(r, vv)) >= 2 * T + 1
+          OBVIOUS
+      <2> PICK r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2} :
+                 Cardinality(PVSetP(r, vv)) >= 2 * T + 1
+          BY <2>inst
+      <2>rdom. r \in (0)..(MaxRound)  OBVIOUS
+      <2>eq. Cardinality(PVSetP(r, vv)) =
+               Cardinality({s \in (Corr \union Faulty) :
+                 \E pv0 \in {pp2 \in msgs_prevote'[r] : vv = pp2.id} : s = pv0.src})
+          BY <2>rdom, PVSetPFlipCard
+      <2> QED  BY <2>eq
+  <1> SUFFICES \A pp \in Corr, rr1 \in (0)..(MaxRound), vv \in ValidValues, rr2 \in (0)..(MaxRound):
+                  (/\ rr2 > rr1
+                   /\ \E pc \in msgs_precommit'[rr1] : pp = pc.src /\ pc.id /= -1 /\ vv /= pc.id
+                   /\ \E pv \in msgs_prevote'[rr2] : pp = pv.src /\ vv = pv.id)
+                  => \E r \in {rr \in (0)..(MaxRound): rr >= rr1 /\ rr < rr2} :
+                       Cardinality(PVSetP(r, vv)) >= 2 * T + 1
+      BY <1>bridge
   <1> SUFFICES ASSUME NEW p \in Corr, NEW r1 \in (0)..(MaxRound),
                       NEW v \in ValidValues, NEW r2 \in (0)..(MaxRound),
                       /\ r2 > r1
@@ -3198,10 +4076,8 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
                            /\ p = pv.src
                            /\ v = pv.id
                PROVE  \E r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}:
-                        Cardinality({s \in (Corr \union Faulty) :
-                          \E pv0 \in {pp \in msgs_prevote'[r] : pp.id = v} :
-                            s = pv0.src}) >= 2 * T + 1
-      BY DEF PrecommitLocksLaterPrevotes
+                        Cardinality(PVSetP(r, v)) >= 2 * T + 1
+      OBVIOUS
   <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> PICK pc \in msgs_precommit'[r1]:
          /\ p = pc.src
@@ -3217,32 +4093,33 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
       BY DEF TypedIndInv, IndInv
   <1>pcOld. CASE pc \in msgs_precommit[r1]
       <2>pvOld. CASE pv \in msgs_prevote[r2]
+          \* PrecommitLocksLaterPrevotesOp applies the PRE-state invariant at (p, r1, v, r2) and
+          \* bridges the spec's flipped orientation to PVSet; pc (from pcOld) and pv (from pvOld)
+          \* are its precommit/prevote witnesses.
+          <3>ante. /\ \E pcx \in msgs_precommit[r1] : p = pcx.src /\ pcx.id # -1 /\ v # pcx.id
+                   /\ \E pvx \in msgs_prevote[r2] : p = pvx.src /\ v = pvx.id
+              BY <1>pcOld, <2>pvOld
           <3>oldQ. \E r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}:
-                     Cardinality({s \in (Corr \union Faulty) :
-                       \E pv0 \in {pp \in msgs_prevote[r] : pp.id = v} :
-                         s = pv0.src}) >= 2 * T + 1
-              BY <1>oldInv, <1>pcOld, <2>pvOld, Zenon, SMT
-                 DEF PrecommitLocksLaterPrevotes
+                     Cardinality(PVSet(r, v)) >= 2 * T + 1
+              BY <3>ante, PrecommitLocksLaterPrevotesOp DEF TypedIndInv, IndInv
           <3> PICK r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}:
-                    Cardinality({s \in (Corr \union Faulty) :
-                      \E pv0 \in {pp \in msgs_prevote[r] : pp.id = v} :
-                        s = pv0.src}) >= 2 * T + 1
+                    Cardinality(PVSet(r, v)) >= 2 * T + 1
               BY <3>oldQ
-          <3>rdom. r \in (0)..(MaxRound)  BY <3>oldQ
-          <3>preQ. Cardinality(PVSet(r, v)) >= 2 * T + 1
-              BY <3>oldQ DEF PVSet
+          <3>rdom. r \in (0)..(MaxRound)  OBVIOUS
           <3>postQ. Cardinality(PVSetP(r, v)) >= 2 * T + 1
-              BY <3>preQ, <3>rdom, <1>vty, PVSetQuorumMonotone
-          <3> QED BY <3>oldQ, <3>postQ DEF PVSetP
+              BY <3>rdom, <1>vty, PVSetQuorumMonotone
+          <3> QED BY <3>postQ, <3>rdom DEF PVSetP
       <2>pvFresh. CASE pv \notin msgs_prevote[r2]
+          \* pv is a fresh valid (id = v # -1) prevote by the correct process p at r2. Only the two
+          \* value-prevote actions add such a message: the other correct actions leave msgs_prevote
+          \* unchanged (ruled out by DEF Step's frame, so their DEFs are unneeded -- unfolding all
+          \* eleven overwhelms SMT), OnTimeoutPropose adds only a nil prevote (id = -1 # v), and
+          \* FaultyStep adds only faulty senders (p \notin Faulty by DisjointCF).
           <3>split. \/ UponProposalInPropose(p)
                      \/ UponProposalInProposeAndPrevote(p)
               BY <2>pvFresh, DisjointCF, NilNotValid, SMT
                  DEF Step, FaultyStep, UponProposalInPropose,
-                     UponProposalInProposeAndPrevote, InsertProposal,
-                     UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
-                     UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
-                     OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup
+                     UponProposalInProposeAndPrevote, OnTimeoutPropose
           <3>proposal. CASE UponProposalInPropose(p)
               <4>rd. round[p] = r2
                   BY <2>pvFresh, <3>proposal, SMT DEF UponProposalInPropose
@@ -3285,9 +4162,7 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
       <2>shape. /\ round[p] = r1
                  /\ step[p] = "PREVOTE_OF_STEP"
                  /\ msgs_prevote' = msgs_prevote
-          BY <1>pcFresh, DisjointCF, NilNotValid, SMT
-             DEF Step, FaultyStep, UponProposalInPrevoteOrCommitAndPrevote,
-                 UponQuorumOfPrevotesAny, OnQuorumOfNilPrevotes
+          BY <1>pcFresh, FreshPrecommitShape
       <2>pvPre. pv \in msgs_prevote[r2]
           BY <2>shape
       <2>future. \A mv \in msgs_prevote[r2]: p # mv.src
@@ -3339,32 +4214,6 @@ THEOREM Inductive ==
 \*****************************************************************************
 
 
-\* Orientation bridge: the spec writes the value test as `d = mm.id` in some
-\* conjuncts and `mm.id = d` in others; both name the same set.
-LEMMA PCSetFlip ==
-  ASSUME NEW r, NEW d
-  PROVE  PCSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_precommit[r] : d = mm.id} : s = m.src}
-  BY DEF PCSet
-LEMMA PVSetFlip ==
-  ASSUME NEW r, NEW d
-  PROVE  PVSet(r, d) = {s \in (Corr \union Faulty) : \E m \in {mm \in msgs_prevote[r] : d = mm.id} : s = m.src}
-  BY DEF PVSet
-
-\* Cross-round lock: an earlier 2T+1 precommit quorum for va forces any later
-\* 2T+1 precommit quorum's value vb to equal va.
-\* Any subset of the (finite) replica set is finite.
-LEMMA SubsetCFFinite == ASSUME NEW A, A \subseteq (Corr \union Faulty) PROVE IsFiniteSet(A)
-  BY FiniteCF, FS_Union, FS_Subset
-
-\* Cardinality congruence, grounded in FS_Subset (this tlapm build's backends do not
-\* apply Leibniz under Cardinality on these set-builders without finiteness).
-LEMMA CardCong ==
-  ASSUME NEW S1, NEW S2, IsFiniteSet(S1), S1 = S2
-  PROVE  Cardinality(S1) = Cardinality(S2)
-  <1>1. S1 \subseteq S2 /\ S2 \subseteq S1  OBVIOUS
-  <1>2. IsFiniteSet(S2)  OBVIOUS
-  <1> QED  BY <1>1, <1>2, FS_Subset
-
 LEMMA LockLemma ==
   ASSUME TypedIndInvMin,
          NEW ra \in (0)..(MaxRound), NEW rb \in (0)..(MaxRound),
@@ -3390,7 +4239,7 @@ LEMMA LockLemma ==
   <1>raw. \/ Cardinality(PCSet(ra, va)) < 2 * T + 1
           \/ (\A r3 \in {rr \in (0)..(MaxRound) : rr > ra} : \A v3 \in (ValidValues \ {va}) :
                 Cardinality(PVSet(r3, v3)) < 2 * T + 1)
-      BY Zenon, SMT DEF PrecommitsLockValue, PCSet, PVSet
+      BY PrecommitsLockValueOp DEF TypedIndInvMin, IndInvMin
   <1>finU2. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
   <1>cardNat. Cardinality(PCSet(ra, va)) \in Nat /\ Cardinality(PVSet(rb, mc.id)) \in Nat
       <2>1. PCSet(ra, va) \subseteq (Corr \union Faulty) /\ PVSet(rb, mc.id) \subseteq (Corr \union Faulty)
