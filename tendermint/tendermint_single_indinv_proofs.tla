@@ -16,8 +16,8 @@
  * (An earlier `TypedIndInvMin` -- the 17-conjunct subset IndTypeOk /\ IndInvMin --
  * was targeted first but is not inductive on its own: PrecommitsLockValue needs
  * the extra 8 conjuncts. The development now uses the full `TypedIndInv`
- * throughout; the vestigial `TypedIndInvMin`/`IndInvMin` definitions survive only
- * in the generated spec.)
+ * throughout, and `TypedIndInvMin`/`IndInvMin` have been dropped from both the
+ * Wunderspec source and the generated spec.)
  *
  * Environment: tlapm (TLAPS) with the stdlib TLAPS + FiniteSetTheorems modules.
  * Most obligations go to SMT; ~120 higher-order set-cardinality obligations fall
