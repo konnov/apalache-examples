@@ -3481,6 +3481,14 @@ LEMMA SubsetCardGeq ==
   <1>nb. Cardinality(B) \in Nat  BY FS_CardinalityType
   <1> QED  BY <1>le, <1>na, <1>nb, SMT
 
+\* Pure arithmetic transitivity on abstract naturals. Used to lift a >= k through a <= b without
+\* handing the concrete Cardinality set-builders to SMT (which then tries, and fails/stalls, to
+\* reason about the set structure instead of treating the cardinalities as opaque integers).
+LEMMA GeqTransLe ==
+  ASSUME NEW a \in Nat, NEW b \in Nat, NEW k \in Nat, a >= k, a <= b
+  PROVE  b >= k
+  BY SMT
+
 \* A T+1 sender set already contains a correct process (there are at most F <= T faulty).
 LEMMA SmallQuorumHasCorrect ==
   ASSUME NEW S \in SUBSET (Corr \union Faulty), Cardinality(S) >= T + 1
@@ -3636,6 +3644,39 @@ LEMMA PastStartRoundFromCorrect ==
 \* the T+1 evidence at rnd has a correct sender c, which by AllNoFutureMessagesSent already had
 \* round[c] >= rnd pre-state, so AllPastStartRound(c, .) pre already gives Q3(r) \/ Q4(r) for every
 \* r <= rnd.
+\* UponQuorumOfPrecommitsAny(p) fires on a 2T+1 precommit-sender quorum at round[p], which lifts
+\* (monotone) to a 2T+1 post-state quorum PCAllP(round[p]). Kept as a standalone lemma so its
+\* subset-cardinality lift runs in a clean context (cited from Pres_AllPastStartRound and
+\* Pres_AllRoundsBelowHavePrecommitQuorum, where the same derivation inline drowns in hypotheses).
+LEMMA UQPAGivesPostQuorum ==
+  ASSUME IndTypeOk, Step, NEW p \in Corr, UponQuorumOfPrecommitsAny(p)
+  PROVE  Cardinality(PCAllP(round[p])) >= 2 * T + 1
+  <1> USE DEF IndTypeOk
+  <1>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
+  <1> PICK ev \in SUBSET msgs_precommit[round[p]] :
+         Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
+      BY Zenon DEF UponQuorumOfPrecommitsAny
+  <1>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1  OBVIOUS
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])  BY DEF PCAll
+  <1>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
+  <1>finPC. IsFiniteSet(PCAll(round[p]))  BY <1>pcSub, <1>finU, FS_Subset
+  <1>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <1>finPC, FS_CardinalityType
+  \* Inline the subset-cardinality lift as an explicit <=-chain + arithmetic rather than
+  \* instantiating SubsetCardGeq: unifying its A/B against these set-builders is slow enough to
+  \* exhaust the fallback chain under -threads contention.
+  <1>evFin. IsFiniteSet({s \in (Corr \union Faulty) : \E m \in ev : s = m.src})  BY <1>evSub, <1>finPC, FS_Subset
+  <1>evNat. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) \in Nat  BY <1>evFin, FS_CardinalityType
+  <1>le. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) <= Cardinality(PCAll(round[p]))
+      BY <1>evSub, <1>finPC, FS_Subset
+  <1>k. (2 * T + 1) \in Nat  BY ConstNat, SMT
+  <1>pcQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
+      BY <1>gev, <1>le, <1>evNat, <1>natPC, <1>k, GeqTransLe
+  <1>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))  BY <1>rpDom, PCAllMonotone
+  <1>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>natPP. Cardinality(PCAllP(round[p])) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
+  <1> QED  BY <1>pcQ, <1>mono, <1>natPC, <1>natPP, <1>k, GeqTransLe
+
 THEOREM Pres_AllPastStartRound ==
   ASSUME TypedIndInv, Step PROVE AllPastStartRound'
   <1> USE DEF TypedIndInv, IndInv, IndTypeOk
@@ -3696,35 +3737,10 @@ THEOREM Pres_AllPastStartRound ==
           <3>b. CASE ~(R <= round[p])
               <4>Req. R = round[p] + 1  BY <3>b, <3>Rle2, ConstNat, SMT
               <4>rm1. R - 1 = round[p]  BY <4>Req, ConstNat, SMT
-              <4>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
-              \* The action fired on a 2T+1 precommit-sender quorum at round[p] = R-1; lift it.
-              <4> PICK ev \in SUBSET msgs_precommit[round[p]] :
-                     Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
-                  BY <2>uqp, Zenon DEF UponQuorumOfPrecommitsAny
-              <4>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
-                  OBVIOUS
-              <4>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
-              <4>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])
-                  BY DEF PCAll
-              <4>evFin. IsFiniteSet({s \in (Corr \union Faulty) : \E m \in ev : s = m.src})
-                  BY <4>finU, FS_Subset
-              <4>evNat. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) \in Nat
-                  BY <4>evFin, FS_CardinalityType
-              <4>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
-              <4>finPC. IsFiniteSet(PCAll(round[p]))  BY <4>pcSub, <4>finU, FS_Subset
-              <4>le. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src})
-                     <= Cardinality(PCAll(round[p]))
-                  BY <4>evSub, <4>finPC, FS_Subset
-              <4>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <4>finPC, FS_CardinalityType
-              <4>pcAllQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
-                  BY <4>gev, <4>evSub, <4>finPC, ConstNat, SubsetCardGeq
-              <4>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))
-                  BY <4>rpDom, PCAllMonotone
-              <4>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
-              <4>natPP. Cardinality(PCAllP(round[p])) \in Nat
-                  BY <4>ppSub, <4>finU, FS_Subset, FS_CardinalityType
+              \* The action fired on a 2T+1 precommit-sender quorum at round[p] = R-1; the standalone
+              \* lemma lifts it (monotone) to a 2T+1 post-state quorum PCAllP(round[p]).
               <4>post. Cardinality(PCAllP(round[p])) >= 2 * T + 1
-                  BY <4>pcAllQ, <4>mono, <4>natPC, <4>natPP, ConstNat, SMT
+                  BY <2>uqp, UQPAGivesPostQuorum
               \* R - 1 = round[p], so Q4'(R) holds.
               <4> QED  BY <4>post, <4>rm1
           <3> QED  BY <3>a, <3>b
@@ -3798,29 +3814,6 @@ LEMMA MaxReachedProps ==
   <1>ex. \E mx \in MaxCandOf(rd) : \A o \in MaxCandOf(rd) : mx >= o
       BY <1>sub, <1>ne, ConstNat, BoundedMaxExists
   <1> QED  BY <1>ex DEF MaxReachedOf
-
-\* UponQuorumOfPrecommitsAny(p) fires on a 2T+1 precommit-sender quorum at round[p], which lifts
-\* (monotone) to a 2T+1 post-state quorum PCAllP(round[p]).
-LEMMA UQPAGivesPostQuorum ==
-  ASSUME IndTypeOk, Step, NEW p \in Corr, UponQuorumOfPrecommitsAny(p)
-  PROVE  Cardinality(PCAllP(round[p])) >= 2 * T + 1
-  <1> USE DEF IndTypeOk
-  <1>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
-  <1> PICK ev \in SUBSET msgs_precommit[round[p]] :
-         Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
-      BY Zenon DEF UponQuorumOfPrecommitsAny
-  <1>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1  OBVIOUS
-  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
-  <1>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])  BY DEF PCAll
-  <1>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
-  <1>finPC. IsFiniteSet(PCAll(round[p]))  BY <1>pcSub, <1>finU, FS_Subset
-  <1>pcQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
-      BY <1>gev, <1>evSub, <1>finPC, ConstNat, SubsetCardGeq
-  <1>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))  BY <1>rpDom, PCAllMonotone
-  <1>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
-  <1>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <1>finPC, FS_CardinalityType
-  <1>natPP. Cardinality(PCAllP(round[p])) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
-  <1> QED  BY <1>pcQ, <1>mono, <1>natPC, <1>natPP, ConstNat, SMT
 
 \* A correct process reaches round R (R < max reached) only after every earlier round collected a
 \* 2T+1 precommit quorum. The global max advances only via UponQuorumOfPrecommitsAny (+1, whose
@@ -3920,28 +3913,40 @@ THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
 \* premise vacuous, and the locking action sets step to PRECOMMIT.
 THEOREM Pres_AllValidInCurrentRoundPrecommitted ==
   ASSUME TypedIndInv, Step PROVE AllValidInCurrentRoundPrecommitted'
-  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  \* Extract only the conjuncts this proof needs (pre-invariant + bound + typing) instead of
+  \* USE DEF-expanding all of TypedIndInv -- the full expansion bloats the single-shot SMT call
+  \* over the 10 action bodies enough to time out under -threads contention.
+  <1>pre. /\ IndTypeOk
+          /\ AllValidInCurrentRoundPrecommitted
+          /\ AllValidAndLockedRoundBounded
+      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] = round'[q]
                PROVE  step'[q] = "PRECOMMIT_OF_STEP" \/ step'[q] = "DECIDED_OF_STEP"
       BY DEF AllValidInCurrentRoundPrecommitted
   <1> QED
-      BY SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
+      BY <1>pre, SMT DEF Step, UponProposalInPropose, UponProposalInProposeAndPrevote,
          UponProposalInPrevoteOrCommitAndPrevote, UponQuorumOfPrevotesAny,
          UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision, OnTimeoutPropose,
          OnQuorumOfNilPrevotes, OnRoundCatchup,
-         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded
+         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded, IndTypeOk
 
 \* locked_round and valid_round change only in UponProposalInPrevoteOrCommitAndPrevote, which
 \* sets both to round[p] (lab_then) or leaves locked_round and sets valid_round = round[p]
 \* (lab_else, where locked_round <= round by AllValidAndLockedRoundBounded).
 THEOREM Pres_AllLockedRoundBelowValidRound ==
   ASSUME TypedIndInv, Step PROVE AllLockedRoundBelowValidRound'
-  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  \* Extract only the needed conjuncts; USE DEF-expanding all of TypedIndInv drags the quorum
+  \* invariants' Cardinality set-builders into this single-shot SMT call, pushing it onto the slow
+  \* fallback chain where it times out under -threads contention.
+  <1>pre. /\ IndTypeOk
+          /\ AllLockedRoundBelowValidRound
+          /\ AllValidAndLockedRoundBounded
+      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr PROVE locked_round'[q] <= valid_round'[q]
       BY DEF AllLockedRoundBelowValidRound
   <1> QED
-      BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
-         AllLockedRoundBelowValidRound, AllValidAndLockedRoundBounded
+      BY <1>pre, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
+         AllLockedRoundBelowValidRound, AllValidAndLockedRoundBounded, IndTypeOk
 
 \* valid_round changes only in UponProposalInPrevoteOrCommitAndPrevote (to round[p]); lab_then
 \* adds a precommit by p at round[p], lab_else has step[p] = PRECOMMIT so a precommit by p at
@@ -3949,7 +3954,16 @@ THEOREM Pres_AllLockedRoundBelowValidRound ==
 \* unchanged and its old precommit persists (PrecommitMonotone).
 THEOREM Pres_AllIfValidRoundThenPrecommitted ==
   ASSUME TypedIndInv, Step PROVE AllIfValidRoundThenPrecommitted'
-  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  \* Keep only IndTypeOk (typing) ambient as a fact and pull the three non-typing conjuncts this
+  \* proof needs separately; USE DEF-expanding all of TypedIndInv drags the quorum invariants'
+  \* nested Cardinality set-builders into every obligation, bloating the SMT calls enough to time
+  \* out under -threads contention.
+  <1>tok. IndTypeOk  BY DEF TypedIndInv, IndInv, IndInvMin
+  <1> USE <1>tok DEF IndTypeOk
+  <1>pre. /\ AllIfValidRoundThenPrecommitted
+          /\ AllIfInPrecommitThenSentPrecommit
+          /\ AllValidAndLockedRoundBounded
+      BY DEF TypedIndInv, IndInv, IndInvMin
   <1> USE DEF AllIfValidRoundThenPrecommitted
   <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] # -1
                PROVE  \E m \in msgs_precommit'[valid_round'[q]] : q = m.src
@@ -3958,15 +3972,45 @@ THEOREM Pres_AllIfValidRoundThenPrecommitted ==
       BY SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
   <1>1. CASE valid_round'[q] = valid_round[q]
       \* valid_round unchanged: the old precommit at valid_round[q] persists.
-      <2>a. \E m \in msgs_precommit[valid_round[q]] : q = m.src  BY <1>1
+      <2>a. \E m \in msgs_precommit[valid_round[q]] : q = m.src  BY <1>1, <1>pre
       <2> PICK m \in msgs_precommit[valid_round[q]] : q = m.src  BY <2>a
       <2> QED  BY <2>a, <1>1, <1>vrq, PrecommitMonotone
   <1>2. CASE valid_round'[q] # valid_round[q]
       \* only UponProposalInPrevoteOrCommitAndPrevote(q) changes valid_round[q], to round[q];
-      \* lab_then adds q's precommit at round[q], lab_else has step[q] = PRECOMMIT.
-      <2> QED
-          BY <1>vrq, PrecommitMonotone, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote,
-             AllIfInPrecommitThenSentPrecommit, AllValidAndLockedRoundBounded
+      \* lab_then adds q's precommit at round[q], lab_else has step[q] = PRECOMMIT. Decomposed into
+      \* the two labels so each obligation stays small (a single-shot SMT over Step + the full
+      \* invariant times out under -threads contention).
+      \* Identify the actor cheaply via a valid_round frame selector: only UPCP changes valid_round
+      \* (every other branch keeps its UNCHANGED frame), so the actor is q.
+      <2>sel. \/ valid_round' = valid_round
+              \/ \E pp \in Corr : UponProposalInPrevoteOrCommitAndPrevote(pp)
+          BY DEF Step
+      <2>act. UponProposalInPrevoteOrCommitAndPrevote(q)
+          <3>1. CASE valid_round' = valid_round
+              <4> QED  BY <3>1, <1>2
+          <3>2. CASE \E pp \in Corr : UponProposalInPrevoteOrCommitAndPrevote(pp)
+              <4> PICK pp \in Corr : UponProposalInPrevoteOrCommitAndPrevote(pp)  BY <3>2
+              <4>vr. valid_round' = [valid_round EXCEPT ![pp] = round[pp]]
+                  BY Zenon DEF UponProposalInPrevoteOrCommitAndPrevote
+              <4>pq. pp = q  BY <4>vr, <1>2, SMT
+              <4> QED  BY <4>pq
+          <3> QED  BY <2>sel, <3>1, <3>2
+      <2>vr. valid_round'[q] = round[q]
+          BY <2>act, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+      <2>rdom. round[q] \in (0)..(MaxRound)  BY DEF IndTypeOk
+      <2>ex. \E m \in msgs_precommit'[round[q]] : q = m.src
+          <3>then. CASE step[q] = "PREVOTE_OF_STEP"
+              \* lab_then broadcasts q's precommit for the proposed value at round[q].
+              <4> QED  BY <2>act, <3>then, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+          <3>else. CASE step[q] # "PREVOTE_OF_STEP"
+              \* lab_else: step[q] = PRECOMMIT, so q's precommit at round[q] already exists.
+              <4>pcstep. step[q] = "PRECOMMIT_OF_STEP"
+                  BY <2>act, <3>else, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
+              <4>old. \E m \in msgs_precommit[round[q]] : q = m.src
+                  BY <4>pcstep, <1>pre DEF AllIfInPrecommitThenSentPrecommit
+              <4> QED  BY <4>old, <2>rdom, PrecommitMonotone
+          <3> QED  BY <3>then, <3>else
+      <2> QED  BY <2>ex, <2>vr
   <1> QED  BY <1>1, <1>2
 
 \* Proposals are added only by InsertProposal (correct proposer, step PROPOSE), which sets the
@@ -3975,14 +4019,21 @@ THEOREM Pres_AllIfValidRoundThenPrecommitted ==
 \* (AllValidAndLockedRoundBounded), so valid_round[p] < round[p].
 THEOREM Pres_AllCorrectProposalValidRoundBelowRound ==
   ASSUME TypedIndInv, Step PROVE AllCorrectProposalValidRoundBelowRound'
-  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  \* Extract only the needed conjuncts; USE DEF-expanding all of TypedIndInv drags the quorum
+  \* invariants' Cardinality set-builders into this single-shot SMT call, pushing it onto the slow
+  \* fallback chain where it times out under -threads contention.
+  <1>pre. /\ IndTypeOk
+          /\ AllCorrectProposalValidRoundBelowRound
+          /\ AllValidInCurrentRoundPrecommitted
+          /\ AllValidAndLockedRoundBounded
+      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW mp \in msgs_propose'[r], mp.src \in Corr
                PROVE  r > mp.valid_round
       BY DEF AllCorrectProposalValidRoundBelowRound
   <1> QED
-      BY DisjointCF, SMT DEF Step, InsertProposal, FaultyStep,
+      BY <1>pre, DisjointCF, SMT DEF Step, InsertProposal, FaultyStep,
          AllCorrectProposalValidRoundBelowRound,
-         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded
+         AllValidInCurrentRoundPrecommitted, AllValidAndLockedRoundBounded, IndTypeOk
 
 \* A fresh non-nil precommit by a correct process p at r1 is added only by
 \* UponProposalInPrevoteOrCommitAndPrevote(p) (the only action adding a non-nil correct precommit),
@@ -4103,11 +4154,12 @@ THEOREM Pres_PrecommitLocksLaterPrevotesOp ==
           \* unchanged (ruled out by DEF Step's frame, so their DEFs are unneeded -- unfolding all
           \* eleven overwhelms SMT), OnTimeoutPropose adds only a nil prevote (id = -1 # v), and
           \* FaultyStep adds only faulty senders (p \notin Faulty by DisjointCF).
+          \* The fresh non-nil prevote pv by correct p at r2 forces a value-prevote action, via the
+          \* standalone lemma (clean context); inlining the action case-split here drowns the SMT
+          \* call in this theorem's full-invariant ambient context and times out under -threads.
           <3>split. \/ UponProposalInPropose(p)
                      \/ UponProposalInProposeAndPrevote(p)
-              BY <2>pvFresh, DisjointCF, NilNotValid, SMT
-                 DEF Step, FaultyStep, UponProposalInPropose,
-                     UponProposalInProposeAndPrevote, OnTimeoutPropose
+              BY <2>pvFresh, NilNotValid, FreshValuePrevoteAction
           <3>proposal. CASE UponProposalInPropose(p)
               <4>rd. round[p] = r2
                   BY <2>pvFresh, <3>proposal, SMT DEF UponProposalInPropose
