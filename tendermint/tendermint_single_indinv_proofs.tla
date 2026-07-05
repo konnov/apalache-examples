@@ -4,39 +4,32 @@
  * `tendermint_single_indinv.tla` (a machine-generated Apalache model).
  *
  * Goals (mirroring ben-or83/Ben_or83_proofs.tla):
- *   1. `TypedIndInvMin` is inductive: base case `Init => TypedIndInvMin`
- *      (Section B) and the step `TypedIndInvMin /\ Step => TypedIndInvMin'`
+ *   1. `TypedIndInv` is inductive: base case `Init => TypedIndInv`
+ *      (Section B) and the step `TypedIndInv /\ Step => TypedIndInv'`
  *      (Section C).
- *   2. `TypedIndInvMin => Agreement` (Section D).
+ *   2. `TypedIndInv => Agreement` (Section D).
  *
- * We target `TypedIndInvMin` (IndTypeOk /\ IndInvMin, 17 conjuncts) first. If it
- * turns out not to be inductive, escalate to the full `TypedIndInv` (25
- * conjuncts). Targeting IndInvMin also keeps the two `ApaFoldSet` conjuncts
- * (which live only in the extra 8 conjuncts of IndInv and in IndInit) off the
- * proof's critical path; `Apalache.tla` is only a parse-time dependency here.
+ * `TypedIndInv` is `IndTypeOk /\ IndInv` (25 conjuncts). The proof is complete
+ * end-to-end with no remaining holes (no OMITTED stubs): `InitInd`
+ * (Init => TypedIndInv), `Inductive` (TypedIndInv /\ Step => TypedIndInv', all
+ * 25 conjuncts preserved), and `AgreementThm` (TypedIndInv => Agreement).
+ * (An earlier `TypedIndInvMin` -- the 17-conjunct subset IndTypeOk /\ IndInvMin --
+ * was targeted first but is not inductive on its own: PrecommitsLockValue needs
+ * the extra 8 conjuncts. The development now uses the full `TypedIndInv`
+ * throughout; the vestigial `TypedIndInvMin`/`IndInvMin` definitions survive only
+ * in the generated spec.)
  *
- * Current status: the A/B/C/D skeleton is in place and the following are proved
- * end-to-end: the base case `InitInd` (Init => TypedIndInvMin), type preservation
- * `TypePres` (IndTypeOk'), and 4 inductive-step conjuncts --
- * `AllValidAndLockedRoundBounded`, `AllLockedRoundIffLockedValue`,
- * `AllValidRoundIffValidValue`, and `AllIfInDecidedThenValidDecision` --
- * plus the record-typing helpers used by TypePres. Still to be filled
- * in incrementally: the Section A quorum-intersection lemma, the remaining 12
- * inductive-step conjuncts, and the Section D agreement proof.
- *
- * Environment: tlapm (TLAPS) build `b064bce-dirty` (`tlapm --version`), using the
- * stdlib TLAPS + FiniteSetTheorems modules (no Isabelle backend; all obligations
- * discharged by Zenon/SMT). The spec `EXTENDS Apalache`; the community
- * `Apalache.tla` crashes this tlapm build (its `RECURSIVE ApaFoldSet` with a
- * higher-order operator argument trips the frontend), so a minimal parse-time
- * shim `Apalache.tla` sits in this directory (see its header). Verify with:
- *   tlapm --stretch 2 --threads 4 -I . tendermint_single_indinv_proofs.tla
- *   => "All 2978 obligations proved"; proof stubs contribute no obligation.
- *      This header is historical; search for open proof-body markers before
- *      assuming any proof hole remains.
- * Syntax/semantic checks while editing: SANY via tla2tools.jar (note: this build
- * flags 12 spurious "multiply-defined 'p'" errors on the `<1>sel` selectors that
- * tlapm's own frontend accepts -- they are pre-existing and not a real defect).
+ * Environment: tlapm (TLAPS) with the stdlib TLAPS + FiniteSetTheorems modules.
+ * Most obligations go to SMT; ~120 higher-order set-cardinality obligations fall
+ * back to Zenon and a handful to the Isabelle backend (a few are pinned to `Isa`
+ * so they skip the doomed SMT/Zenon attempts, which otherwise waste time and, under
+ * `--threads` contention, cause nondeterministic timeouts). The spec is a plain
+ * `EXTENDS Integers, FiniteSets, Sequences` (the old `Apalache.tla` shim is gone --
+ * `Max` now renders via `CHOOSE`, not `ApaFoldSet`). Verify with:
+ *   tlapm --stretch 2 --threads 3 -I . tendermint_single_indinv_proofs.tla
+ *   => "All 3769 obligations proved", exit 0.
+ * Note: SANY flags ~12 spurious "multiply-defined 'p'" errors on the `<1>sel`
+ * selectors that tlapm's own frontend accepts -- pre-existing, not a real defect.
  *
  * Igor Konnov, Claude Opus 4.8, July 2026
  *)
@@ -199,7 +192,7 @@ THEOREM QuorumHasCorrect ==
 \*****************************************************************************
 
 \* Base case of induction. At Init the message logs are empty and every
-\* per-process field is nil (-1) or 0, so each IndInvMin conjunct holds: the
+\* per-process field is nil (-1) or 0, so each IndInv conjunct holds: the
 \* message-quantified ones are vacuous, the nil-flag ones agree, and the two
 \* existential-witness conjuncts (AllNoEquivocationByCorrect, PrecommitsLockValue)
 \* close via ValidValuesNonEmpty and Cardinality({}) = 0.
@@ -305,7 +298,7 @@ THEOREM InitInd ==
       BY <1>type, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9, <1>10,
          <1>11, <1>12, <1>13, <1>14, <1>15, <1>16, <1>17,
          <1>18, <1>19, <1>20, <1>21, <1>22, <1>23, <1>24, <1>25
-      DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+      DEF TypedIndInv, IndInv
 
 \* Record-typing helpers: a freshly built message record lies in the IndTypeOk
 \* element set. These supply the tuple witness that Zenon/SMT cannot guess for
@@ -756,24 +749,24 @@ LEMMA StepChangeChar ==
   <1> QED BY <1>sel, <1>0, <1>1, <1>2, <1>3, <1>4, <1>5, <1>6, <1>7, <1>8, <1>9
 
 LEMMA EnteredPrevoteHasSentPrevote ==
-  ASSUME TypedIndInvMin, Step, NEW q \in Corr,
+  ASSUME TypedIndInv, Step, NEW q \in Corr,
          step[q] # "PREVOTE_OF_STEP", step'[q] = "PREVOTE_OF_STEP"
   PROVE  \E m \in msgs_prevote'[round'[q]] :
            /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
            /\ q = m.src
-  BY SMT DEF TypedIndInvMin, IndInvMin, IndTypeOk, Step, InsertProposal,
+  BY SMT DEF TypedIndInv, IndInv, IndTypeOk, Step, InsertProposal,
      UponProposalInPropose, UponProposalInProposeAndPrevote,
      UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
      UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
      OnTimeoutPropose, OnQuorumOfNilPrevotes, OnRoundCatchup, FaultyStep
 
 LEMMA EnteredPrecommitHasSentPrecommit ==
-  ASSUME TypedIndInvMin, Step, NEW q \in Corr,
+  ASSUME TypedIndInv, Step, NEW q \in Corr,
          step[q] # "PRECOMMIT_OF_STEP", step'[q] = "PRECOMMIT_OF_STEP"
   PROVE  \E m \in msgs_precommit'[round'[q]] :
            /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
            /\ q = m.src
-  BY SMT DEF TypedIndInvMin, IndInvMin, IndTypeOk, Step, InsertProposal,
+  BY SMT DEF TypedIndInv, IndInv, IndTypeOk, Step, InsertProposal,
      UponProposalInPropose, UponProposalInProposeAndPrevote,
      UponQuorumOfPrevotesAny, UponProposalInPrevoteOrCommitAndPrevote,
      UponQuorumOfPrecommitsAny, UponProposalInPrecommitNoDecision,
@@ -791,9 +784,9 @@ LEMMA RoundMonotone ==
 \* their own UNCHANGED tuple. Message-adding actions build records that match the
 \* IndTypeOk element sets (src in Corr\union Faulty, round = index, value typed).
 THEOREM TypePres ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  IndTypeOk'
-  <1> USE DEF TypedIndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndTypeOk
   <1>1. (round \in [Corr -> (0)..(MaxRound)])'
         BY DEF Step, UponQuorumOfPrecommitsAny, OnRoundCatchup
   <1>2. (step \in [Corr -> {"PROPOSE_OF_STEP", "PREVOTE_OF_STEP", "PRECOMMIT_OF_STEP", "DECIDED_OF_STEP"}])'
@@ -1025,8 +1018,8 @@ THEOREM TypePres ==
 \* inlines the disjunction of the 10 correct sub-actions (each guarded by a
 \* process p \in Corr and paired with its own UNCHANGED tuple) plus FaultyStep.
 \*
-\* For each IndInvMin conjunct C we prove an assembler
-\*   Pres_C == ASSUME TypedIndInvMin, Step PROVE C'
+\* For each IndInv conjunct C we prove an assembler
+\*   Pres_C == ASSUME TypedIndInv, Step PROVE C'
 \* by splitting Step into its 11 disjuncts and discharging each with a per-action
 \* theorem Pres_C_<action>. Below, `AllValidAndLockedRoundBounded` is fully worked
 \* out as the template; later assemblers follow the same shape.
@@ -1047,63 +1040,63 @@ THEOREM TypePres ==
 \* --- 8 trivial (UNCHANGED) cases ---
 
 THEOREM Pres_Bounded_InsertProposal ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, InsertProposal(p),
+  ASSUME TypedIndInv, NEW p \in Corr, InsertProposal(p),
          UNCHANGED <<round, step, decision, locked_value, locked_round, valid_value, valid_round, msgs_prevote, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_UponProposalInPropose ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, UponProposalInPropose(p),
+  ASSUME TypedIndInv, NEW p \in Corr, UponProposalInPropose(p),
          UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_UponProposalInProposeAndPrevote ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, UponProposalInProposeAndPrevote(p),
+  ASSUME TypedIndInv, NEW p \in Corr, UponProposalInProposeAndPrevote(p),
          UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_UponQuorumOfPrevotesAny ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, UponQuorumOfPrevotesAny(p),
+  ASSUME TypedIndInv, NEW p \in Corr, UponQuorumOfPrevotesAny(p),
          UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_UponProposalInPrecommitNoDecision ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, UponProposalInPrecommitNoDecision(p),
+  ASSUME TypedIndInv, NEW p \in Corr, UponProposalInPrecommitNoDecision(p),
          UNCHANGED <<round, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_OnTimeoutPropose ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, OnTimeoutPropose(p),
+  ASSUME TypedIndInv, NEW p \in Corr, OnTimeoutPropose(p),
          UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_OnQuorumOfNilPrevotes ==
-  ASSUME TypedIndInvMin, NEW p \in Corr, OnQuorumOfNilPrevotes(p),
+  ASSUME TypedIndInv, NEW p \in Corr, OnQuorumOfNilPrevotes(p),
          UNCHANGED <<round, decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 THEOREM Pres_Bounded_Faulty ==
-  ASSUME TypedIndInvMin, FaultyStep,
+  ASSUME TypedIndInv, FaultyStep,
          UNCHANGED <<round, step, decision, locked_value, locked_round, valid_value, valid_round, last_action>>
   PROVE  AllValidAndLockedRoundBounded'
-  BY DEF TypedIndInvMin, IndInvMin, AllValidAndLockedRoundBounded
+  BY DEF TypedIndInv, IndInv, AllValidAndLockedRoundBounded
 
 \* --- 3 substantive cases ---
 
 \* Sets valid_round[p]:=round[p], and locked_round[p]:=round[p] in the "then"
 \* branch (else locked_round UNCHANGED); round itself is UNCHANGED.
 THEOREM Pres_Bounded_UponProposalInPrevoteOrCommitAndPrevote ==
-  ASSUME TypedIndInvMin, NEW p \in Corr,
+  ASSUME TypedIndInv, NEW p \in Corr,
          UponProposalInPrevoteOrCommitAndPrevote(p),
          UNCHANGED <<round, decision, msgs_propose, msgs_prevote>>
   PROVE  AllValidAndLockedRoundBounded'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllValidAndLockedRoundBounded
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllValidAndLockedRoundBounded
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  valid_round'[q] <= round'[q] /\ locked_round'[q] <= round'[q]
       OBVIOUS
@@ -1115,7 +1108,7 @@ THEOREM Pres_Bounded_UponProposalInPrevoteOrCommitAndPrevote ==
         BY DEF UponProposalInPrevoteOrCommitAndPrevote
   <1>4. /\ DOMAIN round = Corr /\ DOMAIN valid_round = Corr /\ DOMAIN locked_round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        BY SMT DEF TypedIndInvMin, IndTypeOk
+        BY SMT DEF TypedIndInv, IndTypeOk
   <1>5. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
@@ -1123,11 +1116,11 @@ THEOREM Pres_Bounded_UponProposalInPrevoteOrCommitAndPrevote ==
 
 \* Advances round[p] to round[p]+1; valid_round and locked_round are UNCHANGED.
 THEOREM Pres_Bounded_UponQuorumOfPrecommitsAny ==
-  ASSUME TypedIndInvMin, NEW p \in Corr,
+  ASSUME TypedIndInv, NEW p \in Corr,
          UponQuorumOfPrecommitsAny(p),
          UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllValidAndLockedRoundBounded
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllValidAndLockedRoundBounded
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  valid_round'[q] <= round'[q] /\ locked_round'[q] <= round'[q]
       OBVIOUS
@@ -1137,7 +1130,7 @@ THEOREM Pres_Bounded_UponQuorumOfPrecommitsAny ==
         BY SMT
   <1>3. /\ DOMAIN round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        BY SMT DEF TypedIndInvMin, IndTypeOk
+        BY SMT DEF TypedIndInv, IndTypeOk
   <1>4. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
@@ -1145,11 +1138,11 @@ THEOREM Pres_Bounded_UponQuorumOfPrecommitsAny ==
 
 \* Jumps round[p] up to some rnd > round[p]; valid_round and locked_round UNCHANGED.
 THEOREM Pres_Bounded_OnRoundCatchup ==
-  ASSUME TypedIndInvMin, NEW p \in Corr,
+  ASSUME TypedIndInv, NEW p \in Corr,
          OnRoundCatchup(p),
          UNCHANGED <<decision, locked_value, locked_round, valid_value, valid_round, msgs_propose, msgs_prevote, msgs_precommit>>
   PROVE  AllValidAndLockedRoundBounded'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllValidAndLockedRoundBounded
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllValidAndLockedRoundBounded
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  valid_round'[q] <= round'[q] /\ locked_round'[q] <= round'[q]
       OBVIOUS
@@ -1159,7 +1152,7 @@ THEOREM Pres_Bounded_OnRoundCatchup ==
         BY SMT
   <1>3. /\ DOMAIN round = Corr
         /\ round[p] \in Int /\ round[q] \in Int
-        BY SMT DEF TypedIndInvMin, IndTypeOk
+        BY SMT DEF TypedIndInv, IndTypeOk
   <1>4. valid_round[q] <= round[q] /\ locked_round[q] <= round[q]
         OBVIOUS
   <1> QED
@@ -1167,7 +1160,7 @@ THEOREM Pres_Bounded_OnRoundCatchup ==
 
 \* Assembler: split Step into its 11 disjuncts.
 THEOREM Pres_AllValidAndLockedRoundBounded ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  AllValidAndLockedRoundBounded'
   BY Pres_Bounded_InsertProposal,
      Pres_Bounded_UponProposalInPropose,
@@ -1189,8 +1182,8 @@ THEOREM Pres_AllValidAndLockedRoundBounded ==
 \* ---------------------------------------------------------------------------
 
 THEOREM Pres_AllNoFutureMessagesSent ==
-  ASSUME TypedIndInvMin, Step PROVE AllNoFutureMessagesSent'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllNoFutureMessagesSent'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  /\ /\ \/ q = Proposer[round'[q]]
                          \/ \A mp \in msgs_propose'[round'[q]] : q # mp.src
@@ -1354,8 +1347,8 @@ THEOREM Pres_AllNoFutureMessagesSent ==
      <1>decide, <1>timeoutPropose, <1>nilPrevotes, <1>roundCatchup
 
 THEOREM Pres_AllIfInPrevoteThenSentPrevote ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfInPrevoteThenSentPrevote'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfInPrevoteThenSentPrevote'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "PREVOTE_OF_STEP"
                PROVE  \E m \in msgs_prevote'[round'[q]] :
                          /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
@@ -1378,8 +1371,8 @@ THEOREM Pres_AllIfInPrevoteThenSentPrevote ==
   <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfInPrecommitThenSentPrecommit ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfInPrecommitThenSentPrecommit'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfInPrecommitThenSentPrecommit'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "PRECOMMIT_OF_STEP"
                PROVE  \E m \in msgs_precommit'[round'[q]] :
                          /\ m.id \in ((ValidValues \union InvalidValues) \union {-1})
@@ -1406,9 +1399,9 @@ THEOREM Pres_AllIfInPrecommitThenSentPrecommit ==
 \* an already-decided process keeps its decision (it cannot act) and the proposal
 \* persists by ProposeMonotone.
 THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  AllIfInDecidedThenReceivedProposal'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "DECIDED_OF_STEP"
                PROVE  \E rr \in (0)..(MaxRound) : \E mm \in msgs_propose'[rr] :
                         mm.src = Proposer[rr] /\ mm.proposal = decision'[q]
@@ -1451,8 +1444,8 @@ THEOREM Pres_AllIfInDecidedThenReceivedProposal ==
   <1> QED  BY <1>1, <1>2
 
 THEOREM Pres_AllIfInDecidedThenReceivedTwoThirds ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfInDecidedThenReceivedTwoThirds'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfInDecidedThenReceivedTwoThirds'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, step'[q] = "DECIDED_OF_STEP"
                PROVE  \E rr \in (0)..(MaxRound) :
                          Cardinality({s \in (Corr \union Faulty) :
@@ -1577,9 +1570,9 @@ THEOREM Pres_AllIfInDecidedThenReceivedTwoThirds ==
 \* leaving decision unchanged, so the old biconditional carries: the guard makes
 \* the old LHS false, hence decision[p] was not a ValidValue.
 THEOREM Pres_AllIfInDecidedThenValidDecision ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  AllIfInDecidedThenValidDecision'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllIfInDecidedThenValidDecision
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllIfInDecidedThenValidDecision
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  (step'[q] = "DECIDED_OF_STEP") = (decision'[q] \in ValidValues)
       OBVIOUS
@@ -1595,9 +1588,9 @@ THEOREM Pres_AllIfInDecidedThenValidDecision ==
 \* locked_round[p]:=round[p] (in 0..MaxRound, so /= -1) together; every other
 \* action leaves both UNCHANGED. So the -1 flags stay in agreement.
 THEOREM Pres_AllLockedRoundIffLockedValue ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  AllLockedRoundIffLockedValue'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllLockedRoundIffLockedValue
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllLockedRoundIffLockedValue
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  (locked_round'[q] = -1) = (locked_value'[q] = -1)
       OBVIOUS
@@ -1607,9 +1600,9 @@ THEOREM Pres_AllLockedRoundIffLockedValue ==
 \* Symmetric to the above: only UponProposalInPrevoteOrCommitAndPrevote sets
 \* valid_value[p]:=v (/= -1) and valid_round[p]:=round[p] (/= -1) together.
 THEOREM Pres_AllValidRoundIffValidValue ==
-  ASSUME TypedIndInvMin, Step
+  ASSUME TypedIndInv, Step
   PROVE  AllValidRoundIffValidValue'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk, AllValidRoundIffValidValue
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk, AllValidRoundIffValidValue
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  (valid_round'[q] = -1) = (valid_value'[q] = -1)
       OBVIOUS
@@ -1617,8 +1610,8 @@ THEOREM Pres_AllValidRoundIffValidValue ==
       BY NilNotValid, SMT DEF Step, UponProposalInPrevoteOrCommitAndPrevote
 
 THEOREM Pres_AllIfValidRoundThenTwoThirdsPrevotes ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfValidRoundThenTwoThirdsPrevotes'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfValidRoundThenTwoThirdsPrevotes'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] # -1
                PROVE  Cardinality({s \in (Corr \union Faulty) :
                          \E m \in {mm \in msgs_prevote'[valid_round'[q]] :
@@ -1724,8 +1717,8 @@ THEOREM Pres_AllIfValidRoundThenTwoThirdsPrevotes ==
   <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfLockedRoundThenSentCommit ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfLockedRoundThenSentCommit'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfLockedRoundThenSentCommit'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, locked_round'[q] # -1
                PROVE  \E rr \in (0)..(MaxRound) :
                          /\ rr <= round'[q]
@@ -1758,11 +1751,11 @@ THEOREM Pres_AllIfLockedRoundThenSentCommit ==
       <2>4. m \in msgs_precommit'[rr]
             BY <2>2, PrecommitMonotone
       <2>5. round[q] <= round'[q]
-            BY RoundMonotone DEF TypedIndInvMin, IndTypeOk
+            BY RoundMonotone DEF TypedIndInv, IndTypeOk
       <2>6. IndTypeOk'
             BY TypePres
       <2>7. /\ rr \in Int /\ round[q] \in Int /\ round'[q] \in Int
-            BY <2>1, <2>6, ConstNat, SMT DEF TypedIndInvMin, IndTypeOk
+            BY <2>1, <2>6, ConstNat, SMT DEF TypedIndInv, IndTypeOk
       <2>8. rr <= round'[q]
             BY <2>3, <2>5, <2>7, SMT
       <2> QED BY <1>1, <2>1, <2>2, <2>4, <2>8
@@ -1781,7 +1774,7 @@ THEOREM Pres_AllIfLockedRoundThenSentCommit ==
                        (msgs_precommit[round[q]] \union {[id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q]})]
             BY <1>2, <2>1, SMT DEF UponProposalInPrevoteOrCommitAndPrevote
       <2>3. round[q] <= round'[q]
-            BY RoundMonotone DEF TypedIndInvMin, IndTypeOk
+            BY RoundMonotone DEF TypedIndInv, IndTypeOk
       <2>4. round[q] \in (0)..(MaxRound)
             BY SMT DEF IndTypeOk
       <2>5. [id |-> v, kind |-> "PRECOMMIT_OF_VOTEKIND", round |-> round[q], src |-> q] \in msgs_precommit'[round[q]]
@@ -1792,8 +1785,8 @@ THEOREM Pres_AllIfLockedRoundThenSentCommit ==
   <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllLatestPrecommitHasLockedRound ==
-  ASSUME TypedIndInvMin, Step PROVE AllLatestPrecommitHasLockedRound'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllLatestPrecommitHasLockedRound'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr
                PROVE  \/ /\ locked_round'[q] = -1
                           /\ locked_value'[q] = -1
@@ -1846,10 +1839,10 @@ THEOREM Pres_AllLatestPrecommitHasLockedRound ==
                 BY <2>old, <2>1, SMT
           <3> QED
                 BY <1>1, <2>1, <3>oldNil, <2>shape, ConstNat, SMT
-                DEF TypedIndInvMin, IndTypeOk
+                DEF TypedIndInv, IndTypeOk
       <2>2. CASE locked_round[q] # -1
           <3>0. locked_round[q] \in (0)..(MaxRound)
-                BY <2>2, SMT DEF TypedIndInvMin, IndTypeOk
+                BY <2>2, SMT DEF TypedIndInv, IndTypeOk
           <3>oldVal. locked_value[q] # -1
                 BY <2>old, <2>2, SMT
           <3>oldUni. \A r \in (0)..(MaxRound) : \A m \in msgs_precommit[r] :
@@ -1901,8 +1894,8 @@ THEOREM Pres_AllLatestPrecommitHasLockedRound ==
   <1> QED BY <1>1, <1>2
 
 THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
-  ASSUME TypedIndInvMin, Step PROVE AllIfSentPrevoteThenReceivedProposalOrTwoThirds'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllIfSentPrevoteThenReceivedProposalOrTwoThirds'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
                        NEW m \in msgs_prevote'[r]
                PROVE  \/ m.src \in Faulty
@@ -2037,7 +2030,7 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
                             \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
                               s = pv.src})
                     BY <4>rty, <4>idty, PrevoteSenderSetCardinalityMonotone, Isa
-                       DEF TypedIndInvMin
+                       DEF TypedIndInv
               <4>oldCard. Cardinality({s \in (Corr \union Faulty) :
                              \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
                                s = pv.src}) >= ((2 * T) + 1)
@@ -2174,8 +2167,8 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
   <1> QED BY <1>split, <1>1, <1>2, <1>3, <1>4, <1>5
 
 THEOREM Pres_IfSentPrecommitThenSentPrevote ==
-  ASSUME TypedIndInvMin, Step PROVE IfSentPrecommitThenSentPrevote'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE IfSentPrecommitThenSentPrevote'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
                        NEW m \in msgs_precommit'[r],
                        m.src \in Corr
@@ -2213,8 +2206,13 @@ THEOREM Pres_IfSentPrecommitThenSentPrevote ==
   <1> QED BY <1>split, <1>1, <1>2
 
 THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
-  ASSUME TypedIndInvMin, Step PROVE IfSentPrecommitThenReceivedTwoThirds'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE IfSentPrecommitThenReceivedTwoThirds'
+  \* Keep only IndTypeOk (typing) + the one pre-invariant this proof needs ambient; USE DEF-
+  \* expanding all of IndInv drags the quorum conjuncts' nested-Cardinality set-builders into
+  \* every obligation, timing out the fallback-less `BY ... SMT DEF FaultyStep` case.
+  <1>tok. IndTypeOk  BY DEF TypedIndInv, IndInv
+  <1> USE <1>tok DEF IndTypeOk
+  <1>pre. IfSentPrecommitThenReceivedTwoThirds  BY DEF TypedIndInv, IndInv
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound),
                        NEW m \in msgs_precommit'[r],
                        m.src \in Corr
@@ -2305,7 +2303,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                 \/ /\ m.id = -1
                    /\ Cardinality({s \in (Corr \union Faulty) :
                         \E pv \in msgs_prevote[r] : s = pv.src}) >= ((2 * T) + 1)
-            BY <1>1 DEF IfSentPrecommitThenReceivedTwoThirds
+            BY <1>1, <1>pre DEF IfSentPrecommitThenReceivedTwoThirds
       <2>vcase. CASE /\ m.id \in ValidValues
                     /\ Cardinality({s \in (Corr \union Faulty) :
                          \E pv \in {pp \in msgs_prevote[r] : pp.id = m.id} :
@@ -2505,8 +2503,8 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
   <1> QED BY <1>split, <1>1, <1>2, <1>3, <1>4
 
 THEOREM Pres_AllNoEquivocationByCorrect ==
-  ASSUME TypedIndInvMin, Step PROVE AllNoEquivocationByCorrect'
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  ASSUME TypedIndInv, Step PROVE AllNoEquivocationByCorrect'
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound)
                PROVE  /\ \E pv \in ValidValues :
                            \E pvr \in ((0)..(MaxRound) \union {-1}) :
@@ -2730,7 +2728,7 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
          <2>proposalPrevoteCommit, <2>nilPrevotes
   <1> QED BY <1>prop, <1>prevote, <1>precommit
 
-\* PrecommitsLockValue is NOT inductive relative to IndInvMin alone (Apalache CE): a
+\* PrecommitsLockValue is NOT inductive relative to IndInv alone (Apalache CE): a
 \* fresh prevote for w2 in a round above an existing precommit lock for w must be
 \* blocked, which needs the per-process lock PrecommitLocksLaterPrevotes (and the
 \* valid-round conjuncts). Hence this preservation is stated over the full TypedIndInv.
@@ -3271,12 +3269,12 @@ LEMMA FreshPrevoteLockedGivesPreQuorum ==
 \* Cardinality set-builder via PVSet.
 \* ---------------------------------------------------------------------------
 LEMMA PrevoteQuorumFreshOrEarlier ==
-  ASSUME TypedIndInvMin, NEW r \in (0)..(MaxRound), NEW v \in ValidValues,
+  ASSUME TypedIndInv, NEW r \in (0)..(MaxRound), NEW v \in ValidValues,
          Cardinality(PVSet(r, v)) >= 2 * T + 1
   PROVE  \/ (\E prop \in msgs_propose[r] :
                prop.src = Proposer[r] /\ prop.proposal = v /\ prop.valid_round = -1)
          \/ (\E vr \in {x \in (0)..(MaxRound) : x < r} : Cardinality(PVSet(vr, v)) >= 2 * T + 1)
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>vne. v # -1  BY NilNotValid
   \* A 2T+1 quorum for v at r contains a correct prevoter c whose prevote carries id = v.
   <1>sub. PVSet(r, v) \in SUBSET (Corr \union Faulty)  BY PVSetSubset
@@ -3290,7 +3288,7 @@ LEMMA PrevoteQuorumFreshOrEarlier ==
                     prop.src = Proposer[r] /\ prop.proposal = v /\ prop.valid_round = -1)
               \/ (\E vr \in {x \in (0)..(MaxRound) : x < r} : Cardinality(PVSet(vr, v)) >= 2 * T + 1)
       <2>inv. AllIfSentPrevoteThenReceivedProposalOrTwoThirds
-          BY DEF TypedIndInvMin, IndInvMin
+          BY DEF TypedIndInv, IndInv
       <2>raw. \/ mv.src \in Faulty
                \/ mv.id = -1
                \/ /\ mv.id # -1
@@ -3374,7 +3372,7 @@ LEMMA PostPrecommitByCorrectGivesPostPrevoteQuorum ==
          NEW m \in msgs_precommit'[r], m.src \in Corr, m.id \in ValidValues
   PROVE  Cardinality(PVSetP(r, m.id)) >= 2 * T + 1
   <1>postInv. IfSentPrecommitThenReceivedTwoThirds'
-      BY Pres_IfSentPrecommitThenReceivedTwoThirds DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+      BY Pres_IfSentPrecommitThenReceivedTwoThirds DEF TypedIndInv, IndInv
   <1>ne. m.id # -1  BY NilNotValid
   <1> QED  BY <1>postInv, <1>ne, Zenon, SMT DEF IfSentPrecommitThenReceivedTwoThirds, PVSetP
 
@@ -3403,18 +3401,18 @@ LEMMA PostSameRoundPrecommitPrevoteQuorumsContra ==
   <1>dw. \E pv \in msgs_prevote'[r] : pv.src = d /\ pv.id = w  BY DEF PVSetP
   <1>dw2. \E pv \in msgs_prevote'[r] : pv.src = d /\ pv.id = w2  BY DEF PVSetP
   <1>noEq. AllNoEquivocationByCorrect'
-      BY Pres_AllNoEquivocationByCorrect DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+      BY Pres_AllNoEquivocationByCorrect DEF TypedIndInv, IndInv
   <1> QED  BY <1>dw, <1>dw2, <1>wne, <1>noEq DEF AllNoEquivocationByCorrect
 
 \* ---------------------------------------------------------------------------
 \* TOP-LEVEL INDUCTIVE STEP: assemble type preservation + all 17 conjuncts.
 \* ---------------------------------------------------------------------------
-\* Preserving the 17 IndInvMin conjuncts. PrecommitsLockValue needs the extra IndInv
+\* Preserving the 17 IndInv conjuncts. PrecommitsLockValue needs the extra IndInv
 \* conjuncts (via Pres_PrecommitsLockValue), so the hypothesis is the full TypedIndInv;
-\* the other 16 preservations only use the TypedIndInvMin part. Extending the conclusion
+\* the other 16 preservations only use the TypedIndInv part. Extending the conclusion
 \* to the full TypedIndInv' requires preserving the remaining 7 support conjuncts.
 \* ---------------------------------------------------------------------------
-\* Preservation of the 8 extra IndInv support conjuncts (beyond IndInvMin).
+\* Preservation of the 8 extra IndInv support conjuncts (beyond IndInv).
 \* ---------------------------------------------------------------------------
 \* A correct proposer pr = Proposer[r] that reproposes fresh (valid_round = -1) at r never
 \* precommitted a non-nil value below r. Assume a counterexample: a fresh proposal pp by pr at r
@@ -3424,7 +3422,7 @@ LEMMA PostSameRoundPrecommitPrevoteQuorumsContra ==
 \* so AllNoFutureMessagesSent gives r <= round[pr] = r2 < r.
 THEOREM Pres_AllLockedProposerReproposes ==
   ASSUME TypedIndInv, Step PROVE AllLockedProposerReproposes'
-  <1> USE DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound), Proposer[r] \in Corr,
                       NEW pp \in msgs_propose'[r], pp.src = Proposer[r], pp.valid_round = -1,
                       NEW r2 \in {x \in (0)..(MaxRound) : x < r},
@@ -3824,7 +3822,7 @@ THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
   ASSUME TypedIndInv, Step PROVE AllRoundsBelowHavePrecommitQuorum'
   <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>arb. AllRoundsBelowHavePrecommitQuorum  BY DEF TypedIndInv, IndInv
-  <1>tp. IndTypeOk'  BY TypePres DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+  <1>tp. IndTypeOk'  BY TypePres DEF TypedIndInv, IndInv
   <1>rBoundsU. \A k \in Corr : round[k] \in (0)..(MaxRound)  BY DEF IndTypeOk
   <1>rBoundsP. \A k \in Corr : round'[k] \in (0)..(MaxRound)  BY <1>tp DEF IndTypeOk
   <1>domU. DOMAIN round = Corr  BY DEF IndTypeOk
@@ -3919,7 +3917,7 @@ THEOREM Pres_AllValidInCurrentRoundPrecommitted ==
   <1>pre. /\ IndTypeOk
           /\ AllValidInCurrentRoundPrecommitted
           /\ AllValidAndLockedRoundBounded
-      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+      BY DEF TypedIndInv, IndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] = round'[q]
                PROVE  step'[q] = "PRECOMMIT_OF_STEP" \/ step'[q] = "DECIDED_OF_STEP"
       BY DEF AllValidInCurrentRoundPrecommitted
@@ -3941,7 +3939,7 @@ THEOREM Pres_AllLockedRoundBelowValidRound ==
   <1>pre. /\ IndTypeOk
           /\ AllLockedRoundBelowValidRound
           /\ AllValidAndLockedRoundBounded
-      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+      BY DEF TypedIndInv, IndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW q \in Corr PROVE locked_round'[q] <= valid_round'[q]
       BY DEF AllLockedRoundBelowValidRound
   <1> QED
@@ -3958,12 +3956,12 @@ THEOREM Pres_AllIfValidRoundThenPrecommitted ==
   \* proof needs separately; USE DEF-expanding all of TypedIndInv drags the quorum invariants'
   \* nested Cardinality set-builders into every obligation, bloating the SMT calls enough to time
   \* out under -threads contention.
-  <1>tok. IndTypeOk  BY DEF TypedIndInv, IndInv, IndInvMin
+  <1>tok. IndTypeOk  BY DEF TypedIndInv, IndInv, IndInv
   <1> USE <1>tok DEF IndTypeOk
   <1>pre. /\ AllIfValidRoundThenPrecommitted
           /\ AllIfInPrecommitThenSentPrecommit
           /\ AllValidAndLockedRoundBounded
-      BY DEF TypedIndInv, IndInv, IndInvMin
+      BY DEF TypedIndInv, IndInv, IndInv
   <1> USE DEF AllIfValidRoundThenPrecommitted
   <1> SUFFICES ASSUME NEW q \in Corr, valid_round'[q] # -1
                PROVE  \E m \in msgs_precommit'[valid_round'[q]] : q = m.src
@@ -4026,7 +4024,7 @@ THEOREM Pres_AllCorrectProposalValidRoundBelowRound ==
           /\ AllCorrectProposalValidRoundBelowRound
           /\ AllValidInCurrentRoundPrecommitted
           /\ AllValidAndLockedRoundBounded
-      BY DEF TypedIndInv, IndInv, IndInvMin, IndTypeOk
+      BY DEF TypedIndInv, IndInv, IndInv, IndTypeOk
   <1> SUFFICES ASSUME NEW r \in (0)..(MaxRound), NEW mp \in msgs_propose'[r], mp.src \in Corr
                PROVE  r > mp.valid_round
       BY DEF AllCorrectProposalValidRoundBelowRound
@@ -4477,7 +4475,7 @@ THEOREM Inductive ==
      Pres_AllLockedRoundBelowValidRound,
      Pres_AllIfValidRoundThenPrecommitted,
      Pres_AllCorrectProposalValidRoundBelowRound
-  DEF TypedIndInvMin, IndInvMin, TypedIndInv, IndInv
+  DEF TypedIndInv, IndInv
 
 \*****************************************************************************
 \* SECTION D -- AGREEMENT
@@ -4493,13 +4491,13 @@ THEOREM Inductive ==
 
 
 LEMMA LockLemma ==
-  ASSUME TypedIndInvMin,
+  ASSUME TypedIndInv,
          NEW ra \in (0)..(MaxRound), NEW rb \in (0)..(MaxRound),
          NEW va \in ValidValues, NEW vb \in ValidValues, ra < rb,
          Cardinality(PCSet(ra, va)) >= 2 * T + 1,
          Cardinality(PCSet(rb, vb)) >= 2 * T + 1
   PROVE  va = vb
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>Ssub. PCSet(rb, vb) \in SUBSET (Corr \union Faulty)  BY PCSetSubset
   <1>corr. \E c \in Corr : c \in PCSet(rb, vb)  BY <1>Ssub, QuorumHasCorrect
   <1> PICK c \in Corr : c \in PCSet(rb, vb)  BY <1>corr
@@ -4517,7 +4515,7 @@ LEMMA LockLemma ==
   <1>raw. \/ Cardinality(PCSet(ra, va)) < 2 * T + 1
           \/ (\A r3 \in {rr \in (0)..(MaxRound) : rr > ra} : \A v3 \in (ValidValues \ {va}) :
                 Cardinality(PVSet(r3, v3)) < 2 * T + 1)
-      BY PrecommitsLockValueOp DEF TypedIndInvMin, IndInvMin
+      BY PrecommitsLockValueOp DEF TypedIndInv, IndInv
   <1>finU2. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
   <1>cardNat. Cardinality(PCSet(ra, va)) \in Nat /\ Cardinality(PVSet(rb, mc.id)) \in Nat
       <2>1. PCSet(ra, va) \subseteq (Corr \union Faulty) /\ PVSet(rb, mc.id) \subseteq (Corr \union Faulty)
@@ -4540,12 +4538,12 @@ LEMMA LockLemma ==
       <2> QED  BY <2>1, <1>mcC, <1>mcvb
 
 THEOREM AgreementThm ==
-  TypedIndInvMin => Agreement
-  <1> SUFFICES ASSUME TypedIndInvMin, NEW p1 \in Corr, NEW p2 \in Corr,
+  TypedIndInv => Agreement
+  <1> SUFFICES ASSUME TypedIndInv, NEW p1 \in Corr, NEW p2 \in Corr,
                       decision[p1] # -1, decision[p2] # -1
                PROVE  decision[p1] = decision[p2]
       BY DEF Agreement
-  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
   <1>d1v. decision[p1] \in ValidValues  BY NilNotValid
   <1>d2v. decision[p2] \in ValidValues  BY NilNotValid
   <1>s1. step[p1] = "DECIDED_OF_STEP"  BY <1>d1v DEF AllIfInDecidedThenValidDecision
