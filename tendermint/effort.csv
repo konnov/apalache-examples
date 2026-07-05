@@ -3,3 +3,4 @@ fix LockedValueGivesPostQuorum + close FreshPrevoteGivesQuorum case-3 OMITTED,20
 verified: All 2673 obligations proved,2026-07-04T16:40:31,,exit 0; 3 failures fixed + FreshPrevoteGivesQuorum case-3 OMITTED closed
 close Pres_AllPastStartRound OMITTED,2026-07-04T19:45:06,,All 2978 obligations proved exit 0; +7 helper lemmas
 reconvert CHOOSE + orientation-fix-in-proofs,2026-07-05T01:11:21,,All 3098 obligations proved exit 0; spec kept as-converted
+close Pres_AllRoundsBelowHavePrecommitQuorum with CHOOSE,2026-07-05T08:47:31,,All 3353 obligations proved exit 0; BoundedMaxExists via NatInductionTrusted

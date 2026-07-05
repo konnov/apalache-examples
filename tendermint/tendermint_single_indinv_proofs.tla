@@ -3591,11 +3591,168 @@ THEOREM Pres_AllPastStartRound ==
       <2> QED  BY <2>act, <2>uqp, <2>orc
   <1> QED  BY <1>main, <1>chg
 
-\* Uses ApaFoldSet (max round over correct processes), shimmed unsoundly in Apalache.tla;
-\* needs the CHOOSE-max replacement in the spec before it can be discharged.
+\* ---------------------------------------------------------------------------
+\* CHOOSE-max machinery for AllRoundsBelowHavePrecommitQuorum. The regenerated spec expresses the
+\* maximum round reached as CHOOSE m in ({round[k]} \union {0}): m >= every candidate.
+\* ---------------------------------------------------------------------------
+\* A nonempty subset of a bounded integer interval has a maximum (induction on the bound via
+\* NatInductionTrusted -- avoids the higher-order FS_Induction, which needs Isabelle here).
+LEMMA BoundedMaxExists ==
+  ASSUME NEW b \in Nat, NEW S \in SUBSET (0)..b, S # {}
+  PROVE  \E mx \in S : \A o \in S : mx >= o
+  <1> DEFINE Q[n \in Nat] == \A SS \in SUBSET (0)..n : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)
+  <1>0. Q[0]
+      <2> SUFFICES \A SS \in SUBSET (0)..0 : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> TAKE SS \in SUBSET (0)..0
+      <2> HAVE SS # {}
+      <2>1. \A o \in SS : 0 >= o  BY SMT
+      <2> QED  BY <2>1
+  <1>step. \A n \in Nat : Q[n] => Q[n+1]
+      <2> TAKE n \in Nat
+      <2> HAVE Q[n]
+      <2>Qn. \A SS \in SUBSET (0)..n : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> SUFFICES \A SS \in SUBSET (0)..(n+1) : (SS # {}) => (\E mx \in SS : \A o \in SS : mx >= o)  BY DEF Q
+      <2> TAKE SS \in SUBSET (0)..(n+1)
+      <2> HAVE SS # {}
+      <2>a. CASE (n+1) \in SS
+          <3>1. \A o \in SS : (n+1) >= o  BY SMT
+          <3> QED  BY <2>a, <3>1
+      <2>b. CASE (n+1) \notin SS
+          <3>sub. SS \in SUBSET (0)..n  BY <2>b, SMT
+          <3> QED  BY <3>sub, <2>Qn
+      <2> QED  BY <2>a, <2>b
+  <1>Qall. \A n \in Nat : Q[n]  BY <1>0, <1>step, NatInductionTrusted
+  <1>Qb. Q[b]  BY <1>Qall
+  <1> QED  BY <1>Qb DEF Q
+
+MaxCandOf(rd) == {rd[k] : k \in DOMAIN rd} \union {0}
+MaxReachedOf(rd) == CHOOSE mx \in MaxCandOf(rd) : \A o \in MaxCandOf(rd) : mx >= o
+
+\* The CHOOSE-max lands in the candidate set and dominates it (the max exists, by BoundedMaxExists).
+LEMMA MaxReachedProps ==
+  ASSUME NEW rd, \A k \in DOMAIN rd : rd[k] \in (0)..(MaxRound)
+  PROVE  /\ MaxReachedOf(rd) \in MaxCandOf(rd)
+         /\ \A o \in MaxCandOf(rd) : MaxReachedOf(rd) >= o
+  <1>sub. MaxCandOf(rd) \in SUBSET (0)..(MaxRound)  BY ConstNat, SMT DEF MaxCandOf
+  <1>ne. MaxCandOf(rd) # {}  BY DEF MaxCandOf
+  <1>ex. \E mx \in MaxCandOf(rd) : \A o \in MaxCandOf(rd) : mx >= o
+      BY <1>sub, <1>ne, ConstNat, BoundedMaxExists
+  <1> QED  BY <1>ex DEF MaxReachedOf
+
+\* UponQuorumOfPrecommitsAny(p) fires on a 2T+1 precommit-sender quorum at round[p], which lifts
+\* (monotone) to a 2T+1 post-state quorum PCAllP(round[p]).
+LEMMA UQPAGivesPostQuorum ==
+  ASSUME IndTypeOk, Step, NEW p \in Corr, UponQuorumOfPrecommitsAny(p)
+  PROVE  Cardinality(PCAllP(round[p])) >= 2 * T + 1
+  <1> USE DEF IndTypeOk
+  <1>rpDom. round[p] \in (0)..(MaxRound)  BY DEF IndTypeOk
+  <1> PICK ev \in SUBSET msgs_precommit[round[p]] :
+         Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1
+      BY Zenon DEF UponQuorumOfPrecommitsAny
+  <1>gev. Cardinality({s \in (Corr \union Faulty) : \E m \in ev : s = m.src}) >= 2 * T + 1  OBVIOUS
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  <1>evSub. {s \in (Corr \union Faulty) : \E m \in ev : s = m.src} \subseteq PCAll(round[p])  BY DEF PCAll
+  <1>pcSub. PCAll(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAll
+  <1>finPC. IsFiniteSet(PCAll(round[p]))  BY <1>pcSub, <1>finU, FS_Subset
+  <1>pcQ. Cardinality(PCAll(round[p])) >= 2 * T + 1
+      BY <1>gev, <1>evSub, <1>finPC, ConstNat, SubsetCardGeq
+  <1>mono. Cardinality(PCAll(round[p])) <= Cardinality(PCAllP(round[p]))  BY <1>rpDom, PCAllMonotone
+  <1>ppSub. PCAllP(round[p]) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>natPC. Cardinality(PCAll(round[p])) \in Nat  BY <1>finPC, FS_CardinalityType
+  <1>natPP. Cardinality(PCAllP(round[p])) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
+  <1> QED  BY <1>pcQ, <1>mono, <1>natPC, <1>natPP, ConstNat, SMT
+
+\* A correct process reaches round R (R < max reached) only after every earlier round collected a
+\* 2T+1 precommit quorum. The global max advances only via UponQuorumOfPrecommitsAny (+1, whose
+\* 2T+1 precommit trigger IS the quorum at the round left); OnRoundCatchup cannot advance the max
+\* (its evidence has a correct sender c with round[c] >= its target, so the target was already
+\* reached). Below the pre-max, the pre-invariant + PCAll monotonicity suffice.
 THEOREM Pres_AllRoundsBelowHavePrecommitQuorum ==
   ASSUME TypedIndInv, Step PROVE AllRoundsBelowHavePrecommitQuorum'
-OMITTED
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>arb. AllRoundsBelowHavePrecommitQuorum  BY DEF TypedIndInv, IndInv
+  <1>tp. IndTypeOk'  BY TypePres DEF TypedIndInv, IndInv, TypedIndInvMin, IndInvMin
+  <1>rBoundsU. \A k \in Corr : round[k] \in (0)..(MaxRound)  BY DEF IndTypeOk
+  <1>rBoundsP. \A k \in Corr : round'[k] \in (0)..(MaxRound)  BY <1>tp DEF IndTypeOk
+  <1>domU. DOMAIN round = Corr  BY DEF IndTypeOk
+  <1>domP. DOMAIN round' = Corr  BY <1>tp DEF IndTypeOk
+  \* Pre-invariant in operator form.
+  <1>arbOp. \A RR \in (0)..(MaxRound) : (RR < MaxReachedOf(round)) => Cardinality(PCAll(RR)) >= 2 * T + 1
+      BY <1>arb, Zenon DEF AllRoundsBelowHavePrecommitQuorum, MaxReachedOf, MaxCandOf, PCAll
+  <1>propsU. MaxReachedOf(round) \in MaxCandOf(round) /\ \A o \in MaxCandOf(round) : MaxReachedOf(round) >= o
+      BY <1>rBoundsU, <1>domU, MaxReachedProps
+  <1>mrU. MaxReachedOf(round) \in (0)..(MaxRound)
+      BY <1>propsU, <1>rBoundsU, <1>domU, ConstNat, SMT DEF MaxCandOf
+  \* Unfold the primed goal to operator form.
+  <1> SUFFICES \A R \in (0)..(MaxRound) : (R < MaxReachedOf(round')) => Cardinality(PCAllP(R)) >= 2 * T + 1
+      BY DEF AllRoundsBelowHavePrecommitQuorum, MaxReachedOf, MaxCandOf, PCAllP
+  <1> TAKE R \in (0)..(MaxRound)
+  <1> HAVE R < MaxReachedOf(round')
+  <1>finU. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
+  \* MaxReachedOf(round') is a candidate >= all; being > R >= 0 it equals round'[pp] for some pp.
+  <1>propsP. MaxReachedOf(round') \in MaxCandOf(round') /\ \A o \in MaxCandOf(round') : MaxReachedOf(round') >= o
+      BY <1>rBoundsP, <1>domP, MaxReachedProps
+  <1>mp. \E pp \in Corr : round'[pp] > R
+      <2>inCand. MaxReachedOf(round') \in ({round'[k] : k \in Corr} \union {0})
+          BY <1>propsP, <1>domP DEF MaxCandOf
+      <2> QED  BY <2>inCand, SMT
+  <1> PICK pp \in Corr : round'[pp] > R  BY <1>mp
+  \* Post-state quorum typing (shared).
+  <1>ppSub. PCAllP(R) \subseteq (Corr \union Faulty)  BY DEF PCAllP
+  <1>natPP. Cardinality(PCAllP(R)) \in Nat  BY <1>ppSub, <1>finU, FS_Subset, FS_CardinalityType
+  <1>main. CASE R < MaxReachedOf(round)
+      <2>preQ. Cardinality(PCAll(R)) >= 2 * T + 1  BY <1>arbOp, <1>main
+      <2>mono. Cardinality(PCAll(R)) <= Cardinality(PCAllP(R))  BY PCAllMonotone
+      <2>pcSub. PCAll(R) \subseteq (Corr \union Faulty)  BY DEF PCAll
+      <2>finPC. IsFiniteSet(PCAll(R))  BY <2>pcSub, <1>finU, FS_Subset
+      <2>natPC. Cardinality(PCAll(R)) \in Nat  BY <2>finPC, FS_CardinalityType
+      <2> QED  BY <2>preQ, <2>mono, <2>natPC, <1>natPP, ConstNat, SMT
+  <1>chg. CASE ~(R < MaxReachedOf(round))
+      <2>geRoundPP. MaxReachedOf(round) >= round[pp]
+          <3>cand. round[pp] \in MaxCandOf(round)  BY <1>domU DEF MaxCandOf
+          <3> QED  BY <3>cand, <1>propsU
+      <2>advanced. round'[pp] # round[pp]  BY <2>geRoundPP, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, SMT
+      <2>act. UponQuorumOfPrecommitsAny(pp) \/ OnRoundCatchup(pp)
+          <3>sel. \/ round' = round
+                  \/ \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+                  \/ \E q \in Corr : OnRoundCatchup(q)
+              BY DEF Step
+          <3>1. CASE round' = round  BY <3>1, <2>advanced, SMT
+          <3>2. CASE \E q \in Corr : UponQuorumOfPrecommitsAny(q)
+              <4> PICK q \in Corr : UponQuorumOfPrecommitsAny(q)  BY <3>2
+              <4>qr. round' = [round EXCEPT ![q] = round[q] + 1]  BY Zenon DEF UponQuorumOfPrecommitsAny
+              <4>qp. q = pp  BY <4>qr, <2>advanced, SMT
+              <4> QED  BY <4>qp
+          <3>3. CASE \E q \in Corr : OnRoundCatchup(q)
+              <4> PICK q \in Corr : OnRoundCatchup(q)  BY <3>3
+              <4>qr. \E rr \in (0)..(MaxRound) : round' = [round EXCEPT ![q] = rr]  BY Zenon DEF OnRoundCatchup
+              <4>qp. q = pp  BY <4>qr, <2>advanced, SMT
+              <4> QED  BY <4>qp
+          <3> QED  BY <3>sel, <3>1, <3>2, <3>3
+      <2>uqp. CASE UponQuorumOfPrecommitsAny(pp)
+          <3>rp1. round' = [round EXCEPT ![pp] = round[pp] + 1]  BY <2>uqp, Zenon DEF UponQuorumOfPrecommitsAny
+          <3>rp. round'[pp] = round[pp] + 1  BY <3>rp1, SMT
+          <3>Req. R = round[pp]  BY <3>rp, <2>geRoundPP, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, ConstNat, SMT
+          <3>post. Cardinality(PCAllP(round[pp])) >= 2 * T + 1  BY <2>uqp, UQPAGivesPostQuorum
+          <3> QED  BY <3>post, <3>Req
+      <2>orc. CASE OnRoundCatchup(pp)
+          <3> PICK rnd \in (0)..(MaxRound) :
+                /\ round' = [round EXCEPT ![pp] = rnd]
+                /\ rnd > round[pp]
+                /\ \E c \in Corr : c \in AllMsgSenders(rnd)
+              BY <2>orc, OnRoundCatchupGivesSender
+          <3>rndEq. round'[pp] = rnd  BY SMT
+          <3> PICK c \in Corr : c \in AllMsgSenders(rnd)  OBVIOUS
+          <3>csent. \/ (\E m \in msgs_propose[rnd] : c = m.src)
+                    \/ (\E m \in msgs_prevote[rnd] : c = m.src)
+                    \/ (\E m \in msgs_precommit[rnd] : c = m.src)
+              BY DEF AllMsgSenders
+          <3>cround. rnd <= round[c]  BY <3>csent, SMT DEF AllNoFutureMessagesSent
+          <3>cCand. round[c] \in MaxCandOf(round)  BY <1>domU DEF MaxCandOf
+          <3>geC. MaxReachedOf(round) >= round[c]  BY <3>cCand, <1>propsU
+          <3> QED  BY <3>rndEq, <3>cround, <3>geC, <1>chg, <1>propsU, <1>mrU, <1>rBoundsU, <1>rBoundsP, SMT
+      <2> QED  BY <2>act, <2>uqp, <2>orc
+  <1> QED  BY <1>main, <1>chg
 
 \* If valid_round[q]' = round[q]' then the acting process's step guard (for the step-changing
 \* actions the actor was in PROPOSE/PREVOTE, so by the pre-invariant valid_round[q] # round[q],
