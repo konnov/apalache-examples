@@ -3162,6 +3162,103 @@ LEMMA LockedValueGivesPostQuorum ==
       BY <1>preQ, <1>lrDom, PVSetQuorumMonotone
   <1> QED BY <1>lrDom, <1>lrGe, <1>lrLt, <1>postQ
 
+\* Pre-state variant of LockedValueGivesPostQuorum: a correct process locked on v (that also
+\* precommitted a different value at r1) has a 2T+1 PRE-state prevote quorum for v at locked_round
+\* in [r1, round). Used for the UponProposalInPropose branch of the caseChanged bridge.
+LEMMA LockedValueGivesPreQuorum ==
+  ASSUME TypedIndInv,
+         NEW p \in Corr, NEW r1 \in (0)..(MaxRound), NEW r2 \in (0)..(MaxRound),
+         NEW v \in ValidValues, r2 > r1,
+         \E pc \in msgs_precommit[r1] : p = pc.src /\ pc.id /= -1 /\ v /= pc.id,
+         round[p] = r2, step[p] = "PROPOSE_OF_STEP", locked_value[p] = v
+  PROVE  \E r \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2} : Cardinality(PVSet(r, v)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>vne. v # -1  BY NilNotValid
+  <1> PICK pc \in msgs_precommit[r1] : /\ p = pc.src /\ pc.id /= -1 /\ v /= pc.id  OBVIOUS
+  <1>pcRound. pc.round = r1  BY DEF IndTypeOk
+  <1>lrNonNil. locked_round[p] # -1  BY <1>vne, SMT DEF AllLockedRoundIffLockedValue
+  <1>lrDom. locked_round[p] \in (0)..(MaxRound)  BY <1>lrNonNil, SMT DEF IndTypeOk
+  <1> PICK lp \in msgs_precommit[locked_round[p]] : p = lp.src /\ lp.id = v
+      BY <1>lrNonNil, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lpRound. lp.round = locked_round[p]  BY <1>lrDom DEF IndTypeOk
+  <1>lrGe. locked_round[p] >= r1  BY <1>lrNonNil, <1>pcRound, SMT DEF AllLatestPrecommitHasLockedRound
+  <1>lrLe. locked_round[p] <= r2  BY <1>lrDom, SMT DEF AllNoFutureMessagesSent
+  <1>lrNe. locked_round[p] # r2  BY SMT DEF AllNoFutureMessagesSent
+  <1>lrLt. locked_round[p] < r2  BY <1>lrLe, <1>lrNe, <1>lrDom, SMT
+  <1>lpC. lp.src \in Corr /\ lp.id \in ValidValues  OBVIOUS
+  <1>qId. Cardinality(PVSet(locked_round[p], lp.id)) >= 2 * T + 1
+      BY <1>lpC, <1>lrDom, PrecommitByCorrectGivesPrevoteQuorum
+  <1>preQ. Cardinality(PVSet(locked_round[p], v)) >= 2 * T + 1  BY <1>qId
+  <1>dom. locked_round[p] \in {rr \in (0)..(MaxRound): rr >= r1 /\ rr < r2}
+      BY <1>lrGe, <1>lrLt, <1>lrDom, SMT
+  <1> QED  BY <1>preQ, <1>dom
+
+\* A fresh valid (non-nil) prevote by a correct process c at round r is added only by the two
+\* value-prevote actions, acting at round[c] = r. Standalone (clean context; the monolithic split
+\* is defeated by the heavy hypotheses of the caseChanged bridge).
+LEMMA FreshValuePrevoteAction ==
+  ASSUME IndTypeOk, Step, NEW c \in Corr, NEW r \in (0)..(MaxRound),
+         NEW mv \in msgs_prevote'[r], mv \notin msgs_prevote[r], mv.src = c, mv.id # -1
+  PROVE  /\ round[c] = r
+         /\ (UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c))
+  <1> USE DEF IndTypeOk
+  <1>sel. \/ msgs_prevote' = msgs_prevote
+          \/ (\E q \in Corr : UponProposalInPropose(q))
+          \/ (\E q \in Corr : UponProposalInProposeAndPrevote(q))
+          \/ (\E q \in Corr : OnTimeoutPropose(q))
+          \/ FaultyStep
+      BY DEF Step
+  <1>1. CASE msgs_prevote' = msgs_prevote  BY <1>1
+  <1>2. CASE \E q \in Corr : UponProposalInPropose(q)
+      <2> PICK q \in Corr : UponProposalInPropose(q)  BY <1>2
+      <2> QED  BY SMT DEF UponProposalInPropose
+  <1>3. CASE \E q \in Corr : UponProposalInProposeAndPrevote(q)
+      <2> PICK q \in Corr : UponProposalInProposeAndPrevote(q)  BY <1>3
+      <2> QED  BY SMT DEF UponProposalInProposeAndPrevote
+  <1>4. CASE \E q \in Corr : OnTimeoutPropose(q)
+      \* adds only a nil prevote, contradicting mv.id # -1.
+      <2> PICK q \in Corr : OnTimeoutPropose(q)  BY <1>4
+      <2> QED  BY SMT DEF OnTimeoutPropose
+  <1>5. CASE FaultyStep
+      \* adds only faulty senders, contradicting mv.src = c \in Corr.
+      <2> PICK rr \in (0)..(MaxRound), fps2 \in SUBSET Faulty, v2 \in (ValidValues \union InvalidValues) :
+             msgs_prevote' = [msgs_prevote EXCEPT ![rr] =
+               (msgs_prevote[rr] \union {[id |-> v2, kind |-> "PREVOTE_OF_VOTEKIND", round |-> rr, src |-> v_v54]: v_v54 \in fps2})]
+          BY <1>5 DEF FaultyStep
+      <2>added. mv \in {[id |-> v2, kind |-> "PREVOTE_OF_VOTEKIND", round |-> rr, src |-> v_v54]: v_v54 \in fps2}
+          BY SMT
+      <2>fsrc. mv.src \in Faulty  BY <2>added
+      <2> QED  BY <2>fsrc, DisjointCF
+  <1> QED  BY <1>sel, <1>1, <1>2, <1>3, <1>4, <1>5
+
+\* A correct process c that precommitted w at r0 and, this Step, freshly prevotes w2 (# w) at
+\* round[c] > r0 (via a value-prevote action) has a pre-state 2T+1 prevote quorum for w2 in
+\* [r0, round[c]). UponProposalInProposeAndPrevote: FreshPrevoteGivesQuorum; UponProposalInPropose:
+\* c is locked, so the fresh w2-prevote forces locked_value[c] = w2, i.e. c precommitted w2 at
+\* locked_round[c] in (r0, round[c]) -> LockedValueGivesPreQuorum. Isolated (clean context).
+LEMMA FreshPrevoteLockedGivesPreQuorum ==
+  ASSUME TypedIndInv, Step, NEW c \in Corr, NEW r0 \in (0)..(MaxRound),
+         NEW w \in ValidValues, NEW w2 \in (ValidValues \ {w}),
+         \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w,
+         round[c] > r0,
+         \E mv \in msgs_prevote'[round[c]] : mv.src = c /\ mv.id = w2 /\ mv \notin msgs_prevote[round[c]],
+         UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c)
+  PROVE  \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < round[c]} : Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+  <1> USE DEF TypedIndInv, IndInv, IndTypeOk
+  <1>wne. w # -1 /\ w2 # -1  BY NilNotValid
+  <1>preC. \E pc \in msgs_precommit[r0] : c = pc.src /\ pc.id # -1 /\ w2 # pc.id  BY <1>wne
+  <1>ppp. CASE UponProposalInProposeAndPrevote(c)
+      <2> QED  BY <1>ppp, FreshPrevoteGivesQuorum
+  <1>pp. CASE UponProposalInPropose(c)
+      <2>st. step[c] = "PROPOSE_OF_STEP"  BY <1>pp DEF UponProposalInPropose
+      <2>lrNonNil. locked_round[c] # -1
+          BY <1>wne, SMT DEF AllLatestPrecommitHasLockedRound
+      <2>lv. locked_value[c] = w2
+          BY <1>pp, <2>lrNonNil, <1>wne, SMT DEF UponProposalInPropose
+      <2>rdom. round[c] \in (0)..(MaxRound)  BY DEF IndTypeOk
+      <2> QED  BY <1>preC, <2>rdom, <2>st, <2>lv, LockedValueGivesPreQuorum
+  <1> QED  BY <1>ppp, <1>pp
+
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
   <1> USE DEF TypedIndInv, IndTypeOk
@@ -3237,13 +3334,50 @@ THEOREM Pres_PrecommitsLockValue ==
         <3>pcQpre. Cardinality(PCSet(r0, w)) >= 2 * T + 1  BY <2>pcQ, <2>caseClean DEF PCSet, PCSetP
         <3> QED  BY <3>mcPre, <3>mvPre, <3>pcQpre, <1>rDom, PrecommitLockContra
     <2>caseChanged. CASE ~(msgs_precommit'[r0] = msgs_precommit[r0] /\ msgs_prevote'[r] = msgs_prevote[r])
-        \* ---- remaining bridge (OMITTED): the acting correct process added, in this Step, a
-        \* precommit for w at r0 or a prevote for w2 at r (only one message, by one process;
-        \* FaultyStep adds only faulty senders and so leaves the correct slices unchanged).
-        \* A fresh vote adds a single correct sender (Prevote/PrecommitSenderSetCardinality-
-        \* Monotone), so the pre-state count was exactly 2T; the acting process's prevote guard
-        \* (locked on w, via the valid-round conjuncts) then reduces this to PrecommitLockContra.
-        OMITTED
+        <3> PICK mc \in msgs_precommit'[r0] : mc.src = c /\ mc.id = w  BY <2>cPC
+        <3> PICK mv \in msgs_prevote'[r] : mv.src = c /\ mv.id = w2  BY <2>cPV
+        <3>caseA. CASE msgs_precommit'[r0] = msgs_precommit[r0]
+            \* Precommit slice at r0 unchanged: a real pre-state 2T+1 precommit quorum for w at r0,
+            \* and c's precommit for w at r0 is pre-state.
+            <4>pcQpre. Cardinality(PCSet(r0, w)) >= 2 * T + 1  BY <2>pcQ, <3>caseA DEF PCSet, PCSetP
+            <4>mcPre. \E pc \in msgs_precommit[r0] : pc.src = c /\ pc.id = w  BY <3>caseA
+            <4>mvPre. CASE mv \in msgs_prevote[r]
+                \* c's prevote for w2 at r is pre-state: PrecommitLockContra closes it.
+                <5>pvPre. \E pv \in msgs_prevote[r] : pv.src = c /\ pv.id = w2  BY <4>mvPre
+                <5> QED  BY <4>mcPre, <5>pvPre, <4>pcQpre, <1>rDom, PrecommitLockContra
+            <4>mvF. CASE mv \notin msgs_prevote[r]
+                \* c added a fresh prevote for w2 at r = round[c]. Being locked (it precommitted w at
+                \* r0), its prevote guard yields a pre-state 2T+1 prevote quorum for w2 in [r0, r),
+                \* which contradicts the r0 precommit lock (LockContraFromPrevoteQuorum).
+                <5>fr0. round[c] = r /\ (UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c))
+                    BY <4>mvF, NilNotValid, FreshValuePrevoteAction
+                <5>rd. round[c] = r  BY <5>fr0
+                <5>act. UponProposalInPropose(c) \/ UponProposalInProposeAndPrevote(c)  BY <5>fr0
+                <5>rc. round[c] > r0  BY <5>rd, <1>rDom
+                <5>fresh. \E mvv \in msgs_prevote'[round[c]] :
+                             mvv.src = c /\ mvv.id = w2 /\ mvv \notin msgs_prevote[round[c]]
+                    BY <4>mvF, <5>rd
+                <5>preRC. \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < round[c]} :
+                            Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+                    BY <4>mcPre, <5>rc, <5>fresh, <5>act, FreshPrevoteLockedGivesPreQuorum
+                <5>preQ. \E vr \in {x \in (0)..(MaxRound) : x >= r0 /\ x < r} :
+                           Cardinality(PVSet(vr, w2)) >= 2 * T + 1
+                    BY <5>preRC, <5>rd
+                <5> QED  BY <4>pcQpre, <5>preQ, <1>rDom, LockContraFromPrevoteQuorum
+            <4> QED  BY <4>mvPre, <4>mvF
+        <3>caseB. CASE msgs_precommit'[r0] # msgs_precommit[r0]
+            \* ---- RESIDUE (OMITTED). This Step *completed* the precommit quorum for w at r0 (a
+            \* fresh correct precommit at round[c']=r0, or a FaultyStep injection at r0), so the
+            \* PRE-state precommit quorum for w may be < 2T+1 and PrecommitLockContra no longer
+            \* applies. The prevote slice at r is unchanged here (precommit-adding actions and
+            \* FaultyStep-at-r0 leave msgs_prevote[r] fixed), so pre PVSet(r, w2) >= 2T+1, and via
+            \* PrecommitLocksLaterPrevotes on c a pre PVSet(r1, w2) >= 2T+1 for some r1 in [r0, r).
+            \* r1 = r0 equivocates against the pre PVSet(r0, w) quorum (from any correct precommitter
+            \* of w). r1 > r0 is NOT closed by the current 25 conjuncts: ruling it out requires a new
+            \* prevote-based cross-round lock invariant, proved by strong induction over rounds
+            \* through AllIfSentPrevoteThenReceivedProposalOrTwoThirds. See session notes.
+            OMITTED
+        <3> QED  BY <3>caseA, <3>caseB
     <2> QED  BY <2>caseClean, <2>caseChanged
 
 \* ---------------------------------------------------------------------------
