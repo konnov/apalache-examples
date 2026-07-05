@@ -2036,7 +2036,7 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
                         Cardinality({s \in (Corr \union Faulty) :
                             \E pv \in {pp \in msgs_prevote'[rr] : pp.id = m.id} :
                               s = pv.src})
-                    BY <4>rty, <4>idty, PrevoteSenderSetCardinalityMonotone
+                    BY <4>rty, <4>idty, PrevoteSenderSetCardinalityMonotone, Isa
                        DEF TypedIndInvMin
               <4>oldCard. Cardinality({s \in (Corr \union Faulty) :
                              \E pv \in {pp \in msgs_prevote[rr] : pp.id = m.id} :
@@ -2103,16 +2103,16 @@ THEOREM Pres_AllIfSentPrevoteThenReceivedProposalOrTwoThirds ==
                   <=
                   Cardinality({s \in (Corr \union Faulty) :
                     \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
-                BY PrevoteValueMessagesCardinalityLeSenders
+                BY PrevoteValueMessagesCardinalityLeSenders, Isa
           <3>mono. Cardinality({s \in (Corr \union Faulty) :
                     \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
                   <=
                   Cardinality({s \in (Corr \union Faulty) :
                     \E pv \in {pp \in msgs_prevote'[vr] : pp.id = v} : s = pv.src})
-                BY PrevoteSenderSetCardinalityMonotone
+                BY PrevoteSenderSetCardinalityMonotone, Isa
           <3>finCF. IsFiniteSet(Corr \union Faulty)  BY FiniteCF, FS_Union
           <3>fin1. IsFiniteSet({pv \in msgs_prevote[vr] : pv.id = v})
-                BY PrevoteValueMessagesFinite
+                BY PrevoteValueMessagesFinite, Isa
           <3>fin2. IsFiniteSet({s \in (Corr \union Faulty) :
                      \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src})
                 <4>sub. {s \in (Corr \union Faulty) : \E pv \in {pp \in msgs_prevote[vr] : pp.id = v} : s = pv.src}
@@ -2319,7 +2319,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
                     Cardinality({s \in (Corr \union Faulty) :
                          \E pv \in {pp \in msgs_prevote'[r] : pp.id = m.id} :
                            s = pv.src})
-                BY <3>idtype, PrevoteSenderSetCardinalityMonotone
+                BY <3>idtype, PrevoteSenderSetCardinalityMonotone, Isa
           <3>types. /\ Cardinality({s \in (Corr \union Faulty) :
                            \E pv \in {pp \in msgs_prevote[r] : pp.id = m.id} :
                              s = pv.src}) \in Int
@@ -2380,13 +2380,13 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
               <=
               Cardinality({s \in (Corr \union Faulty) :
                 \E pv \in {pp \in msgs_prevote[round[p]] : pp.id = v} : s = pv.src})
-            BY <2>rty, <2>vty, PrevoteValueMessagesCardinalityLeSenders
+            BY <2>rty, <2>vty, PrevoteValueMessagesCardinalityLeSenders, Isa
       <2>mono. Cardinality({s \in (Corr \union Faulty) :
                   \E pv \in {pp \in msgs_prevote[round[p]] : pp.id = v} : s = pv.src})
               <=
               Cardinality({s \in (Corr \union Faulty) :
                   \E pv \in {pp \in msgs_prevote'[round[p]] : pp.id = v} : s = pv.src})
-            BY <2>rty, <2>vty, PrevoteSenderSetCardinalityMonotone
+            BY <2>rty, <2>vty, PrevoteSenderSetCardinalityMonotone, Isa
       <2>types. /\ Cardinality({pv \in msgs_prevote[round[p]] : pv.id = v}) \in Int
                   /\ Cardinality({s \in (Corr \union Faulty) :
                        \E pv \in {pp \in msgs_prevote[round[p]] : pp.id = v} : s = pv.src}) \in Int
@@ -2430,7 +2430,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
               <=
               Cardinality({s \in (Corr \union Faulty) :
                 \E pv \in msgs_prevote[round[p]] : s = pv.src})
-            BY <2>rty, PrevoteEvidenceSenderSetCardinalityLeAllSenders
+            BY <2>rty, PrevoteEvidenceSenderSetCardinalityLeAllSenders, Isa
       <2>mono. Cardinality({s \in (Corr \union Faulty) :
                   \E pv \in msgs_prevote[round[p]] : s = pv.src})
               <=
@@ -2474,7 +2474,7 @@ THEOREM Pres_IfSentPrecommitThenReceivedTwoThirds ==
               <=
               Cardinality({s \in (Corr \union Faulty) :
                 \E pv \in msgs_prevote[round[p]] : s = pv.src})
-            BY <2>rty, <2>nilty, PrevoteValueMessagesCardinalityLeAllSenders
+            BY <2>rty, <2>nilty, PrevoteValueMessagesCardinalityLeAllSenders, Isa
       <2>mono. Cardinality({s \in (Corr \union Faulty) :
                   \E pv \in msgs_prevote[round[p]] : s = pv.src})
               <=
