@@ -5,3 +5,4 @@ close Pres_AllPastStartRound OMITTED,2026-07-04T19:45:06,,All 2978 obligations p
 reconvert CHOOSE + orientation-fix-in-proofs,2026-07-05T01:11:21,,All 3098 obligations proved exit 0; spec kept as-converted
 close Pres_AllRoundsBelowHavePrecommitQuorum with CHOOSE,2026-07-05T08:47:31,,All 3353 obligations proved exit 0; BoundedMaxExists via NatInductionTrusted
 caseChanged decomposition: close caseA (precommit unchanged),2026-07-05T09:48:24,,All 3506 proved exit 0; caseB (quorum completed this step) residue isolated
+bootstrap PrevoteQuorumFreshOrEarlier (structure + OMITTED descent),2026-07-05T10:33:14,,All 3518 proved exit 0

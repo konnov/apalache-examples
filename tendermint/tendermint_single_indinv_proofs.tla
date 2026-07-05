@@ -3259,6 +3259,42 @@ LEMMA FreshPrevoteLockedGivesPreQuorum ==
       <2> QED  BY <1>preC, <2>rdom, <2>st, <2>lv, LockedValueGivesPreQuorum
   <1> QED  BY <1>ppp, <1>pp
 
+\* ---------------------------------------------------------------------------
+\* BOOTSTRAP (for the Pres_PrecommitsLockValue caseB residue): the quorum-level lift of the
+\* per-message conjunct AllIfSentPrevoteThenReceivedProposalOrTwoThirds. A 2T+1 prevote quorum for a
+\* valid value v at round r contains a correct prevoter c; c's prevote (correct, non-nil) was backed
+\* by EITHER a fresh proposal (valid_round = -1) for v at r, OR a proposal with valid_round vr < r
+\* AND a 2T+1 prevote quorum for v at vr. So the quorum descends: either it is fresh, or an earlier
+\* round already has a 2T+1 prevote quorum for v. Iterating this down to the least such round yields
+\* a fresh proposal for v, at which a correct prevoter must be unlocked or locked on v -- the hook
+\* that will contradict a competing r0 precommit-lock in caseB (the r1 > r0 sub-case).
+\*
+\* Initial structure below (correct-prevoter extraction) is in place; the descent step -- applying
+\* AllIfSentPrevoteThenReceivedProposalOrTwoThirds to c's prevote and re-expressing its raw
+\* Cardinality set-builder via PVSet -- is OMITTED, to be filled in as the caseB machinery is built.
+\* ---------------------------------------------------------------------------
+LEMMA PrevoteQuorumFreshOrEarlier ==
+  ASSUME TypedIndInvMin, NEW r \in (0)..(MaxRound), NEW v \in ValidValues,
+         Cardinality(PVSet(r, v)) >= 2 * T + 1
+  PROVE  \/ (\E prop \in msgs_propose[r] :
+               prop.src = Proposer[r] /\ prop.proposal = v /\ prop.valid_round = -1)
+         \/ (\E vr \in {x \in (0)..(MaxRound) : x < r} : Cardinality(PVSet(vr, v)) >= 2 * T + 1)
+  <1> USE DEF TypedIndInvMin, IndInvMin, IndTypeOk
+  <1>vne. v # -1  BY NilNotValid
+  \* A 2T+1 quorum for v at r contains a correct prevoter c whose prevote carries id = v.
+  <1>sub. PVSet(r, v) \in SUBSET (Corr \union Faulty)  BY PVSetSubset
+  <1>corr. \E c \in Corr : c \in PVSet(r, v)  BY <1>sub, QuorumHasCorrect
+  <1> PICK c \in Corr : c \in PVSet(r, v)  BY <1>corr
+  <1> PICK mv \in msgs_prevote[r] : mv.src = c /\ mv.id = v  BY DEF PVSet
+  \* c \in Corr, so mv.src \notin Faulty; mv.id = v # -1. The per-message descent conjunct
+  \* AllIfSentPrevoteThenReceivedProposalOrTwoThirds applied to mv then yields the goal (the
+  \* earlier-quorum disjunct's raw set-builder is re-expressed via PVSet, cf. PVSetFlip/CardCong).
+  <1>descent. \/ (\E prop \in msgs_propose[r] :
+                    prop.src = Proposer[r] /\ prop.proposal = v /\ prop.valid_round = -1)
+              \/ (\E vr \in {x \in (0)..(MaxRound) : x < r} : Cardinality(PVSet(vr, v)) >= 2 * T + 1)
+      OMITTED
+  <1> QED  BY <1>descent
+
 THEOREM Pres_PrecommitsLockValue ==
   ASSUME TypedIndInv, Step PROVE PrecommitsLockValue'
   <1> USE DEF TypedIndInv, IndTypeOk
