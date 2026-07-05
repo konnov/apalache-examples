@@ -3269,9 +3269,9 @@ LEMMA FreshPrevoteLockedGivesPreQuorum ==
 \* a fresh proposal for v, at which a correct prevoter must be unlocked or locked on v -- the hook
 \* that will contradict a competing r0 precommit-lock in caseB (the r1 > r0 sub-case).
 \*
-\* Initial structure below (correct-prevoter extraction) is in place; the descent step -- applying
-\* AllIfSentPrevoteThenReceivedProposalOrTwoThirds to c's prevote and re-expressing its raw
-\* Cardinality set-builder via PVSet -- is OMITTED, to be filled in as the caseB machinery is built.
+\* Initial structure below extracts a correct prevoter from the quorum, then applies
+\* AllIfSentPrevoteThenReceivedProposalOrTwoThirds to that prevote and re-expresses its raw
+\* Cardinality set-builder via PVSet.
 \* ---------------------------------------------------------------------------
 LEMMA PrevoteQuorumFreshOrEarlier ==
   ASSUME TypedIndInvMin, NEW r \in (0)..(MaxRound), NEW v \in ValidValues,
@@ -3292,7 +3292,84 @@ LEMMA PrevoteQuorumFreshOrEarlier ==
   <1>descent. \/ (\E prop \in msgs_propose[r] :
                     prop.src = Proposer[r] /\ prop.proposal = v /\ prop.valid_round = -1)
               \/ (\E vr \in {x \in (0)..(MaxRound) : x < r} : Cardinality(PVSet(vr, v)) >= 2 * T + 1)
-      OMITTED
+      <2>inv. AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+          BY DEF TypedIndInvMin, IndInvMin
+      <2>raw. \/ mv.src \in Faulty
+               \/ mv.id = -1
+               \/ /\ mv.id # -1
+                  /\ \/ \E prop \in msgs_propose[r] :
+                           /\ prop.src = Proposer[r]
+                           /\ prop.proposal = mv.id
+                           /\ prop.valid_round = -1
+                     \/ \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                           /\ \E prop \in msgs_propose[r] :
+                                /\ prop.src = Proposer[r]
+                                /\ prop.proposal = mv.id
+                                /\ rr = prop.valid_round
+                           /\ Cardinality({s \in (Corr \union Faulty) :
+                                \E m \in {mm \in msgs_prevote[rr] : mm.id = mv.id} :
+                                  s = m.src}) >= ((2 * T) + 1)
+          BY <2>inv, Zenon DEF AllIfSentPrevoteThenReceivedProposalOrTwoThirds
+      <2>src. mv.src = c  OBVIOUS
+      <2>mid. mv.id = v  OBVIOUS
+      <2>notFaulty. mv.src \notin Faulty  BY <2>src, DisjointCF
+      <2>notNil. mv.id # -1  BY <2>mid, <1>vne
+      <2>faultyCase. CASE mv.src \in Faulty
+          <3> QED  BY <2>faultyCase, <2>notFaulty
+      <2>nilCase. CASE mv.id = -1
+          <3> QED  BY <2>nilCase, <2>notNil
+      <2>goodCase. CASE /\ mv.id # -1
+                         /\ \/ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = mv.id
+                                  /\ prop.valid_round = -1
+                            \/ \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                                  /\ \E prop \in msgs_propose[r] :
+                                       /\ prop.src = Proposer[r]
+                                       /\ prop.proposal = mv.id
+                                       /\ rr = prop.valid_round
+                                  /\ Cardinality({s \in (Corr \union Faulty) :
+                                       \E m \in {mm \in msgs_prevote[rr] : mm.id = mv.id} :
+                                         s = m.src}) >= ((2 * T) + 1)
+          <3>propCase. CASE \E prop \in msgs_propose[r] :
+                             /\ prop.src = Proposer[r]
+                             /\ prop.proposal = mv.id
+                             /\ prop.valid_round = -1
+              <4> PICK prop \in msgs_propose[r] :
+                             /\ prop.src = Proposer[r]
+                             /\ prop.proposal = mv.id
+                             /\ prop.valid_round = -1
+                  BY <3>propCase
+              <4> QED  BY <2>mid, SMT
+          <3>quorumCase. CASE \E rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                             /\ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = mv.id
+                                  /\ rr = prop.valid_round
+                             /\ Cardinality({s \in (Corr \union Faulty) :
+                                  \E m \in {mm \in msgs_prevote[rr] : mm.id = mv.id} :
+                                    s = m.src}) >= ((2 * T) + 1)
+              <4> PICK rr \in {rrr \in (0)..(MaxRound) : rrr < r} :
+                             /\ \E prop \in msgs_propose[r] :
+                                  /\ prop.src = Proposer[r]
+                                  /\ prop.proposal = mv.id
+                                  /\ rr = prop.valid_round
+                             /\ Cardinality({s \in (Corr \union Faulty) :
+                                  \E m \in {mm \in msgs_prevote[rr] : mm.id = mv.id} :
+                                    s = m.src}) >= ((2 * T) + 1)
+                  BY <3>quorumCase
+              <4>rrDom. rr \in {x \in (0)..(MaxRound) : x < r}  BY SMT
+              <4>rawCard. Cardinality({s \in (Corr \union Faulty) :
+                              \E m \in {mm \in msgs_prevote[rr] : mm.id = mv.id} :
+                                s = m.src}) >= ((2 * T) + 1)
+                  OBVIOUS
+              <4>cardMv. Cardinality(PVSet(rr, mv.id)) >= 2 * T + 1
+                  BY <4>rawCard, Zenon DEF PVSet
+              <4>card. Cardinality(PVSet(rr, v)) >= 2 * T + 1
+                  BY <4>cardMv, <2>mid
+              <4> QED  BY <4>rrDom, <4>card
+          <3> QED  BY <2>goodCase, <3>propCase, <3>quorumCase, Zenon
+      <2> QED  BY <2>raw, <2>faultyCase, <2>nilCase, <2>goodCase, Zenon
   <1> QED  BY <1>descent
 
 THEOREM Pres_PrecommitsLockValue ==
