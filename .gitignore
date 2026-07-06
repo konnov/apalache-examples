@@ -1,0 +1,12 @@
+# TLAPS proof-obligation cache
+.tlacache/
+
+# Apalache model-checker output
+_apalache-out/
+
+# Scratch/temporary output
+tmp/
+
+# TLA+ toolbox / editor swap files
+*.swp
+*.old
