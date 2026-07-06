@@ -21,7 +21,7 @@ the `n4_t1_f*` instances). The proofs are the hand-written part.
 |------|----------|
 | `tendermint_single_indinv.tla` | The spec: state variables, the transition `Step` (10 correct actions + `FaultyStep`), the safety property `Agreement`, and the inductive invariant `TypedIndInv`. Machine-generated — do not hand-edit. |
 | `tendermint_single_indinv_proofs.tla` | The TLAPS proofs. |
-| `MC_n4_t1_f0.tla`, `MC_n4_t1_f1.tla`, `MC_n4_t1_f2.tla` | Model-checking instances (`N=4, T=1`) that fix the constants and `INSTANCE` the spec — see below. |
+| `MCn4t1f0_tendermint_single_indinv.tla`, `…f1…`, `…f2…` | Model-checking instances (`N=4, T=1`) that fix the constants and `INSTANCE` the spec — see below. |
 | `README.md` | This file. |
 
 ## What is proved
@@ -136,23 +136,23 @@ assumptions. The `MC_*` modules are small, finite instances (all `N = 4, T = 1`,
 invariant with a model checker (TLC or Apalache). Each fixes the constants and
 `INSTANCE`s `tendermint_single_indinv`:
 
-| Instance | `Corr` | `Faulty` | Faults `F` | Within the `T >= F` threshold? |
-|----------|--------|----------|------------|--------------------------------|
-| `MC_n4_t1_f0` | `{0,1,2,3}` | `{}`      | 0 | yes |
-| `MC_n4_t1_f1` | `{0,1,2}`   | `{3}`     | 1 | yes (at the bound) |
-| `MC_n4_t1_f2` | `{0,1}`     | `{2,3}`   | 2 | **no** (`F = 2 > T = 1`) |
+| Module | `Corr` | `Faulty` | Faults `F` | Within the `T >= F` threshold? |
+|--------|--------|----------|------------|--------------------------------|
+| `MCn4t1f0_tendermint_single_indinv` | `{0,1,2,3}` | `{}`      | 0 | yes |
+| `MCn4t1f1_tendermint_single_indinv` | `{0,1,2}`   | `{3}`     | 1 | yes (at the bound) |
+| `MCn4t1f2_tendermint_single_indinv` | `{0,1}`     | `{2,3}`   | 2 | **no** (`F = 2 > T = 1`) |
 
 `f0` and `f1` stay within the tolerated fault budget, so `Agreement` holds.
 `f2` deliberately exceeds it (two faults with `T = 1`): the proof's `TgeF`
 (`T >= F`) assumption is violated, so it is the case where safety may break —
 useful for confirming the model checker *finds* a violation there.
 
-These modules are generated with Wunderspec's `--instance` flag, e.g.:
+These modules are generated with Wunderspec's `--instance` flag. The output
+module name must match `MC<tag>_<BaseModule>`, so the `--to` filename ends in
+`_tendermint_single_indinv` — that is how the converter knows to emit
+`INSTANCE tendermint_single_indinv`:
 
 ```sh
 wunderspec convert --from examples/tendermint_single_indinv.py \
-  --instance n4_t1_f0 --to MC_n4_t1_f0.tla
+  --instance n4_t1_f0 --to MCn4t1f0_tendermint_single_indinv.tla
 ```
-
-(one manual fix is applied afterwards: the generated `INSTANCE n4_t1_f0` line is
-retargeted to `INSTANCE tendermint_single_indinv`, the actual spec module).
