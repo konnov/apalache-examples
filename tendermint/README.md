@@ -9,12 +9,19 @@ fixed set of correct processes (`Corr`) and Byzantine-faulty processes
 (`Faulty`), `N = 3T + 1` replicas tolerating up to `T` faults, and a bounded
 number of rounds (`MaxRound`). Faulty replicas may inject arbitrary messages.
 
+The `.tla` spec and instances here are machine-generated from the
+[Wunderspec](https://github.com/wunderspec/wunderspec) sources
+`examples/tendermint_single.py` (the base algorithm) and
+`examples/tendermint_single_indinv.py` (which adds the inductive invariant and
+the `n4_t1_f*` instances). The proofs are the hand-written part.
+
 ## Files
 
 | File | Contents |
 |------|----------|
-| `tendermint_single_indinv.tla` | The spec: state variables, the transition `Step` (10 correct actions + `FaultyStep`), the safety property `Agreement`, and the inductive invariant `TypedIndInv`. Machine-generated from a Wunderspec model — do not hand-edit. |
+| `tendermint_single_indinv.tla` | The spec: state variables, the transition `Step` (10 correct actions + `FaultyStep`), the safety property `Agreement`, and the inductive invariant `TypedIndInv`. Machine-generated — do not hand-edit. |
 | `tendermint_single_indinv_proofs.tla` | The TLAPS proofs. |
+| `MC_n4_t1_f0.tla`, `MC_n4_t1_f1.tla`, `MC_n4_t1_f2.tla` | Model-checking instances (`N=4, T=1`) that fix the constants and `INSTANCE` the spec — see below. |
 | `README.md` | This file. |
 
 ## What is proved
@@ -120,3 +127,32 @@ selector — pass the line span of the theorem:
 ```sh
 tlapm --toolbox <startLine> <endLine> --stretch 2 -I . tendermint_single_indinv_proofs.tla
 ```
+
+## Model-checking instances
+
+The TLAPS proof establishes the result for *all* parameter values satisfying the
+assumptions. The `MC_*` modules are small, finite instances (all `N = 4, T = 1`,
+`ValidValues = {0,1}`, `MaxRound = 3`) useful for cross-checking the spec and the
+invariant with a model checker (TLC or Apalache). Each fixes the constants and
+`INSTANCE`s `tendermint_single_indinv`:
+
+| Instance | `Corr` | `Faulty` | Faults `F` | Within the `T >= F` threshold? |
+|----------|--------|----------|------------|--------------------------------|
+| `MC_n4_t1_f0` | `{0,1,2,3}` | `{}`      | 0 | yes |
+| `MC_n4_t1_f1` | `{0,1,2}`   | `{3}`     | 1 | yes (at the bound) |
+| `MC_n4_t1_f2` | `{0,1}`     | `{2,3}`   | 2 | **no** (`F = 2 > T = 1`) |
+
+`f0` and `f1` stay within the tolerated fault budget, so `Agreement` holds.
+`f2` deliberately exceeds it (two faults with `T = 1`): the proof's `TgeF`
+(`T >= F`) assumption is violated, so it is the case where safety may break —
+useful for confirming the model checker *finds* a violation there.
+
+These modules are generated with Wunderspec's `--instance` flag, e.g.:
+
+```sh
+wunderspec convert --from examples/tendermint_single_indinv.py \
+  --instance n4_t1_f0 --to MC_n4_t1_f0.tla
+```
+
+(one manual fix is applied afterwards: the generated `INSTANCE n4_t1_f0` line is
+retargeted to `INSTANCE tendermint_single_indinv`, the actual spec module).
