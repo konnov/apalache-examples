@@ -1203,7 +1203,7 @@ THEOREM Pres_AllNoFutureMessagesSent ==
   \* Step branch's UNCHANGED tuple. The bare action alone does NOT determine the frame
   \* (e.g. FaultyStep with an empty faulty injection can co-occur with OnRoundCatchup,
   \* which changes round), so the frame must come from the branch, not the action.
-  <1>sel. \/ (FaultyStep /\ round' = round /\ step' = step)
+  <1>sel.  \/ (FaultyStep /\ round' = round /\ step' = step)
            \/ ((\E p \in Corr : InsertProposal(p))
                  /\ round' = round /\ step' = step
                  /\ msgs_prevote' = msgs_prevote /\ msgs_precommit' = msgs_precommit)
@@ -2578,7 +2578,7 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
       <2>old. PICK oldv \in (ValidValues \union {-1}) :
                     \A mv \in msgs_prevote[r] : q = mv.src => oldv = mv.id
             BY DEF AllNoEquivocationByCorrect
-      <2>sel. \/ msgs_prevote' = msgs_prevote
+      <2>sel.  \/ msgs_prevote' = msgs_prevote
                \/ FaultyStep
                \/ \E p \in Corr : UponProposalInPropose(p)
                \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
@@ -2649,7 +2649,7 @@ THEOREM Pres_AllNoEquivocationByCorrect ==
       <2>old. PICK oldv \in (ValidValues \union {-1}) :
                     \A mc \in msgs_precommit[r] : q = mc.src => oldv = mc.id
             BY DEF AllNoEquivocationByCorrect
-      <2>sel. \/ msgs_precommit' = msgs_precommit
+      <2>sel.  \/ msgs_precommit' = msgs_precommit
                \/ FaultyStep
                \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
                \/ \E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p)
@@ -4219,7 +4219,7 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
       BY Pres_PrecommitLocksLaterPrevotesOp
   <1> DEFINE RawPV(rr, val) ==
         Cardinality({s \in (Corr \union Faulty) :
-          \E pv0 \in {pp \in msgs_prevote'[rr] : val = pp.id} : s = pv0.src}) >= 2 * T + 1
+          \E pv0 \in {pp0 \in msgs_prevote'[rr] : val = pp0.id} : s = pv0.src}) >= 2 * T + 1
   <1> SUFFICES ASSUME NEW pp \in Corr, NEW rr1 \in (0)..(MaxRound), NEW vv \in ValidValues,
                         NEW rr2 \in (0)..(MaxRound),
                         /\ rr2 > rr1
@@ -4238,10 +4238,10 @@ THEOREM Pres_PrecommitLocksLaterPrevotes ==
   <1>rdom. r \in (0)..(MaxRound)  OBVIOUS
   <1>eq. Cardinality(PVSetP(r, vv)) =
           Cardinality({s \in (Corr \union Faulty) :
-            \E pv0 \in {pp \in msgs_prevote'[r] : vv = pp.id} : s = pv0.src})
+            \E pv0 \in {pp0 \in msgs_prevote'[r] : vv = pp0.id} : s = pv0.src})
       BY <1>rdom, PVSetPFlipCard
   <1>rawQ. Cardinality({s \in (Corr \union Faulty) :
-              \E pv0 \in {pp \in msgs_prevote'[r] : vv = pp.id} : s = pv0.src}) >= 2 * T + 1
+              \E pv0 \in {pp0 \in msgs_prevote'[r] : vv = pp0.id} : s = pv0.src}) >= 2 * T + 1
       BY <1>eq
   <1>rawNamed. RawPV(r, vv)  BY <1>rawQ DEF RawPV
   <1>wit. \E rr \in {rr0 \in (0)..(MaxRound): rr0 >= rr1 /\ rr0 < rr2} : RawPV(rr, vv)
