@@ -1207,20 +1207,34 @@ THEOREM Pres_AllNoFutureMessagesSent ==
            \/ ((\E p \in Corr : InsertProposal(p))
                  /\ round' = round /\ step' = step
                  /\ msgs_prevote' = msgs_prevote /\ msgs_precommit' = msgs_precommit)
-           \/ \E p \in Corr : UponProposalInPropose(p)
-           \/ \E p \in Corr : UponProposalInProposeAndPrevote(p)
-           \/ \E p \in Corr : UponQuorumOfPrevotesAny(p)
+           \/ ((\E p \in Corr : UponProposalInPropose(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit)
+           \/ ((\E p \in Corr : UponProposalInProposeAndPrevote(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit)
+           \/ ((\E p \in Corr : UponQuorumOfPrevotesAny(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote)
            \/ ((\E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p))
                  /\ round' = round
                  /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote)
-           \/ \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+           \/ ((\E p \in Corr : UponQuorumOfPrecommitsAny(p))
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                 /\ msgs_precommit' = msgs_precommit)
            \/ ((\E p \in Corr : UponProposalInPrecommitNoDecision(p))
                  /\ round' = round
                  /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
                  /\ msgs_precommit' = msgs_precommit)
-           \/ \E p \in Corr : OnTimeoutPropose(p)
-           \/ \E p \in Corr : OnQuorumOfNilPrevotes(p)
-           \/ \E p \in Corr : OnRoundCatchup(p)
+           \/ ((\E p \in Corr : OnTimeoutPropose(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit)
+           \/ ((\E p \in Corr : OnQuorumOfNilPrevotes(p))
+                 /\ round' = round
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote)
+           \/ ((\E p \in Corr : OnRoundCatchup(p))
+                 /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                 /\ msgs_precommit' = msgs_precommit)
       BY DEF Step
   <1>faulty. CASE FaultyStep /\ round' = round /\ step' = step
       <2>frame. round' = round /\ step' = step
@@ -1264,17 +1278,77 @@ THEOREM Pres_AllNoFutureMessagesSent ==
                       /\ \A mc \in msgs_precommit[rr] : q # mc.src
             BY DEF AllNoFutureMessagesSent
       <2> QED BY <1>insert, <2>frame, <2>old, SMT DEF InsertProposal
-  <1>proposal. CASE \E p \in Corr : UponProposalInPropose(p)
+  <1>proposal. CASE (\E p \in Corr : UponProposalInPropose(p))
+                     /\ round' = round
+                     /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : UponProposalInPropose(p) BY <1>proposal
-      <2> QED BY <1>proposal, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>proposal
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>proposal, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          UponProposalInPropose
-  <1>proposalPrevote. CASE \E p \in Corr : UponProposalInProposeAndPrevote(p)
+  <1>proposalPrevote. CASE (\E p \in Corr : UponProposalInProposeAndPrevote(p))
+                            /\ round' = round
+                            /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : UponProposalInProposeAndPrevote(p) BY <1>proposalPrevote
-      <2> QED BY <1>proposalPrevote, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>proposalPrevote
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>proposalPrevote, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          UponProposalInProposeAndPrevote
-  <1>quorumPrevotes. CASE \E p \in Corr : UponQuorumOfPrevotesAny(p)
+  <1>quorumPrevotes. CASE (\E p \in Corr : UponQuorumOfPrevotesAny(p))
+                          /\ round' = round
+                          /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
       <2> PICK p \in Corr : UponQuorumOfPrevotesAny(p) BY <1>quorumPrevotes
-      <2> QED BY <1>quorumPrevotes, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+            BY <1>quorumPrevotes
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>quorumPrevotes, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          UponQuorumOfPrevotesAny
   <1>proposalPrevoteCommit. CASE (\E p \in Corr : UponProposalInPrevoteOrCommitAndPrevote(p))
                                  /\ round' = round
@@ -1300,9 +1374,29 @@ THEOREM Pres_AllNoFutureMessagesSent ==
             BY DEF AllNoFutureMessagesSent
       <2> QED BY <1>proposalPrevoteCommit, <2>frame, <2>old, DisjointCF, SMT
          DEF UponProposalInPrevoteOrCommitAndPrevote
-  <1>quorumPrecommits. CASE \E p \in Corr : UponQuorumOfPrecommitsAny(p)
+  <1>quorumPrecommits. CASE (\E p \in Corr : UponQuorumOfPrecommitsAny(p))
+                            /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                            /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : UponQuorumOfPrecommitsAny(p) BY <1>quorumPrecommits
-      <2> QED BY <1>quorumPrecommits, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>quorumPrecommits
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>quorumPrecommits, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          UponQuorumOfPrecommitsAny
   <1>decide. CASE (\E p \in Corr : UponProposalInPrecommitNoDecision(p))
                   /\ round' = round
@@ -1330,17 +1424,77 @@ THEOREM Pres_AllNoFutureMessagesSent ==
             BY DEF AllNoFutureMessagesSent
       <2> QED BY <1>decide, <2>frame, <2>old, SMT
          DEF UponProposalInPrecommitNoDecision
-  <1>timeoutPropose. CASE \E p \in Corr : OnTimeoutPropose(p)
+  <1>timeoutPropose. CASE (\E p \in Corr : OnTimeoutPropose(p))
+                          /\ round' = round
+                          /\ msgs_propose' = msgs_propose /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : OnTimeoutPropose(p) BY <1>timeoutPropose
-      <2> QED BY <1>timeoutPropose, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>timeoutPropose
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>timeoutPropose, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          OnTimeoutPropose
-  <1>nilPrevotes. CASE \E p \in Corr : OnQuorumOfNilPrevotes(p)
+  <1>nilPrevotes. CASE (\E p \in Corr : OnQuorumOfNilPrevotes(p))
+                       /\ round' = round
+                       /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
       <2> PICK p \in Corr : OnQuorumOfNilPrevotes(p) BY <1>nilPrevotes
-      <2> QED BY <1>nilPrevotes, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ round' = round
+                /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+            BY <1>nilPrevotes
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>nilPrevotes, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          OnQuorumOfNilPrevotes
-  <1>roundCatchup. CASE \E p \in Corr : OnRoundCatchup(p)
+  <1>roundCatchup. CASE (\E p \in Corr : OnRoundCatchup(p))
+                        /\ msgs_propose' = msgs_propose /\ msgs_prevote' = msgs_prevote
+                        /\ msgs_precommit' = msgs_precommit
       <2> PICK p \in Corr : OnRoundCatchup(p) BY <1>roundCatchup
-      <2> QED BY <1>roundCatchup, DisjointCF, SMT DEF AllNoFutureMessagesSent, Step,
+      <2>frame. /\ msgs_propose' = msgs_propose
+                /\ msgs_prevote' = msgs_prevote
+                /\ msgs_precommit' = msgs_precommit
+            BY <1>roundCatchup
+      <2>old. /\ /\ \/ q = Proposer[round[q]]
+                    \/ \A mp \in msgs_propose[round[q]] : q # mp.src
+                 /\ \/ step[q] = "PREVOTE_OF_STEP"
+                    \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mv \in msgs_prevote[round[q]] : q # mv.src
+                 /\ \/ step[q] = "PRECOMMIT_OF_STEP"
+                    \/ step[q] = "DECIDED_OF_STEP"
+                    \/ \A mc \in msgs_precommit[round[q]] : q # mc.src
+                 /\ \A rr \in {r \in (0)..(MaxRound) : r > round[q]} :
+                      /\ \A mp \in msgs_propose[rr] : q # mp.src
+                      /\ \A mv \in msgs_prevote[rr] : q # mv.src
+                      /\ \A mc \in msgs_precommit[rr] : q # mc.src
+            BY DEF AllNoFutureMessagesSent
+      <2> QED BY <1>roundCatchup, <2>frame, <2>old, DisjointCF, SMT DEF AllNoFutureMessagesSent,
          OnRoundCatchup
   <1> QED BY <1>sel, <1>faulty, <1>insert, <1>proposal, <1>proposalPrevote,
      <1>quorumPrevotes, <1>proposalPrevoteCommit, <1>quorumPrecommits,
