@@ -19,7 +19,7 @@
  * under `i |-> [payload |-> sentData[i], seq |-> i-1]` -- from which the seq
  * bounds (MsgsDataSeqBound / MsgsAckSeqBound), DataInv, and the freshness of a
  * sent seq in NextInd all follow. Verify with:
- *   cd ack && tlapm -I . ack_proofs.tla   => All 605 obligations proved.
+ *   cd ack && tlapm -I . ack_proofs.tla   => All 608 obligations proved.
  *
  * Igor Konnov, Claude Opus 4.8, July 2026
  *)
@@ -217,7 +217,7 @@ THEOREM NextInd == TypedIndInv /\ Next => TypedIndInv'
   <1> SUFFICES ASSUME TypedIndInv, Next PROVE TypedIndInv'
         OBVIOUS
   <1> USE DEF TypedIndInv, IndInv
-  <1>act. SendDataClosed \/ ReceiveDataClosed \/ ReceiveAckClosed
+  <1>act. SendDataClosed \/ ReceiveDataClosed \/ ReceiveAckClosed \/ UNCHANGED vars
         BY DEF Next
   \* ===== ACTION 1: SendData =====
   <1>1. CASE SendDataClosed
@@ -436,7 +436,11 @@ THEOREM NextInd == TypedIndInv /\ Next => TypedIndInv'
     <2>L4. Lemma4' BY <2>fr DEF Lemma4
     <2>L5. Lemma5' BY <2>fr DEF Lemma5
     <2> QED BY <2>type, <2>cnt, <2>L2, <2>L3, <2>L4, <2>L5 DEF TypedIndInv, IndInv
-  <1> QED BY <1>1, <1>2, <1>3, <1>act
+  \* ===== ACTION 4: MAX_SEQ stutter (UNCHANGED vars) =====
+  <1>4. CASE UNCHANGED vars
+        BY <1>4 DEF vars, TypedIndInv, TypeOK, IndInv, CounterInv,
+                      Lemma2, Lemma3, Lemma4, Lemma5
+  <1> QED BY <1>1, <1>2, <1>3, <1>4, <1>act
 
 \*****************************************************************************
 \* IMPLICATION. The typed inductive invariant implies the safety invariant.

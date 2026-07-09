@@ -122,6 +122,10 @@ Next ==
     /\ \/ SendDataClosed
        \/ ReceiveDataClosed
        \/ ReceiveAckClosed
+       \/ /\ UNCHANGED vars
+          /\ senderAck = MAX_SEQ
+          /\ senderSeq = MAX_SEQ
+          /\ receiverSeq = MAX_SEQ
     \* Bound the values of the counters to avoid infinite state space.
     \* NOTE: This leads to a deadlock when the counters are exhausted.
     \* We could add stuttering for this case.
