@@ -19,7 +19,7 @@
  * under `i |-> [payload |-> sentData[i], seq |-> i-1]` -- from which the seq
  * bounds (MsgsDataSeqBound / MsgsAckSeqBound), DataInv, and the freshness of a
  * sent seq in NextInd all follow. Verify with:
- *   cd ack && tlapm -I . ack_proofs.tla   => All 603 obligations proved.
+ *   cd ack && tlapm -I . ack_proofs.tla   => All 605 obligations proved.
  *
  * Igor Konnov, Claude Opus 4.8, July 2026
  *)
@@ -28,6 +28,21 @@ EXTENDS ack, FiniteSetTheorems, SequenceTheorems, TLAPS
 \* MAX_SEQ bounds the counters in Next (via BoundedCounters). We restate the
 \* obvious constraint under a name so later steps can USE/cite it.
 ASSUME MaxSeqNat == MAX_SEQ \in Nat
+
+\* Prefix specialization of the library theorem SubSeqProperties (m = 1,
+\* S = PAYLOADS), used once in ImpliesAllInv's DataInv case. We isolate the
+\* instantiation in a top-level lemma, and DELIBERATELY place it here -- before
+\* TypeOK and the protocol lemmas -- so it is discharged in a minimal context.
+\* Cited from inside ImpliesAllInv (under USE DEF TypedIndInv, IndInv) the
+\* SubSeqProperties instantiation makes Zenon run out of memory ("could not find
+\* a proof within the memory size limit"); pre-proved here, the call site only
+\* has to match this ready-made conclusion.
+LEMMA SubSeqPrefixProps ==
+  ASSUME NEW s, NEW n \in Int, \A i \in 1..n : s[i] \in PAYLOADS
+  PROVE  /\ SubSeq(s, 1, n) \in Seq(PAYLOADS)
+         /\ Len(SubSeq(s, 1, n)) = IF 1 <= n THEN n - 1 + 1 ELSE 0
+         /\ \A i \in 1 .. n - 1 + 1 : SubSeq(s, 1, n)[i] = s[1 + i - 1]
+  BY SubSeqProperties
 
 TypeOK ==
     /\ senderSeq \in Nat
@@ -491,7 +506,7 @@ THEOREM ImpliesAllInv == TypedIndInv => AllInv
       <3>props. /\ ss \in Seq(PAYLOADS)
                 /\ Len(ss) = IF 1 <= Len(sentData) - 1 THEN (Len(sentData) - 1) - 1 + 1 ELSE 0
                 /\ \A i \in 1 .. (Len(sentData) - 1) - 1 + 1 : ss[i] = sentData[1 + i - 1]
-            BY <3>elem, <2>lenS, <2>ss, SubSeqProperties
+            BY <3>elem, <2>lenS, <2>ss, SubSeqPrefixProps
       <3>len. Len(ss) = receiverSeq BY <3>props, <3>n, <2>ss
       <3>dom. DOMAIN ss = 1..receiverSeq
             BY <3>props, <3>len, LenProperties
