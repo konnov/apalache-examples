@@ -1,4 +1,5 @@
 ------------------ MODULE ack_tlc ------------------
+\* Special version for TLC.
 EXTENDS ack
 
 TLCTypeOK ==
@@ -12,6 +13,7 @@ TLCTypeOK ==
     /\ msgsData \in SUBSET [payload: PAYLOADS, seq: 0..MAX_SEQ]
     /\ IsFiniteSet(msgsData)
 
+\* The initialization predicate combined with the inductive invariant.
 IndInvInit ==
     /\ TLCTypeOK
     /\ IndInv

@@ -190,7 +190,7 @@ LEMMA MsgsAckSeqBound ==
 
 \*****************************************************************************
 \* INDUCTIVE STEP. Every Next transition preserves the typed inductive
-\* invariant. `Next` is `(SendDataClosed \/ ReceivedDataClosed \/
+\* invariant. `Next` is `(SendDataClosed \/ ReceiveDataClosed \/
 \* ReceiveAckClosed) /\ BoundedCounters'`; the bound is not needed (TypeOK uses
 \* Nat), so we case-split on the three actions. Each action touches few
 \* variables, so most conjuncts are frames; the substantive facts are: a sent
@@ -202,7 +202,7 @@ THEOREM NextInd == TypedIndInv /\ Next => TypedIndInv'
   <1> SUFFICES ASSUME TypedIndInv, Next PROVE TypedIndInv'
         OBVIOUS
   <1> USE DEF TypedIndInv, IndInv
-  <1>act. SendDataClosed \/ ReceivedDataClosed \/ ReceiveAckClosed
+  <1>act. SendDataClosed \/ ReceiveDataClosed \/ ReceiveAckClosed
         BY DEF Next
   \* ===== ACTION 1: SendData =====
   <1>1. CASE SendDataClosed
@@ -289,9 +289,9 @@ THEOREM NextInd == TypedIndInv /\ Next => TypedIndInv'
     <2>L5. Lemma5' BY <2>fr DEF Lemma5
     <2> QED BY <2>type, <2>cnt, <2>L2, <2>L3, <2>L4, <2>L5 DEF TypedIndInv, IndInv
   \* ===== ACTION 2: ReceiveData =====
-  <1>2. CASE ReceivedDataClosed
+  <1>2. CASE ReceiveDataClosed
     <2> PICK msg \in msgsData : ReceiveData(msg)
-          BY <1>2 DEF ReceivedDataClosed
+          BY <1>2 DEF ReceiveDataClosed
     <2> USE DEF ReceiveData
     <2>ss. senderSeq \in Nat /\ senderAck \in Nat /\ receiverSeq \in Nat
           BY DEF TypeOK

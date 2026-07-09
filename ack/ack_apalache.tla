@@ -11,6 +11,9 @@
  *)
 EXTENDS Apalache, ack
 
+\* A special initialization predicate to check inductiveness of the invariant
+\* IndInv. This predicate bounds the contents of the data structure to
+\* translate the constraints to SMT.
 ApalacheInit ==
     /\ senderSeq \in 0..MAX_SEQ
     /\ senderAck \in 0..MAX_SEQ
@@ -30,6 +33,7 @@ ApalacheInit ==
     /\ msgsData \in SUBSET [payload: PAYLOADS, seq: 0..MAX_SEQ]
     /\ IsFiniteSet(msgsData)
 
+\* The initialization predicate combined with the inductive invariant.
 IndInvInit ==
     ApalacheInit /\ IndInv
 
