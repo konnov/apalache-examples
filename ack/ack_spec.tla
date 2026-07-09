@@ -4,7 +4,10 @@ EXTENDS Integers, Sequences
 CONSTANTS
     \* The set of payloads that can be sent in every message.
     \* @type: Set(Str);
-    PAYLOADS
+    PAYLOADS,
+    \* The maximum number of messages that can be sent in the protocol.
+    \* @type: Int;
+    MAX_SEQ
 
 VARIABLES
     \* The history of the data sent by the sender, in the order they were sent.
@@ -24,6 +27,10 @@ Init ==
 SendData ==
     \E payload \in PAYLOADS:
         /\ Len(receivedData) = Len(sentData)
+        \* Guard the send by the bound (mirrors ack.tla), so this action is
+        \* DISABLED once MAX_SEQ messages have been sent: WF_vars(SendData) stays
+        \* satisfiable and the fair Spec is not vacuous.
+        /\ Len(sentData) < MAX_SEQ
         /\ sentData' = Append(sentData, payload)
         /\ UNCHANGED receivedData
 
@@ -36,6 +43,11 @@ ReceiveData ==
 Next ==
     \/ SendData
     \/ ReceiveData
+    \* Explicit stuttering once the bound is reached (mirrors ack.tla): avoids a
+    \* deadlock when both histories have length MAX_SEQ.
+    \/ /\ UNCHANGED vars
+       /\ Len(sentData) = MAX_SEQ
+       /\ Len(receivedData) = MAX_SEQ
 
 \* The invariant on the data sent and received.
 DataInv ==

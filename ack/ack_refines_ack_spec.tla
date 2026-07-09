@@ -14,12 +14,12 @@
  * ReceiveAck / MAX_SEQ-stutter low-level step leaves (sentData, receivedData)
  * unchanged, so it is a high-level stuttering step.
  *
- * NOTE on fairness. We deliberately do NOT prove `Spec => H!Spec` with the
- * high-level fairness. `Fairness` imposes weak fairness on the bare
- * `SendDataClosed` action, which stays ENABLED at senderSeq = MAX_SEQ (only
- * Next's `BoundedCounters'` blocks the step). Weak fairness then demands a step
- * that [Next]_vars cannot take, so the fair `Spec` has no behaviors (it is
- * vacuous) for finite MAX_SEQ. Only the safety refinement is meaningful here.
+ * Both `SendData` actions are now guarded by the MAX_SEQ bound (senderSeq <
+ * MAX_SEQ in ack, Len(sentData) < MAX_SEQ in ack_spec), so the send action is
+ * DISABLED at the bound and the weak-fairness conditions are satisfiable: both
+ * fair specs have genuine behaviors (TLC confirms non-vacuity). This unblocks a
+ * FAIRNESS refinement `Spec => H!Spec` (with H!Fairness); the WF-refinement
+ * proof is future work (see the fairness discussion in the commit history).
  *
  * Verify with:  cd ack && tlapm -I . ack_refines_ack_spec.tla
  *
@@ -30,6 +30,7 @@ EXTENDS ack_proofs
 \* The high-level spec, instantiated with the identity refinement mapping.
 H == INSTANCE ack_spec
      WITH PAYLOADS <- PAYLOADS,
+          MAX_SEQ <- MAX_SEQ,
           sentData <- sentData,
           receivedData <- receivedData
 
@@ -62,21 +63,23 @@ THEOREM ack_next_refines_ack_spec_next ==
     <2> USE DEF SendData
     <2>ss. senderSeq \in Nat /\ senderAck \in Nat /\ receiverSeq \in Nat
           BY DEF TypeOK
-    <2>pre. senderSeq = senderAck BY DEF SendData
+    <2>pre. senderSeq = senderAck /\ senderSeq < MAX_SEQ BY DEF SendData
     <2>req. receiverSeq = senderSeq BY <2>pre, <2>ss DEF CounterInv
     <2>lenS. Len(sentData) = senderSeq BY DEF Lemma2
     <2>lenR. Len(receivedData) = receiverSeq BY DEF Lemma4
     <2>eqlen. Len(receivedData) = Len(sentData) BY <2>req, <2>lenS, <2>lenR
+    <2>lbnd. Len(sentData) < MAX_SEQ BY <2>pre, <2>lenS
     <2>snd. sentData' = Append(sentData, p) /\ receivedData' = receivedData
           BY DEF SendData
     <2>hsend. H!SendData
       <3> SUFFICES \E payload \in PAYLOADS :
                      /\ Len(receivedData) = Len(sentData)
+                     /\ Len(sentData) < MAX_SEQ
                      /\ sentData' = Append(sentData, payload)
                      /\ receivedData' = receivedData
             BY DEF H!SendData
       <3> WITNESS p \in PAYLOADS
-      <3> QED BY <2>eqlen, <2>snd
+      <3> QED BY <2>eqlen, <2>lbnd, <2>snd
     <2> QED BY <2>hsend DEF H!Next
   \* ===== ReceiveData: refines high-level ReceiveData =====
   <1>2. CASE ReceiveDataClosed

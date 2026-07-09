@@ -76,6 +76,11 @@ Init ==
 \* acknowledgment for the previous message.
 SendData(payload) ==
     /\ senderSeq = senderAck
+    \* Guard the send by the bound, so that this action is DISABLED at MAX_SEQ.
+    \* Putting the bound here (rather than only in BoundedCounters' in Next) keeps
+    \* WF_vars(SendDataClosed) satisfiable at MAX_SEQ, so the fair Spec is not
+    \* vacuous. See ack_refines_ack_spec.tla for the fairness refinement.
+    /\ senderSeq < MAX_SEQ
     /\ msgsData' = msgsData \cup { [payload |-> payload, seq |-> senderSeq] }
     /\ senderSeq' = senderSeq + 1
     /\ sentData' = Append(sentData, payload)
